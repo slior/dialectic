@@ -10,7 +10,8 @@
     "build": "tsc",
     "dev": "ts-node src/cli/index.ts",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [],
   "author": "",
