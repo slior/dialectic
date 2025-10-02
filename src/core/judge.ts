@@ -10,7 +10,7 @@ export class JudgeAgent {
 
   async synthesize(problem: string, rounds: DebateRound[], _context: DebateContext): Promise<Solution> {
     const prompt = this.buildSynthesisPrompt(problem, rounds);
-    const description = await this.provider.complete({
+    const res = await this.provider.complete({
       model: this.config.model,
       temperature: this.config.temperature ?? 0.3,
       systemPrompt: this.config.systemPrompt || JUDGE_SYSTEM_PROMPT,
@@ -18,7 +18,7 @@ export class JudgeAgent {
     });
 
     return {
-      description,
+      description: res.text,
       tradeoffs: [],
       recommendations: [],
       confidence: 75,

@@ -20,8 +20,7 @@ jest.mock('openai', () => {
 describe('OpenAIProvider', () => {
   it('falls back to chat completions when Responses API is unavailable', async () => {
     const provider: LLMProvider = new OpenAIProvider('fake');
-    await expect(
-      provider.complete({ model: 'gpt-4', systemPrompt: 'sys', userPrompt: 'hello', temperature: 0.5 })
-    ).resolves.toBe('ok');
+    const res = await provider.complete({ model: 'gpt-4', systemPrompt: 'sys', userPrompt: 'hello', temperature: 0.5 });
+    expect(res.text).toBe('ok');
   });
 });

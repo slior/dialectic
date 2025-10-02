@@ -11,13 +11,13 @@ export abstract class Agent {
 
   protected async callLLM(systemPrompt: string, userPrompt: string) {
     const started = Date.now();
-    const content = await this.provider.complete({
+    const res = await this.provider.complete({
       model: this.config.model,
       temperature: this.config.temperature,
       systemPrompt,
       userPrompt,
     });
     const latencyMs = Date.now() - started;
-    return { content, latencyMs };
+    return { text: res.text, usage: res.usage, latencyMs };
   }
 }
