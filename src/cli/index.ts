@@ -3,9 +3,19 @@ import { Command } from 'commander';
 import { debateCommand, loadConfig as loadDebateConfig } from './commands/debate';
 import { EXIT_GENERAL_ERROR } from '../utils/exit-codes';
 
+/**
+ * Runs the CLI for the multi-agent debate system.
+ *
+ * This function sets up the command-line interface using Commander,
+ * registers available commands (such as 'debate'), and parses the provided arguments.
+ * It is intended to be called with the argument vector (argv) excluding the node and script name.
+ *
+ * @param argv - The array of command-line arguments to parse (excluding 'node' and script name).
+ * @throws Rethrows any error encountered during command parsing.
+ */
 export async function runCli(argv: string[]) {
   const program = new Command();
-  program.name('debate').description('Multi-agent debate system').version('1.0.0');
+  program.name('debate').description('Multi-agent debate system').version('0.1.0');
 
   // Register commands
   debateCommand(program);
