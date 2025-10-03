@@ -41,8 +41,26 @@ describe('CLI debate command', () => {
 
   it('prints only minimal solution to stdout (non-verbose)', async () => {
     process.env.OPENAI_API_KEY = 'test';
-    // This will fail until CLI and mocks are wired; keeping RED.
     await runCli(['debate', 'Design a rate limiting system']);
     expect(stdoutSpy).toHaveBeenCalled();
+  });
+
+  it('prints verbose header and summary with metadata when --verbose', async () => {
+    process.env.OPENAI_API_KEY = 'test';
+    const captured: string[] = [];
+    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk: any) => {
+      captured.push(String(chunk));
+      return true as any;
+    });
+
+    await runCli(['debate', 'Design X', '--rounds', '2', '--verbose']);
+
+    const out = captured.join('');
+    expect(out).toContain('Running debate (verbose)');
+    expect(out).toContain('Summary (verbose)');
+    expect(out).toMatch(/Round\s+1\s+-/);
+    expect(out).toMatch(/latency=.+, tokens=/);
+
+    writeSpy.mockRestore();
   });
 });

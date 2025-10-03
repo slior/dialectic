@@ -110,8 +110,17 @@ export function debateCommand(program: Command) {
         const agents = buildAgents(agentConfigs, provider);
         const judge = new JudgeAgent(sysConfig.judge!, provider);
         const stateManager = new StateManager();
-        const orchestrator = new DebateOrchestrator(agents as any, judge, stateManager, debateCfg);
 
+        // Verbose header before run
+        if (options.verbose) {
+          process.stdout.write('Running debate (verbose)\n');
+          process.stdout.write('Active Agents:\n');
+          agentConfigs.forEach(a => {
+            process.stdout.write(`  • ${a.name} (${a.model})\n`);
+          });
+        }
+
+        const orchestrator = new DebateOrchestrator(agents as any, judge, stateManager, debateCfg);
         const result: DebateResult = await orchestrator.runDebate(problem);
 
         // Persist path notice (StateManager already persisted during run)
@@ -129,6 +138,26 @@ export function debateCommand(program: Command) {
         } else {
           // stdout minimal
           process.stdout.write(finalText);
+        }
+
+        // Verbose summary after solution to stdout (only when not writing to a file)
+        if (!outputPath && options.verbose) {
+          const debate = await stateManager.getDebate(result.debateId);
+          if (debate) {
+            process.stdout.write('\nSummary (verbose)\n');
+            debate.rounds.forEach((round) => {
+              process.stdout.write(`Round ${round.roundNumber} - ${round.phase}\n`);
+              round.contributions.forEach((c) => {
+                const firstLine = c.content.split('\n')[0];
+                const tokens = (c.metadata && c.metadata.tokensUsed != null) ? c.metadata.tokensUsed : 'N/A';
+                const lat = (c.metadata && c.metadata.latencyMs != null) ? `${c.metadata.latencyMs}ms` : 'N/A';
+                process.stdout.write(`  [${c.agentRole}] ${c.type}: ${firstLine}\n`);
+                process.stdout.write(`    (latency=${lat}, tokens=${tokens})\n`);
+              });
+            });
+            const totalTokens = debate.rounds.reduce((sum, r) => sum + r.contributions.reduce((s, c) => s + (c.metadata.tokensUsed ?? 0), 0), 0);
+            process.stdout.write(`\nTotals: rounds=${result.metadata.totalRounds}, duration=${result.metadata.durationMs}ms, tokens=${totalTokens ?? 'N/A'}\n`);
+          }
         }
       } catch (err: any) {
         const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
