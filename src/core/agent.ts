@@ -1,4 +1,4 @@
-import { AgentConfig, Proposal, Critique } from '../types/agent.types';
+import { AgentConfig, Proposal, Critique, ContributionMetadata } from '../types/agent.types';
 import { DebateContext } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 import { CompletionResponse, CompletionUsage } from '../providers/llm-provider';
@@ -56,6 +56,76 @@ export abstract class Agent {
    * @returns A Promise resolving to a new Proposal object with the refined solution and metadata.
    */
   abstract refine(originalProposal: Proposal, critiques: Critique[], context: DebateContext): Promise<Proposal>;
+
+  /**
+   * Template method for generating proposals.
+   * Subclasses should call this method from their `propose` implementation after preparing prompts.
+   *
+   * @final
+   * @param _context - The current debate context (unused in base implementation).
+   * @param systemPrompt - The system prompt to use for the LLM.
+   * @param userPrompt - The user prompt to use for the LLM.
+   * @returns A Promise resolving to a Proposal object containing the agent's solution and metadata.
+   */
+  protected async proposeImpl(
+
+    _context: DebateContext,
+    systemPrompt: string,
+    userPrompt: string
+  ): Promise<Proposal> {
+    const { text, usage, latencyMs } = await this.callLLM(systemPrompt, userPrompt);
+    const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
+    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
+    return { content: text, metadata };
+  }
+
+  /**
+   * Template method for generating critiques.
+   * Subclasses should call this method from their `critique` implementation after preparing prompts.
+   *
+   * @final
+   * @param _proposal - The proposal to critique.
+   * @param _context - The current debate context.
+   * @param systemPrompt - The system prompt to use for the LLM.
+   * @param userPrompt - The user prompt to use for the LLM.
+   * @returns A Promise resolving to a Critique object containing the agent's review and metadata.
+   */
+  protected async critiqueImpl(
+    _proposal: Proposal,
+    _context: DebateContext,
+    systemPrompt: string,
+    userPrompt: string
+  ): Promise<Critique> {
+    const { text, usage, latencyMs } = await this.callLLM(systemPrompt, userPrompt);
+    const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
+    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
+    return { content: text, metadata };
+  }
+
+  /**
+   * Template method for refining proposals.
+   * Subclasses should call this method from their `refine` implementation after preparing prompts.
+   *
+   * @final
+   * @param _originalProposal - The original proposal to refine.
+   * @param _critiques - Array of critiques to address.
+   * @param _context - The current debate context.
+   * @param systemPrompt - The system prompt to use for the LLM.
+   * @param userPrompt - The user prompt to use for the LLM.
+   * @returns A Promise resolving to a refined Proposal object with updated content and metadata.
+   */
+  protected async refineImpl(
+    _originalProposal: Proposal,
+    _critiques: Critique[],
+    _context: DebateContext,
+    systemPrompt: string,
+    userPrompt: string
+  ): Promise<Proposal> {
+    const { text, usage, latencyMs } = await this.callLLM(systemPrompt, userPrompt);
+    const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
+    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
+    return { content: text, metadata };
+  }
 
   /**
    * Helper method to call the underlying LLM provider with the specified prompts.

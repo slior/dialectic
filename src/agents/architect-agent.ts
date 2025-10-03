@@ -1,9 +1,9 @@
 import { Agent } from '../core/agent';
-import { AgentConfig, Proposal, Critique, ContributionMetadata } from '../types/agent.types';
+import { AgentConfig, Proposal, Critique } from '../types/agent.types';
 import { DebateContext } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 
-const ARCHITECT_SYSTEM_PROMPT = `You are an expert software architect specializing in distributed systems and scalable architecture design.
+const DEFAULT_ARCHITECT_SYSTEM_PROMPT = `You are an expert software architect specializing in distributed systems and scalable architecture design.
 Consider scalability, performance, component boundaries, interfaces, architectural patterns, data flow, state management, and operational concerns.
 When proposing solutions, start with high-level architecture, identify key components, communication patterns, failure modes, and provide clear descriptions.
 When critiquing, look for scalability bottlenecks, missing components, architectural coherence, and operational complexity.`;
@@ -49,32 +49,26 @@ export class ArchitectAgent extends Agent {
   /**
    * Generates a comprehensive architectural proposal for the given problem.
    * @param problem - The software design problem to solve.
-   * @param _context - Debate context
+   * @param context - Debate context
    * @returns A Proposal object containing the agent's solution and metadata.
    */
-  async propose(problem: string, _context: DebateContext): Promise<Proposal> {
-    const system = this.config.systemPrompt || ARCHITECT_SYSTEM_PROMPT;
+  async propose(problem: string, context: DebateContext): Promise<Proposal> {
+    const system = this.config.systemPrompt || DEFAULT_ARCHITECT_SYSTEM_PROMPT;
     const user = `Problem to solve:\n${problem}\n\nAs an architect, propose a comprehensive solution including approach, key components, challenges, and justification.`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
+    return this.proposeImpl(context, system, user);
   }
 
   /**
    * Critiques a given proposal from an architectural perspective.
    * Identifies strengths, weaknesses, improvements, and critical issues.
    * @param proposal - The proposal to critique.
-   * @param _context - Debate context (unused).
+   * @param context - Debate context.
    * @returns A Critique object containing the agent's review and metadata.
    */
-  async critique(proposal: Proposal, _context: DebateContext): Promise<Critique> {
-    const system = this.config.systemPrompt || ARCHITECT_SYSTEM_PROMPT;
+  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
+    const system = this.config.systemPrompt || DEFAULT_ARCHITECT_SYSTEM_PROMPT;
     const user = `Review this proposal as an architect. Identify strengths, weaknesses, improvements, and critical issues.\n\nProposal:\n${proposal.content}`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
+    return this.critiqueImpl(proposal, context, system, user);
   }
 
   /**
@@ -82,16 +76,13 @@ export class ArchitectAgent extends Agent {
    * Strengthens the solution based on feedback from other agents.
    * @param original - The original proposal to refine.
    * @param critiques - Array of critiques to address.
-   * @param _context - Debate context (unused).
+   * @param context - Debate context.
    * @returns A new Proposal object with the refined solution and metadata.
    */
-  async refine(original: Proposal, critiques: Critique[], _context: DebateContext): Promise<Proposal> {
-    const system = this.config.systemPrompt || ARCHITECT_SYSTEM_PROMPT;
+  async refine(original: Proposal, critiques: Critique[], context: DebateContext): Promise<Proposal> {
+    const system = this.config.systemPrompt || DEFAULT_ARCHITECT_SYSTEM_PROMPT;
     const critiquesText = critiques.map((c, i) => `Critique ${i + 1}:\n${c.content}`).join('\n\n');
     const user = `Original proposal:\n${original.content}\n\nCritiques:\n${critiquesText}\n\nRefine your proposal addressing valid concerns, incorporating good suggestions, and strengthening the solution.`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
+    return this.refineImpl(original, critiques, context, system, user);
   }
 }

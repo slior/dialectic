@@ -3,7 +3,7 @@ import { AgentConfig, Proposal, Critique } from '../types/agent.types';
 import { DebateContext } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 
-const PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer specializing in system optimization, profiling, and resource management.
+const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer specializing in system optimization, profiling, and resource management.
 Consider latency, throughput, resource utilization, caching strategies, algorithmic complexity, and performance testing.
 When proposing solutions, include performance requirements, optimization strategies, caching, and metrics.
 When critiquing, look for bottlenecks, inefficient algorithms/data structures, resource usage, and scalability limits.`;
@@ -47,48 +47,39 @@ export class PerformanceAgent extends Agent {
   /**
    * Generates a performance-focused proposal for the given problem.
    * @param problem - The software/system design problem to solve.
-   * @param _context - The current debate context (unused in this implementation).
+   * @param context - The current debate context.
    * @returns A Promise resolving to a Proposal object containing the agent's solution and metadata.
    */
-  async propose(problem: string, _context: DebateContext): Promise<Proposal> {
-    const system = this.config.systemPrompt || PERFORMANCE_SYSTEM_PROMPT;
+  async propose(problem: string, context: DebateContext): Promise<Proposal> {
+    const system = this.config.systemPrompt || DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
     const user = `Problem to solve:\n${problem}\n\nAs a performance engineer, propose a comprehensive solution focusing on latency/throughput, caching, and resource efficiency.`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: any = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
+    return this.proposeImpl(context, system, user);
   }
 
   /**
    * Critiques a given proposal from a performance engineering perspective.
    * Identifies strengths, bottlenecks, and suggests concrete improvements.
    * @param proposal - The proposal to critique.
-   * @param _context - The current debate context (unused in this implementation).
+   * @param context - The current debate context.
    * @returns A Promise resolving to a Critique object containing the agent's review and metadata.
    */
-  async critique(proposal: Proposal, _context: DebateContext): Promise<Critique> {
-    const system = this.config.systemPrompt || PERFORMANCE_SYSTEM_PROMPT;
+  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
+    const system = this.config.systemPrompt || DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
     const user = `Review this proposal as a performance engineer. Identify strengths, bottlenecks, and concrete improvements.\n\nProposal:\n${proposal.content}`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: any = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
+    return this.critiqueImpl(proposal, context, system, user);
   }
 
   /**
    * Refines the agent's original proposal by addressing critiques and strengthening performance aspects.
    * @param original - The original proposal to refine.
    * @param critiques - Array of critiques to address.
-   * @param _context - The current debate context (unused in this implementation).
+   * @param context - The current debate context.
    * @returns A Promise resolving to a new Proposal object with the refined solution and metadata.
    */
-  async refine(original: Proposal, critiques: Critique[], _context: DebateContext): Promise<Proposal> {
-    const system = this.config.systemPrompt || PERFORMANCE_SYSTEM_PROMPT;
+  async refine(original: Proposal, critiques: Critique[], context: DebateContext): Promise<Proposal> {
+    const system = this.config.systemPrompt || DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
     const critiquesText = critiques.map((c, i) => `Critique ${i + 1}:\n${c.content}`).join('\n\n');
     const user = `Original proposal:\n${original.content}\n\nCritiques:\n${critiquesText}\n\nRefine your proposal addressing performance concerns and strengthening the solution.`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: any = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
+    return this.refineImpl(original, critiques, context, system, user);
   }
 }
