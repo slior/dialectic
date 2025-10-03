@@ -2,7 +2,8 @@
 
 ## Overview
 
-This document specifies a multi-agent debate system where AI agents collaboratively solve software design problems through structured debate. The system starts as a CLI tool and is designed to extend to a web interface.
+This document specifies a multi-agent debate system where AI agents collaboratively solve software design problems through structured debate. 
+The system starts as a CLI tool and is designed to extend to a web interface.
 
 **Technology Stack**: TypeScript, Node.js, LLM APIs (OpenAI, Anthropic, etc.)
 

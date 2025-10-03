@@ -3,3 +3,7 @@ node_modules/
 
 # Debate state persistence
 debates/
+
+coverage/
+
+dist/

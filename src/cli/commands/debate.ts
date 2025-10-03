@@ -53,10 +53,10 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
 
 function buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider) {
   return agentConfigs.map((cfg) => {
-    if (cfg.role === 'architect') return new ArchitectAgent(cfg, provider);
-    if (cfg.role === 'performance') return new PerformanceAgent(cfg, provider);
-    // Default to architect for unknown roles in Flow 1
-    return new ArchitectAgent(cfg, provider);
+    if (cfg.role === 'architect') return ArchitectAgent.create(cfg, provider);
+    if (cfg.role === 'performance') return PerformanceAgent.create(cfg, provider);
+    // Default to architect for unknown roles
+    return ArchitectAgent.create(cfg, provider);
   });
 }
 
