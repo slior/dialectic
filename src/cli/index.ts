@@ -3,6 +3,10 @@ import { Command } from 'commander';
 import { debateCommand, loadConfig as loadDebateConfig } from './commands/debate';
 import { EXIT_GENERAL_ERROR } from '../utils/exit-codes';
 
+// Color constants for CLI output
+export const WARNING_COLOR = 'yellow';
+export const INFO_COLOR = 'gray';
+
 /**
  * Runs the CLI for the multi-agent debate system.
  *

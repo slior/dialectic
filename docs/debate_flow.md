@@ -4,7 +4,7 @@ This document provides a detailed explanation of the execution flow for the deba
 
 ## Overview
 
-The debate system orchestrates multi-agent discussions to solve software design problems. The flow involves configuration loading, agent initialization, multiple debate phases (proposal, critique, refinement), judge synthesis, and result output.
+The debate system orchestrates multi-agent discussions to solve software design problems. The flow involves configuration loading, agent initialization, multiple debate rounds (each executing proposal, critique, and refinement phases), judge synthesis, and result output. Each round is a complete cycle where agents propose solutions, critique each other's proposals, and refine their own proposals based on feedback.
 
 ## Sequence Diagram
 
@@ -46,24 +46,28 @@ sequenceDiagram
     SM->>FS: save initial state JSON
     SM-->>Orch: DebateState
     
-    Orch->>Orch: proposalPhase(state)
-    loop For each agent
-        Orch->>Agents: agent.propose(problem, context)
-        Agents->>Agents: prepare prompts
-        Agents->>Provider: complete(systemPrompt, userPrompt)
-        Provider->>Provider: try Responses API
-        alt Responses API available
-            Provider->>Provider: call responses.create()
-        else Fallback
-            Provider->>Provider: call chat.completions.create()
-        end
-        Provider-->>Agents: {text, usage, latency}
-        Agents-->>Orch: Proposal {content, metadata}
-        Orch->>SM: addContribution(debateId, contribution)
+    loop For each round (1 to N)
+        Orch->>SM: beginRound(debateId)
+        SM->>SM: create new DebateRound
         SM->>FS: save updated state JSON
-    end
-    
-    alt rounds >= 2
+        
+        Orch->>Orch: proposalPhase(state)
+        loop For each agent
+            Orch->>Agents: agent.propose(problem, context)
+            Agents->>Agents: prepare prompts
+            Agents->>Provider: complete(systemPrompt, userPrompt)
+            Provider->>Provider: try Responses API
+            alt Responses API available
+                Provider->>Provider: call responses.create()
+            else Fallback
+                Provider->>Provider: call chat.completions.create()
+            end
+            Provider-->>Agents: {text, usage, latency}
+            Agents-->>Orch: Proposal {content, metadata}
+            Orch->>SM: addContribution(debateId, contribution)
+            SM->>FS: save updated state JSON
+        end
+        
         Orch->>Orch: critiquePhase(state)
         loop For each agent
             loop For each other agent's proposal
@@ -75,15 +79,13 @@ sequenceDiagram
                 SM->>FS: save updated state JSON
             end
         end
-    end
-    
-    alt rounds >= 3
+        
         Orch->>Orch: refinementPhase(state)
         loop For each agent
             Orch->>Agents: agent.refine(original, critiques, context)
             Agents->>Provider: complete(systemPrompt, userPrompt)
             Provider-->>Agents: {text, usage, latency}
-            Agents-->>Orch: Proposal {content, metadata}
+            Agents-->>Orch: Refinement {content, metadata}
             Orch->>SM: addContribution(debateId, contribution)
             SM->>FS: save updated state JSON
         end
@@ -291,14 +293,21 @@ Manages debate state persistence to disk.
 
 - `createDebate(problem: string, context?: string)`: Creates initial debate state
   - Generates unique ID with timestamp format: `deb-YYYYMMDD-HHMMSS-RAND`
-  - Initializes state with status "running"
+  - Initializes state with status "running" and currentRound 0
   - Saves to disk immediately
   - Returns `DebateState`
 
-- `addContribution(debateId: string, contribution: Contribution)`: Adds contribution to debate
-  - Determines current round based on contribution type
-  - Creates new round if needed
-  - Appends contribution to round
+- `beginRound(debateId: string)`: Begins a new round
+  - Creates a new `DebateRound` object with incremented round number
+  - Appends the round to state.rounds array
+  - Updates state.currentRound to the new round number
+  - Saves updated state to disk
+  - Returns the newly created `DebateRound`
+
+- `addContribution(debateId: string, contribution: Contribution)`: Adds contribution to current round
+  - Requires that a round has been started via `beginRound()`
+  - Throws error if no active round exists
+  - Appends contribution to the current round's contributions array
   - Saves updated state to disk
 
 - `completeDebate(debateId: string, solution: Solution)`: Marks debate complete
@@ -306,23 +315,38 @@ Manages debate state persistence to disk.
   - Attaches final solution
   - Saves final state to disk
 
+- `failDebate(debateId: string, error: Error)`: Marks debate as failed
+  - Sets status to "failed"
+  - Saves updated state to disk
+
 - `getDebate(debateId: string)`: Retrieves debate state
   - Checks in-memory cache first
   - Falls back to reading from disk
   - Revives Date objects from JSON
+
+- `listDebates()`: Lists all debates
+  - Reads all JSON files from debates directory
+  - Returns array of DebateState objects sorted by creation time
 
 ### 11. Orchestrator Initialization
 
 **Class**: `DebateOrchestrator`  
 **Location**: `src/core/orchestrator.ts`
 
-Coordinates the multi-phase debate flow.
+Coordinates the multi-round debate flow, executing N complete rounds where each round consists of proposal, critique, and refinement phases.
 
 **Constructor Parameters**:
 - `agents`: Array of initialized agent instances
 - `judge`: Initialized judge agent
 - `stateManager`: State manager instance
-- `config`: Debate configuration
+- `config`: Debate configuration (includes number of rounds)
+- `hooks`: Optional hooks object with `onPhaseComplete` callback for notifications
+
+**Behavior**:
+- Executes `config.rounds` complete cycles of proposal → critique → refinement
+- Calls `stateManager.beginRound()` at the start of each round
+- All three phases execute in every round
+- Optional `onPhaseComplete` hook invoked after each phase (useful for progress logging)
 
 ### 12. Debate Execution
 
@@ -346,10 +370,18 @@ Main orchestration method that executes the complete debate workflow.
 #### 12.1 State Creation
 Calls `stateManager.createDebate()` to initialize debate state and persist initial JSON file.
 
-#### 12.2 Proposal Phase
+#### 12.2 Round Loop
+The orchestrator executes N complete rounds, where N is specified by `config.rounds`. Each round performs all three phases in sequence: proposal → critique → refinement.
+
+**For each round (1 to N)**:
+
+##### 12.2.1 Begin Round
+Calls `stateManager.beginRound(debateId)` to create a new round object and increment the current round counter. The round is persisted immediately to disk.
+
+##### 12.2.2 Proposal Phase
 **Method**: `proposalPhase(state: DebateState)`
 
-All agents generate initial proposals in parallel.
+All agents generate proposals in parallel for this round.
 
 **For each agent**:
 1. Builds `DebateContext` from current state (includes full history if configured)
@@ -358,20 +390,19 @@ All agents generate initial proposals in parallel.
    - Calls `proposeImpl()` which invokes `callLLM()`
    - `callLLM()` measures latency and calls `provider.complete()`
    - Returns `Proposal` with content and metadata (tokens, latency, model)
-3. Builds `Contribution` object with normalized metadata
-4. Calls `stateManager.addContribution()` to persist contribution
+3. Builds `Contribution` object with type "proposal" and normalized metadata
+4. Calls `stateManager.addContribution()` to persist contribution to current round
 5. State manager saves updated JSON to disk
 
 **Concurrency**: All agent proposals run in parallel via `Promise.all()`
 
-#### 12.3 Critique Phase
-**Method**: `critiquePhase(state: DebateState)`  
-**Condition**: Only runs if `config.rounds >= 2`
+##### 12.2.3 Critique Phase
+**Method**: `critiquePhase(state: DebateState)`
 
-Each agent critiques proposals from other agents.
+Each agent critiques proposals from other agents within the current round.
 
 **For each agent**:
-1. Retrieves proposals from previous round
+1. Retrieves proposals from current round (just added in proposal phase)
 2. Filters to get proposals from other agents only
 3. **For each other agent's proposal**:
    - Calls `agent.critique(proposal, context)`
@@ -380,32 +411,34 @@ Each agent critiques proposals from other agents.
    - `callLLM()` measures latency and calls `provider.complete()`
    - Returns `Critique` with content and metadata
 4. Builds `Contribution` with type "critique" and target agent ID
-5. Calls `stateManager.addContribution()` to persist
+5. Calls `stateManager.addContribution()` to persist to current round
 6. State manager saves updated JSON to disk
 
 **Concurrency**: Critiques are processed sequentially (outer loop) but could be parallelized
 
-#### 12.4 Refinement Phase
-**Method**: `refinementPhase(state: DebateState)`  
-**Condition**: Only runs if `config.rounds >= 3`
+##### 12.2.4 Refinement Phase
+**Method**: `refinementPhase(state: DebateState)`
 
-Each agent refines their original proposal based on received critiques.
+Each agent refines their proposal based on critiques received within the current round.
 
 **For each agent**:
-1. Retrieves agent's original proposal from previous round
-2. Retrieves all critiques targeting this agent
+1. Retrieves agent's proposal from current round
+2. Retrieves all critiques targeting this agent from current round
 3. Calls `agent.refine(original, critiques, context)`
    - Agent builds refinement prompts including original and all critiques
    - Calls `refineImpl()` which invokes `callLLM()`
    - `callLLM()` measures latency and calls `provider.complete()`
-   - Returns refined `Proposal` with updated content and metadata
-4. Builds `Contribution` with type "proposal" (refined version)
-5. Calls `stateManager.addContribution()` to persist
+   - Returns refined content with updated metadata
+4. Builds `Contribution` with type "refinement"
+5. Calls `stateManager.addContribution()` to persist to current round
 6. State manager saves updated JSON to disk
 
 **Concurrency**: All agent refinements run in parallel via `Promise.all()`
 
-#### 12.5 Synthesis Phase
+##### 12.2.5 Phase Complete Hook
+After each phase completes, if the optional `onPhaseComplete` hook is provided (typically for verbose CLI output), it is invoked with the current round number and phase type.
+
+#### 12.3 Synthesis Phase
 **Method**: `synthesisPhase(state: DebateState)`
 
 Judge synthesizes the final solution from all debate rounds.
@@ -428,7 +461,7 @@ Judge synthesizes the final solution from all debate rounds.
 
 **Returns**: `Solution` object
 
-#### 12.6 Debate Completion
+#### 12.4 Debate Completion
 1. Calls `stateManager.completeDebate(debateId, solution)`
 2. State manager updates status to "completed"
 3. Attaches final solution to state
@@ -493,7 +526,7 @@ Represents the complete state of a debate:
 - `problem`: Problem statement
 - `context`: Optional additional context
 - `status`: "pending" | "running" | "completed" | "failed"
-- `currentRound`: Current round number
+- `currentRound`: Current round number (0 when no rounds started, 1-indexed after beginRound())
 - `rounds`: Array of `DebateRound` objects
 - `finalSolution`: Solution object (when complete)
 - `createdAt`: Creation timestamp
@@ -502,8 +535,7 @@ Represents the complete state of a debate:
 ### DebateRound
 Represents a single round of debate:
 - `roundNumber`: Round number (1-indexed)
-- `phase`: "proposal" | "critique" | "refinement"
-- `contributions`: Array of `Contribution` objects
+- `contributions`: Array of `Contribution` objects (includes proposals, critiques, and refinements)
 - `timestamp`: Round start time
 
 ### Contribution
@@ -511,12 +543,15 @@ Represents a single agent contribution:
 - `agentId`: Agent identifier
 - `agentRole`: Agent role
 - `type`: "proposal" | "critique" | "refinement"
+  - "proposal": Initial solution proposal
+  - "critique": Critical analysis of another agent's proposal
+  - "refinement": Refined version of the agent's own proposal based on received critiques
 - `content`: Text content
-- `targetAgentId`: Target agent (for critiques)
+- `targetAgentId`: Target agent (only populated for critiques)
 - `metadata`: Object containing:
-  - `tokensUsed`: Token count
-  - `latencyMs`: Latency in milliseconds
-  - `model`: Model used
+  - `tokensUsed`: Token count (optional)
+  - `latencyMs`: Latency in milliseconds (optional)
+  - `model`: Model used (optional)
 
 ### Solution
 Represents the final synthesized solution:
@@ -529,22 +564,36 @@ Represents the final synthesized solution:
 
 ## Phase Execution Rules
 
-The debate system adapts its flow based on the configured number of rounds:
+The debate system executes N complete rounds, where N is specified by `config.rounds` (minimum 1).
 
-### 1 Round
-- **Phases**: Proposal → Synthesis
-- **Flow**: Agents propose, judge synthesizes immediately
-- **Use case**: Quick initial solutions without iteration
+### Round Structure
+Each round consists of three phases executed in sequence:
+1. **Proposal Phase**: All agents generate proposals in parallel
+2. **Critique Phase**: Each agent critiques proposals from other agents
+3. **Refinement Phase**: Each agent refines their proposal based on received critiques
 
-### 2 Rounds
-- **Phases**: Proposal → Critique → Synthesis
-- **Flow**: Agents propose, critique each other, judge synthesizes
-- **Use case**: Solutions with peer review
+All three phases execute in every round, regardless of the round count.
 
-### 3+ Rounds
-- **Phases**: Proposal → Critique → Refinement → Synthesis
-- **Flow**: Agents propose, critique each other, refine based on critiques, judge synthesizes
-- **Use case**: Full iterative improvement cycle (recommended)
+### Multiple Rounds
+- **1 Round**: Single cycle of proposal → critique → refinement → synthesis
+  - Agents propose fresh ideas
+  - Critique each other's proposals
+  - Refine based on critiques
+  - Judge synthesizes final solution
+  - **Use case**: Standard debate with peer review and refinement
+
+- **2 Rounds**: Two complete cycles of proposal → critique → refinement → synthesis
+  - Round 1: Initial proposals, critiques, and refinements
+  - Round 2: New proposals (potentially informed by full history if enabled), new critiques, new refinements
+  - Judge synthesizes from all rounds
+  - **Use case**: Iterative exploration with two passes
+
+- **3+ Rounds**: Multiple complete cycles
+  - Each round: Fresh proposals → critiques → refinements
+  - Full history can be included in context (via `includeFullHistory: true`)
+  - Agents can build on previous rounds when history is enabled
+  - Judge synthesizes from complete debate history
+  - **Use case**: Deep iterative refinement and exploration of solution space
 
 ## LLM Provider Integration
 
@@ -598,6 +647,7 @@ Latency is measured at multiple levels:
 
 **Persistence Points**:
 - After initial debate creation
+- After each round is begun (via `beginRound()`)
 - After each contribution is added
 - After debate completion with final solution
 
@@ -629,7 +679,8 @@ The following operations run concurrently:
 
 ### Sequential Operations
 The following operations run sequentially:
-- Debate phases (proposal → critique → refinement → synthesis)
+- Debate rounds (round 1 → round 2 → ... → round N → synthesis)
+- Phases within each round (proposal → critique → refinement)
 - Critique generation (agent by agent, though could be parallelized)
 - Provider API calls (one at a time per agent)
 
@@ -648,9 +699,11 @@ The system is single-threaded (Node.js) but uses async/await patterns:
 
 ### Latency
 - Total latency is primarily dominated by LLM API calls
-- Proposal phase latency = max(agent latencies) due to parallel execution
-- Critique phase latency = sum(all critique latencies) due to sequential execution
-- Refinement phase latency = max(agent latencies) due to parallel execution
+- Each round latency = proposal phase + critique phase + refinement phase:
+  - Proposal phase latency = max(agent latencies) due to parallel execution
+  - Critique phase latency = sum(all critique latencies) due to sequential execution
+  - Refinement phase latency = max(agent latencies) due to parallel execution
+- Total debate latency = sum(all round latencies) + synthesis phase latency
 - Synthesis phase latency = judge synthesis latency
 
 ### File System

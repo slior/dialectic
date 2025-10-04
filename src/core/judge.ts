@@ -68,7 +68,7 @@ export class JudgeAgent {
     let text = `Problem: ${problem}\n\n`;
 
     rounds.forEach((round, idx) => {
-      text += `Round ${idx + 1} (${round.phase})\n`;
+      text += `Round ${idx + 1}\n`;
       for (const c of round.contributions) {
         text += `[${c.agentRole}] ${c.type}:\n${c.content}\n\n`;
       }

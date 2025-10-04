@@ -173,10 +173,7 @@ The `DebateConfig` schema controls how debates execute:
 #### `rounds`
 - **Type**: Number (integer)
 - **Accepted Values**: Positive integers >= 1
-- **Semantics**: Number of debate rounds to execute. The debate flow varies by round count:
-  - 1 round: Proposals only, then synthesis
-  - 2 rounds: Proposals + critiques, then synthesis
-  - 3+ rounds: Proposals + critiques + refinement, then synthesis
+- **Semantics**: Number of complete rounds to execute. Each round consists of all phases in order: proposal → critique → refinement. After the final round completes, the judge synthesizes the final solution. Proposals are fresh each round; agents may incorporate prior history when `includeFullHistory` is true.
 - **Default**: 3
 - **Example**: `3`
 

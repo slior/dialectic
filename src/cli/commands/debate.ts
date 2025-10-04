@@ -6,9 +6,10 @@ let chalk: any;
 try { chalk = require('chalk'); } catch { chalk = null; }
 function color(method: string, msg: string) { return chalk && chalk[method] ? chalk[method](msg) : msg; }
 import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
+import { WARNING_COLOR, INFO_COLOR } from '../index';
 import { SystemConfig } from '../../types/config.types';
-import { AgentConfig, AGENT_ROLES } from '../../types/agent.types';
-import { DebateConfig, DebateResult } from '../../types/debate.types';
+import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../../types/agent.types';
+import { DebateConfig, DebateResult, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES } from '../../types/debate.types';
 import { OpenAIProvider } from '../../providers/openai-provider';
 import { ArchitectAgent } from '../../agents/architect-agent';
 import { PerformanceAgent } from '../../agents/performance-agent';
@@ -18,6 +19,19 @@ import { DebateOrchestrator } from '../../core/orchestrator';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
+
+// Default agent identifiers and names
+const DEFAULT_ARCHITECT_ID = 'agent-architect';
+const DEFAULT_ARCHITECT_NAME = 'System Architect';
+const DEFAULT_PERFORMANCE_ID = 'agent-performance';
+const DEFAULT_PERFORMANCE_NAME = 'Performance Engineer';
+const DEFAULT_JUDGE_ID = 'judge-main';
+const DEFAULT_JUDGE_NAME = 'Technical Judge';
+
+// Default LLM configuration
+const DEFAULT_LLM_MODEL = 'gpt-4';
+const DEFAULT_AGENT_TEMPERATURE = 0.5;
+const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 
 /**
  * Returns the built-in default system configuration for the debate system.
@@ -31,11 +45,11 @@ const DEFAULT_ROUNDS = 3;
  */
 function builtInDefaults(): SystemConfig {
   const defaultAgents: AgentConfig[] = [
-    { id: 'agent-architect', name: 'System Architect', role: 'architect', model: 'gpt-4', provider: 'openai', temperature: 0.5, enabled: true },
-    { id: 'agent-performance', name: 'Performance Engineer', role: 'performance', model: 'gpt-4', provider: 'openai', temperature: 0.5, enabled: true },
+    { id: DEFAULT_ARCHITECT_ID, name: DEFAULT_ARCHITECT_NAME, role: AGENT_ROLES.ARCHITECT, model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
+    { id: DEFAULT_PERFORMANCE_ID, name: DEFAULT_PERFORMANCE_NAME, role: AGENT_ROLES.PERFORMANCE, model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
   ];
-  const judge: AgentConfig = { id: 'judge-main', name: 'Technical Judge', role: 'generalist', model: 'gpt-4', provider: 'openai', temperature: 0.3 } as any;
-  const debate: DebateConfig = { rounds: DEFAULT_ROUNDS, terminationCondition: { type: 'fixed' }, synthesisMethod: 'judge', includeFullHistory: true, timeoutPerRound: 300000 };
+  const judge: AgentConfig = { id: DEFAULT_JUDGE_ID, name: DEFAULT_JUDGE_NAME, role: AGENT_ROLES.GENERALIST, model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_JUDGE_TEMPERATURE };
+  const debate: DebateConfig = { rounds: DEFAULT_ROUNDS, terminationCondition: { type: TERMINATION_TYPES.FIXED }, synthesisMethod: SYNTHESIS_METHODS.JUDGE, includeFullHistory: true, timeoutPerRound: 300000 };
   return { agents: defaultAgents, judge, debate } as SystemConfig;
 }
 
@@ -61,7 +75,7 @@ function builtInDefaults(): SystemConfig {
 export async function loadConfig(configPath?: string): Promise<SystemConfig> {
   const finalPath = configPath ? path.resolve(process.cwd(), configPath) : DEFAULT_CONFIG_PATH;
   if (!fs.existsSync(finalPath)) {
-    process.stderr.write(color('yellow', `Config not found at ${finalPath}. Using built-in defaults.`) + '\n');
+    process.stderr.write(color(WARNING_COLOR, `Config not found at ${finalPath}. Using built-in defaults.`) + '\n');
     return builtInDefaults();
   }
   const raw = await fs.promises.readFile(finalPath, 'utf-8');
@@ -69,11 +83,11 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
   // Ensure shape minimal
   if (!Array.isArray(parsed.agents) || parsed.agents.length === 0) {
     // Use process.stderr.write for immediate, unbuffered output with precise newline control (CLI best practice)
-    process.stderr.write(color('yellow', 'Config missing agents. Using built-in defaults.') + '\n');
+    process.stderr.write(color(WARNING_COLOR, 'Config missing agents. Using built-in defaults.') + '\n');
     return builtInDefaults();
   }
   if (!parsed.judge) {
-    process.stderr.write(color('yellow', 'Config missing judge. Using default judge.') + '\n');
+    process.stderr.write(color(WARNING_COLOR, 'Config missing judge. Using default judge.') + '\n');
     parsed.judge = builtInDefaults().judge;
   }
   if (!parsed.debate) {
@@ -100,7 +114,7 @@ function buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider) {
     if (cfg.role === AGENT_ROLES.ARCHITECT) return ArchitectAgent.create(cfg, provider);
     if (cfg.role === AGENT_ROLES.PERFORMANCE) return PerformanceAgent.create(cfg, provider);
     // Default to architect for unknown roles
-    process.stderr.write(color('yellow', `Unknown agent role '${cfg.role}' for agent '${cfg.name}'. Defaulting to architect.`) + '\n');
+    process.stderr.write(color(WARNING_COLOR, `Unknown agent role '${cfg.role}' for agent '${cfg.name}'. Defaulting to architect.`) + '\n');
     return ArchitectAgent.create(cfg, provider);
   });
 }
@@ -147,7 +161,7 @@ function agentConfigsFromSysConfig(sysConfig: SystemConfig, options: any): Agent
   }
   
   if (agentConfigs.length === 0) {
-    process.stderr.write(color('yellow', 'No agents selected; defaulting to architect,performance.') + '\n');
+    process.stderr.write(color(WARNING_COLOR, 'No agents selected; defaulting to architect,performance.') + '\n');
     const defaults = builtInDefaults();
     agentConfigs = defaults.agents;
   }
@@ -188,13 +202,20 @@ async function outputResults(result: DebateResult, stateManager: StateManager, o
     if (debate) {
       process.stdout.write('\nSummary (verbose)\n');
       debate.rounds.forEach((round) => {
-        process.stdout.write(`Round ${round.roundNumber} - ${round.phase}\n`);
-        round.contributions.forEach((c) => {
-          const firstLine = c.content.split('\n')[0];
-          const tokens = (c.metadata && c.metadata.tokensUsed != null) ? c.metadata.tokensUsed : 'N/A';
-          const lat = (c.metadata && c.metadata.latencyMs != null) ? `${c.metadata.latencyMs}ms` : 'N/A';
-          process.stdout.write(`  [${c.agentRole}] ${c.type}: ${firstLine}\n`);
-          process.stdout.write(`    (latency=${lat}, tokens=${tokens})\n`);
+        process.stdout.write(`Round ${round.roundNumber}\n`);
+        const types = [CONTRIBUTION_TYPES.PROPOSAL, CONTRIBUTION_TYPES.CRITIQUE, CONTRIBUTION_TYPES.REFINEMENT] as const;
+        types.forEach((t) => {
+          const items = round.contributions.filter((c) => c.type === t);
+          if (items.length > 0) {
+            process.stdout.write(`  ${t}:\n`);
+            items.forEach((c) => {
+              const firstLine = c.content.split('\n')[0];
+              const tokens = (c.metadata && c.metadata.tokensUsed != null) ? c.metadata.tokensUsed : 'N/A';
+              const lat = (c.metadata && c.metadata.latencyMs != null) ? `${c.metadata.latencyMs}ms` : 'N/A';
+              process.stdout.write(`    [${c.agentRole}] ${firstLine}\n`);
+              process.stdout.write(`      (latency=${lat}, tokens=${tokens})\n`);
+            });
+          }
         });
       });
       const totalTokens = debate.rounds.reduce((sum, r) => sum + r.contributions.reduce((s, c) => s + (c.metadata.tokensUsed ?? 0), 0), 0);
@@ -245,11 +266,19 @@ export function debateCommand(program: Command) {
           });
         }
 
-        const orchestrator = new DebateOrchestrator(agents as any, judge, stateManager, debateCfg);
+        const orchestrator = new DebateOrchestrator(
+          agents as any,
+          judge,
+          stateManager,
+          debateCfg,
+          options.verbose
+            ? { onPhaseComplete: (round, phase) => process.stdout.write(`[Round ${round}] ${phase} complete\n`) }
+            : undefined,
+        );
         const result: DebateResult = await orchestrator.runDebate(problem);
 
         // Persist path notice (StateManager already persisted during run)
-        process.stderr.write(color('gray', `Saved debate to ./debates/${result.debateId}.json`) + '\n');
+        process.stderr.write(color(INFO_COLOR, `Saved debate to ./debates/${result.debateId}.json`) + '\n');
 
         await outputResults(result, stateManager, options);
       } catch (err: any) {

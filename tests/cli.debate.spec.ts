@@ -58,7 +58,8 @@ describe('CLI debate command', () => {
     const out = captured.join('');
     expect(out).toContain('Running debate (verbose)');
     expect(out).toContain('Summary (verbose)');
-    expect(out).toMatch(/Round\s+1\s+-/);
+    expect(out).toMatch(/Round\s+1/);
+    expect(out).toMatch(/\[Round\s+1\]\s+proposal\s+complete/);
     expect(out).toMatch(/latency=.+, tokens=/);
 
     writeSpy.mockRestore();

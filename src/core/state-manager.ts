@@ -1,112 +1,233 @@
 import fs from 'fs';
 import path from 'path';
-import { Contribution, DebateRound, DebateState, Solution } from '../types/debate.types';
+import { Contribution, DebateRound, DebateState, Solution, DEBATE_STATUS } from '../types/debate.types';
 
+// File-level constants to eliminate magic strings and improve clarity
+const DEFAULT_DEBATES_DIR = 'debates';
+const FILE_EXTENSION_JSON = '.json';
+const FILE_ENCODING_UTF8 = 'utf-8';
+const ID_PREFIX = 'deb-';
+const JSON_SPACE = 2;
+
+/**
+ * StateManager persists and retrieves debate state to the filesystem
+ * while keeping an in-memory cache for fast access.
+ */
 export class StateManager {
   private debates: Map<string, DebateState> = new Map();
   private baseDir: string;
 
-  constructor(baseDir: string = path.resolve(process.cwd(), 'debates')) {
+  /**
+   * @param baseDir - Base directory where debate JSON files are stored (defaults to ./debates).
+   */
+  constructor(baseDir: string = path.resolve(process.cwd(), DEFAULT_DEBATES_DIR)) {
     this.baseDir = baseDir;
     this.ensureDirectoryExists();
   }
 
+  /**
+   * Creates a new debate entry, initializes state, and persists it.
+   * @param problem - Problem statement for the debate.
+   * @param context - Optional additional context.
+   * @returns The created DebateState.
+   */
   async createDebate(problem: string, context?: string): Promise<DebateState> {
     const now = new Date();
     const state: DebateState = {
       id: this.generateId(now),
       problem,
-      context,
-      status: 'running',
+      // Conditional spread: only include context property if defined (avoids explicit undefined with exactOptionalPropertyTypes)
+      ...(context !== undefined && { context }),
+      status: DEBATE_STATUS.RUNNING,
       currentRound: 0,
       rounds: [],
       createdAt: now,
       updatedAt: now,
-    } as DebateState;
+    };
 
     this.debates.set(state.id, state);
     await this.save(state);
     return state;
   }
 
+  /**
+   * Adds a contribution to the current round of the specified debate and persists the updated state.
+   *
+   * @param debateId - The unique identifier of the debate to which the contribution should be added.
+   * @param contribution - The Contribution object to append to the current round.
+   * @throws {Error} If the debate with the given ID does not exist.
+   * @throws {Error} If there is no active round for the debate (i.e., beginRound has not been called).
+   *
+   * This method locates the debate in the in-memory cache, verifies that a round is active,
+   * appends the contribution to the current round's contributions array, updates the debate's
+   * updatedAt timestamp, and persists the state to disk.
+   */
   async addContribution(debateId: string, contribution: Contribution): Promise<void> {
+    // Direct in-memory access: only active debates can be modified (don't load completed debates from disk)
     const state = this.debates.get(debateId);
     if (!state) throw new Error(`Debate ${debateId} not found`);
 
-    // Determine current round
-    let round: DebateRound | undefined = state.rounds[state.currentRound - 1];
-    if (!round) {
-      round = {
-        roundNumber: state.currentRound + 1,
-        phase: contribution.type === 'proposal' ? 'proposal' : contribution.type === 'critique' ? 'critique' : 'refinement',
-        contributions: [],
-        timestamp: new Date(),
-      };
-      state.rounds.push(round);
-      state.currentRound = round.roundNumber;
-    }
+    const round: DebateRound | undefined = state.rounds[state.currentRound - 1];
+    if (!round)  throw new Error(`No active round for debate ${debateId}. Call beginRound() before adding contributions.`);
 
     round.contributions.push(contribution);
     state.updatedAt = new Date();
     await this.save(state);
   }
 
+  /**
+   * Marks the specified debate as completed, attaches the final solution, updates the status and timestamp,
+   * and persists the updated debate state to disk.
+   *
+   * @param debateId - The unique identifier of the debate to complete.
+   * @param solution - The final Solution object synthesized by the judge.
+   * @throws {Error} If the debate with the given ID does not exist in memory.
+   *
+   * This method sets the debate's status to COMPLETED, assigns the provided solution to the
+   * finalSolution property, updates the updatedAt timestamp, and saves the state.
+   */
   async completeDebate(debateId: string, solution: Solution): Promise<void> {
     const state = this.debates.get(debateId);
     if (!state) throw new Error(`Debate ${debateId} not found`);
 
-    state.status = 'completed';
+    state.status = DEBATE_STATUS.COMPLETED;
     state.finalSolution = solution;
     state.updatedAt = new Date();
     await this.save(state);
   }
 
+  /**
+   * Marks a debate as failed and persists the updated status.
+   *
+   * @param debateId - The unique identifier of the debate to fail.
+   * @param _error - The error that caused the debate to fail (unused).
+   * @throws {Error} If the debate with the given ID does not exist in memory.
+   *
+   * This method sets the debate's status to FAILED, updates the updatedAt timestamp, and saves the state.
+   * If the debate does not exist, this method does nothing.
+   */
   async failDebate(debateId: string, _error: Error): Promise<void> {
     const state = this.debates.get(debateId);
     if (!state) return;
-    state.status = 'failed';
+    state.status = DEBATE_STATUS.FAILED;
     state.updatedAt = new Date();
     await this.save(state);
   }
 
+  /**
+   * Retrieves a debate by id from in-memory cache, falling back to disk if needed.
+   *
+   * @param debateId - The unique identifier of the debate to retrieve.
+   * @returns The DebateState object if found, or null if not found.
+   *
+   * This method first checks the in-memory cache, then attempts to load from disk if not found.
+   * It revives date fields for createdAt/updatedAt.
+   */
   async getDebate(debateId: string): Promise<DebateState | null> {
     const inMem = this.debates.get(debateId);
     if (inMem) return inMem;
 
-    const filePath = path.join(this.baseDir, `${debateId}.json`);
+    const filePath = this.getFilePath(debateId);
     if (!fs.existsSync(filePath)) return null;
-    const raw = await fs.promises.readFile(filePath, 'utf-8');
+    const raw = await fs.promises.readFile(filePath, FILE_ENCODING_UTF8);
     const parsed = JSON.parse(raw);
-    // revive dates
+    // Revive top-level dates; round timestamps remain as serialized strings unless separately revived.
     parsed.createdAt = new Date(parsed.createdAt);
     parsed.updatedAt = new Date(parsed.updatedAt);
     return parsed as DebateState;
   }
 
+  /**
+   * Lists all debates stored on disk, sorted by most recent creation time.
+   *
+   * This method scans the base directory for all debate JSON files, loads each debate state,
+   * and returns an array of DebateState objects sorted in descending order by their createdAt timestamp.
+   *
+   * Notes:
+   * - Only files with the expected JSON extension are considered.
+   * - If a debate file cannot be loaded or parsed, it is skipped.
+   * - Debates are loaded using getDebate, which revives date fields.
+   * 
+   * @returns {Promise<DebateState[]>} - An array of DebateState objects, most recent first.
+   */
   async listDebates(): Promise<DebateState[]> {
     const files = fs.existsSync(this.baseDir) ? await fs.promises.readdir(this.baseDir) : [];
     const debates: DebateState[] = [];
     for (const file of files) {
-      if (!file.endsWith('.json')) continue;
-      const id = file.replace(/\.json$/, '');
+      if (!file.endsWith(FILE_EXTENSION_JSON)) continue;
+      const id = file.replace(new RegExp(`${FILE_EXTENSION_JSON.replace('.', '\\.')}$`), '');
       const d = await this.getDebate(id);
       if (d) debates.push(d);
     }
     return debates.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
-  private async save(state: DebateState): Promise<void> {
-    const filePath = path.join(this.baseDir, `${state.id}.json`);
-    const serialized = JSON.stringify(state, null, 2);
-    await fs.promises.writeFile(filePath, serialized, 'utf-8');
+  /**
+   * Starts a new round for the specified debate, increments currentRound, and persists state.
+   *
+   * This method locates the debate in the in-memory cache, creates a new round object,
+   * appends it to the state's rounds array, updates the currentRound counter, updates the
+   * updatedAt timestamp, and persists the state to disk.
+   * 
+   * @param debateId - The unique identifier of the debate to begin a round for.
+   * @returns The newly created DebateRound object.
+   */
+  async beginRound(debateId: string): Promise<DebateRound> {
+    const state = this.debates.get(debateId);
+    if (!state) throw new Error(`Debate ${debateId} not found`);
+
+    const round: DebateRound = {
+      roundNumber: state.rounds.length + 1,
+      contributions: [],
+      timestamp: new Date(),
+    };
+
+    state.rounds.push(round);
+    state.currentRound = round.roundNumber;
+    state.updatedAt = new Date();
+    await this.save(state);
+    return round;
   }
 
+  /**
+   * Persists the debate state to disk in JSON format.
+   * 
+   * @param state - The DebateState object to save.
+   */
+  private async save(state: DebateState): Promise<void> {
+    const filePath = this.getFilePath(state.id);
+    const serialized = JSON.stringify(state, null, JSON_SPACE);
+    await fs.promises.writeFile(filePath, serialized, FILE_ENCODING_UTF8);
+  }
+
+  /**
+   * Ensures the base directory exists on disk.
+   */
   private ensureDirectoryExists() {
     if (!fs.existsSync(this.baseDir)) {
+      // Use recursive mkdir to create nested directories if needed
       fs.mkdirSync(this.baseDir, { recursive: true });
     }
   }
 
+  /**
+   * Computes the absolute file path for the JSON file corresponding to a given debate id.
+   *
+   * The file is stored in the base directory with the debate id as the filename and a .json extension.
+   *
+   * @param debateId - The unique identifier of the debate.
+   * @returns The absolute file path where the debate state is persisted.
+   */
+  private getFilePath(debateId: string): string {
+    return path.join(this.baseDir, `${debateId}${FILE_EXTENSION_JSON}`);
+  }
+
+  /**
+   * Generates a unique debate id using a timestamp and a short random suffix.
+   * 
+   * @param now - The current date and time.
+   * @returns The unique debate id.
+   */
   private generateId(now: Date): string {
     const pad = (n: number) => n.toString().padStart(2, '0');
     const yyyy = now.getFullYear();
@@ -116,6 +237,6 @@ export class StateManager {
     const mm = pad(now.getMinutes());
     const ss = pad(now.getSeconds());
     const rand = Math.random().toString(36).slice(2, 6);
-    return `deb-${yyyy}${MM}${dd}-${hh}${mm}${ss}-${rand}`;
+    return `${ID_PREFIX}${yyyy}${MM}${dd}-${hh}${mm}${ss}-${rand}`;
   }
 }

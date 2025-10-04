@@ -34,13 +34,16 @@ function createMockStateManager() {
 
   return {
     createDebate: async (problem: string) => ({ ...state, problem }),
+    beginRound: async (_id: string) => {
+      const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
+      state.rounds.push(round);
+      state.currentRound = round.roundNumber;
+      state.updatedAt = new Date();
+      return round;
+    },
     addContribution: async (_id: string, contrib: any) => {
-      let round = state.rounds[state.currentRound - 1];
-      if (!round) {
-        round = { roundNumber: state.currentRound + 1, phase: contrib.type, contributions: [], timestamp: new Date() };
-        state.rounds.push(round);
-        state.currentRound = round.roundNumber;
-      }
+      const round = state.rounds[state.currentRound - 1];
+      if (!round) throw new Error('No active round');
       round.contributions.push(contrib);
       state.updatedAt = new Date();
     },
@@ -49,6 +52,7 @@ function createMockStateManager() {
       (state as any).finalSolution = solution;
       state.updatedAt = new Date();
     },
+    getState: () => state,
   } as any;
 }
 
@@ -66,9 +70,17 @@ describe('DebateOrchestrator (Flow 1)', () => {
 
     const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
     await expect(orchestrator.runDebate('Design a caching system')).resolves.toBeDefined();
+
+    const state = (sm as any).getState();
+    expect(state.rounds.length).toBe(3);
+    // Each round should include refinement contributions
+    state.rounds.forEach((round: DebateRound) => {
+      const hasRefinement = round.contributions.some((c: any) => c.type === 'refinement');
+      expect(hasRefinement).toBe(true);
+    });
   });
 
-  it('with rounds=1 only runs proposals and synthesizes', async () => {
+  it('with rounds=1 runs all phases and synthesizes', async () => {
     const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
     const sm = createMockStateManager();
     const cfg: DebateConfig = {
@@ -81,5 +93,12 @@ describe('DebateOrchestrator (Flow 1)', () => {
 
     const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
     await expect(orchestrator.runDebate('Design a rate limiting system')).resolves.toBeDefined();
+
+    const state = (sm as any).getState();
+    expect(state.rounds.length).toBe(1);
+    const hasProposal = state.rounds[0].contributions.some((c: any) => c.type === 'proposal');
+    const hasCritique = state.rounds[0].contributions.some((c: any) => c.type === 'critique');
+    const hasRefinement = state.rounds[0].contributions.some((c: any) => c.type === 'refinement');
+    expect(hasProposal && hasCritique && hasRefinement).toBe(true);
   });
 });
