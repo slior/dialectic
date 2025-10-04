@@ -1,7 +1,7 @@
-# Multi-Agent Debate (Flow 1)
+# Multi-Agent Debate
 
 Overview
-- This project implements Flow 1 (simple fixed-round debate) of a multi-agent debate system as a CLI tool named "debate".
+- This project implements a simple fixed-round debate of a multi-agent debate system as a CLI tool named "debate".
 - It supports two agents by default (architect, performance), runs fixed rounds, and synthesizes a final solution via a judge agent.
 - End-to-end path: CLI → configuration → OpenAI provider → agents/orchestrator → state persisted to ./debates → output to stdout or file.
 
@@ -39,6 +39,7 @@ Output Behavior
   - Otherwise, only the final solution text is written
 
 Configuration
+- For comprehensive configuration documentation, see [docs/configuration.md](docs/configuration.md)
 - Default config file: `./debate-config.json`. If missing:
   - The CLI uses built-in defaults (two agents: architect, performance; judge defaults; debate defaults)
   - A notice is written to stderr indicating defaults are used
