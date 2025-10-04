@@ -30,7 +30,7 @@ export abstract class Agent {
    * @param config - The agent's configuration, including model, role, and prompts.
    * @param provider - The LLMProvider instance used for LLM interactions.
    */
-  constructor(protected config: AgentConfig, protected provider: LLMProvider) {}
+  constructor(public config: AgentConfig, protected provider: LLMProvider) {}
 
   /**
    * Generates a proposal for the given problem.
