@@ -248,9 +248,14 @@ Creates concrete agent instances based on configurations.
 **Returns**: Array of Agent instances
 
 **Behavior**:
-- For role `"architect"`: Creates `ArchitectAgent.create(config, provider)`
-- For role `"performance"`: Creates `PerformanceAgent.create(config, provider)`
+- For role `"architect"`: Creates `ArchitectAgent.create(config, provider, resolvedSystemPrompt, promptSource)`
+- For role `"performance"`: Creates `PerformanceAgent.create(config, provider, resolvedSystemPrompt, promptSource)`
 - For unknown roles: Defaults to `ArchitectAgent` with warning to stderr
+
+Prompt source resolution occurs at initialization:
+- If `systemPromptPath` is set on the agent, the CLI resolves it relative to the configuration file directory and attempts to read the entire file (UTF-8)
+- If the file is missing/unreadable/empty, a warning is printed to stderr and the built-in prompt is used instead
+- The chosen source (built-in or absolute file path) is persisted once per debate in `DebateState.promptSources`
 
 Each agent instance is initialized with:
 - Configuration (id, name, role, model, temperature, systemPrompt)
@@ -262,6 +267,10 @@ Each agent instance is initialized with:
 **Location**: `src/core/judge.ts`
 
 Creates the judge agent responsible for synthesis.
+
+Prompt source resolution for the judge:
+- If `systemPromptPath` is set on the judge, it is resolved relative to the configuration file directory and read as UTF-8. Invalid/empty files cause a warning and fallback to the built-in judge prompt.
+- The chosen source is also recorded in `DebateState.promptSources.judge`.
 
 **Constructor Parameters**:
 - `config`: Agent configuration (typically role: "generalist", lower temperature)
@@ -497,6 +506,7 @@ Handles output of debate results based on options.
     - Each contribution with first line preview
     - Metadata (latency, tokens) per contribution
     - Total statistics (rounds, duration, tokens)
+  - Prints which system prompt is used per agent and judge: either "built-in default" or the resolved absolute file path.
 
 **Always**: Writes save path notice to stderr: `Saved debate to ./debates/<debate-id>.json`
 

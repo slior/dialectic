@@ -2,7 +2,7 @@ import { Agent } from './agent';
 import { JudgeAgent } from './judge';
 import { StateManager } from './state-manager';
 import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType } from '../types/debate.types';
-import { AgentRole } from '../types/agent.types';
+import { AgentRole, Critique } from '../types/agent.types';
 
 /**
  * DebateOrchestrator coordinates multi-round debates between agents and a judge.
@@ -184,9 +184,16 @@ export class DebateOrchestrator {
       this.agents.map(async (agent) => {
         const agentId = agent.config.id;
         const original = prevRound?.contributions.find((c) => c.type === CONTRIBUTION_TYPES.PROPOSAL && c.agentId === agentId);
-        const critiques = (prevRound?.contributions || []).filter((c) => c.type === CONTRIBUTION_TYPES.CRITIQUE && c.targetAgentId === agentId);
+        const critiqueContributions = (prevRound?.contributions || []).filter((c) => c.type === CONTRIBUTION_TYPES.CRITIQUE && c.targetAgentId === agentId);
+        
+        // Map Contribution[] to Critique[] by extracting only content and metadata
+        const critiques: Critique[] = critiqueContributions.map((c) => ({
+          content: c.content,
+          metadata: c.metadata
+        }));
+        
         const started = Date.now();
-        const refined = await agent.refine({ content: original?.content || '', metadata: original?.metadata || {} }, critiques as any, ctx);
+        const refined = await agent.refine({ content: original?.content || '', metadata: original?.metadata || {} }, critiques, ctx);
         const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.REFINEMENT, refined.content, refined.metadata, started );
         await this.stateManager.addContribution(state.id, contribution);
       })

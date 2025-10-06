@@ -1,21 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
-// Optional chalk import to avoid ESM issues under Jest
-let chalk: any;
-try { chalk = require('chalk'); } catch { chalk = null; }
-function color(method: string, msg: string) { return chalk && chalk[method] ? chalk[method](msg) : msg; }
 import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
-import { WARNING_COLOR, INFO_COLOR } from '../index';
+import { warnUser, infoUser, writeStderr } from '../index';
 import { SystemConfig } from '../../types/config.types';
-import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../../types/agent.types';
-import { DebateConfig, DebateResult, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES } from '../../types/debate.types';
+import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource } from '../../types/agent.types';
+import { DebateConfig, DebateResult, DebateRound, Contribution, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES } from '../../types/debate.types';
 import { OpenAIProvider } from '../../providers/openai-provider';
 import { ArchitectAgent } from '../../agents/architect-agent';
 import { PerformanceAgent } from '../../agents/performance-agent';
 import { JudgeAgent } from '../../core/judge';
 import { StateManager } from '../../core/state-manager';
 import { DebateOrchestrator } from '../../core/orchestrator';
+import { resolvePrompt } from '../../utils/prompt-loader';
+import { Agent } from '../../core/agent';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -45,11 +43,15 @@ const DEFAULT_JUDGE_TEMPERATURE = 0.3;
  */
 function builtInDefaults(): SystemConfig {
   const defaultAgents: AgentConfig[] = [
-    { id: DEFAULT_ARCHITECT_ID, name: DEFAULT_ARCHITECT_NAME, role: AGENT_ROLES.ARCHITECT, model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
-    { id: DEFAULT_PERFORMANCE_ID, name: DEFAULT_PERFORMANCE_NAME, role: AGENT_ROLES.PERFORMANCE, model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
+    { id: DEFAULT_ARCHITECT_ID, name: DEFAULT_ARCHITECT_NAME, role: AGENT_ROLES.ARCHITECT, 
+      model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
+    { id: DEFAULT_PERFORMANCE_ID, name: DEFAULT_PERFORMANCE_NAME, role: AGENT_ROLES.PERFORMANCE, 
+      model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
   ];
-  const judge: AgentConfig = { id: DEFAULT_JUDGE_ID, name: DEFAULT_JUDGE_NAME, role: AGENT_ROLES.GENERALIST, model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_JUDGE_TEMPERATURE };
-  const debate: DebateConfig = { rounds: DEFAULT_ROUNDS, terminationCondition: { type: TERMINATION_TYPES.FIXED }, synthesisMethod: SYNTHESIS_METHODS.JUDGE, includeFullHistory: true, timeoutPerRound: 300000 };
+  const judge: AgentConfig = {  id: DEFAULT_JUDGE_ID, name: DEFAULT_JUDGE_NAME, role: AGENT_ROLES.GENERALIST, 
+                                model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_JUDGE_TEMPERATURE };
+  const debate: DebateConfig = {  rounds: DEFAULT_ROUNDS, terminationCondition: { type: TERMINATION_TYPES.FIXED }, 
+                                  synthesisMethod: SYNTHESIS_METHODS.JUDGE, includeFullHistory: true, timeoutPerRound: 300000 };
   return { agents: defaultAgents, judge, debate } as SystemConfig;
 }
 
@@ -74,26 +76,66 @@ function builtInDefaults(): SystemConfig {
  */
 export async function loadConfig(configPath?: string): Promise<SystemConfig> {
   const finalPath = configPath ? path.resolve(process.cwd(), configPath) : DEFAULT_CONFIG_PATH;
+  const defaults = builtInDefaults();
+  
   if (!fs.existsSync(finalPath)) {
-    process.stderr.write(color(WARNING_COLOR, `Config not found at ${finalPath}. Using built-in defaults.`) + '\n');
-    return builtInDefaults();
+    warnUser(`Config not found at ${finalPath}. Using built-in defaults.`);
+    defaults.configDir = process.cwd();
+    return defaults;
   }
+  
   const raw = await fs.promises.readFile(finalPath, 'utf-8');
   const parsed = JSON.parse(raw);
+  
   // Ensure shape minimal
   if (!Array.isArray(parsed.agents) || parsed.agents.length === 0) {
-    // Use process.stderr.write for immediate, unbuffered output with precise newline control (CLI best practice)
-    process.stderr.write(color(WARNING_COLOR, 'Config missing agents. Using built-in defaults.') + '\n');
-    return builtInDefaults();
+    warnUser('Config missing agents. Using built-in defaults.');
+    defaults.configDir = path.dirname(finalPath);
+    return defaults;
   }
+  
   if (!parsed.judge) {
-    process.stderr.write(color(WARNING_COLOR, 'Config missing judge. Using default judge.') + '\n');
-    parsed.judge = builtInDefaults().judge;
+    warnUser('Config missing judge. Using default judge.');
+    parsed.judge = defaults.judge;
   }
+  
   if (!parsed.debate) {
-    parsed.debate = builtInDefaults().debate;
+    parsed.debate = defaults.debate;
   }
+  
+  parsed.configDir = path.dirname(finalPath);
   return parsed as SystemConfig;
+}
+
+/**
+ * Helper to create an agent instance with prompt resolution and metadata collection.
+ * Resolves the system prompt from file or default, creates the agent, and records provenance.
+ */
+function createAgentWithPromptResolution( agentClass: typeof ArchitectAgent | typeof PerformanceAgent, cfg: AgentConfig, provider: OpenAIProvider, 
+                                          configDir: string, collect: { agents: AgentPromptMetadata[] }): Agent
+{
+  const defaultText = agentClass.defaultSystemPrompt();
+  const res = resolvePrompt({
+    label: cfg.name,
+    configDir,
+    ...(cfg.systemPromptPath !== undefined && { promptPath: cfg.systemPromptPath }),
+    defaultText
+  });
+  
+  const promptSource: PromptSource = res.source === PROMPT_SOURCES.FILE
+    ? { source: PROMPT_SOURCES.FILE, ...(res.absPath !== undefined && { absPath: res.absPath }) }
+    : { source: PROMPT_SOURCES.BUILT_IN };
+  
+  const agent = agentClass.create(cfg, provider, res.text, promptSource);
+  
+  collect.agents.push({
+    agentId: cfg.id,
+    role: cfg.role,
+    source: res.source,
+    ...(res.absPath !== undefined && { path: res.absPath })
+  });
+  
+  return agent;
 }
 
 /**
@@ -109,13 +151,17 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  * @param {OpenAIProvider} provider - The LLM provider to use for agent interactions.
  * @returns {Agent[]} Array of Agent instances.
  */
-function buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider) {
+function buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider, configDir: string, collect: { agents: AgentPromptMetadata[] }) {
   return agentConfigs.map((cfg) => {
-    if (cfg.role === AGENT_ROLES.ARCHITECT) return ArchitectAgent.create(cfg, provider);
-    if (cfg.role === AGENT_ROLES.PERFORMANCE) return PerformanceAgent.create(cfg, provider);
+    if (cfg.role === AGENT_ROLES.ARCHITECT) {
+      return createAgentWithPromptResolution(ArchitectAgent, cfg, provider, configDir, collect);
+    }
+    if (cfg.role === AGENT_ROLES.PERFORMANCE) {
+      return createAgentWithPromptResolution(PerformanceAgent, cfg, provider, configDir, collect);
+    }
     // Default to architect for unknown roles
-    process.stderr.write(color(WARNING_COLOR, `Unknown agent role '${cfg.role}' for agent '${cfg.name}'. Defaulting to architect.`) + '\n');
-    return ArchitectAgent.create(cfg, provider);
+    warnUser(`Unknown agent role '${cfg.role}' for agent '${cfg.name}'. Defaulting to architect.`);
+    return createAgentWithPromptResolution(ArchitectAgent, cfg, provider, configDir, collect);
   });
 }
 
@@ -161,12 +207,36 @@ function agentConfigsFromSysConfig(sysConfig: SystemConfig, options: any): Agent
   }
   
   if (agentConfigs.length === 0) {
-    process.stderr.write(color(WARNING_COLOR, 'No agents selected; defaulting to architect,performance.') + '\n');
+    warnUser('No agents selected; defaulting to architect,performance.');
     const defaults = builtInDefaults();
     agentConfigs = defaults.agents;
   }
   
   return agentConfigs;
+}
+
+/**
+ * Outputs a summary of a single debate round to stderr for verbose mode.
+ * Lists all contributions (proposals, critiques, refinements) with metadata.
+ *
+ * @param {DebateRound} round - The debate round to summarize.
+ */
+function outputRoundSummary(round: DebateRound): void {
+  writeStderr(`Round ${round.roundNumber}\n`);
+  const types = [CONTRIBUTION_TYPES.PROPOSAL, CONTRIBUTION_TYPES.CRITIQUE, CONTRIBUTION_TYPES.REFINEMENT] as const;
+  types.forEach((t) => {
+    const items = round.contributions.filter((c: Contribution) => c.type === t);
+    if (items.length > 0) {
+      writeStderr(`  ${t}:\n`);
+      items.forEach((c: Contribution) => {
+        const firstLine = c.content.split('\n')[0];
+        const tokens = (c.metadata && c.metadata.tokensUsed != null) ? c.metadata.tokensUsed : 'N/A';
+        const lat = (c.metadata && c.metadata.latencyMs != null) ? `${c.metadata.latencyMs}ms` : 'N/A';
+        writeStderr(`    [${c.agentRole}] ${firstLine}\n`);
+        writeStderr(`      (latency=${lat}, tokens=${tokens})\n`);
+      });
+    }
+  });
 }
 
 /**
@@ -196,30 +266,14 @@ async function outputResults(result: DebateResult, stateManager: StateManager, o
     process.stdout.write(finalText);
   }
 
-  // Verbose summary after solution to stdout (only when not writing to a file)
+  // Verbose summary after solution to stderr (only when not writing to a file)
   if (!outputPath && options.verbose) {
     const debate = await stateManager.getDebate(result.debateId);
     if (debate) {
-      process.stdout.write('\nSummary (verbose)\n');
-      debate.rounds.forEach((round) => {
-        process.stdout.write(`Round ${round.roundNumber}\n`);
-        const types = [CONTRIBUTION_TYPES.PROPOSAL, CONTRIBUTION_TYPES.CRITIQUE, CONTRIBUTION_TYPES.REFINEMENT] as const;
-        types.forEach((t) => {
-          const items = round.contributions.filter((c) => c.type === t);
-          if (items.length > 0) {
-            process.stdout.write(`  ${t}:\n`);
-            items.forEach((c) => {
-              const firstLine = c.content.split('\n')[0];
-              const tokens = (c.metadata && c.metadata.tokensUsed != null) ? c.metadata.tokensUsed : 'N/A';
-              const lat = (c.metadata && c.metadata.latencyMs != null) ? `${c.metadata.latencyMs}ms` : 'N/A';
-              process.stdout.write(`    [${c.agentRole}] ${firstLine}\n`);
-              process.stdout.write(`      (latency=${lat}, tokens=${tokens})\n`);
-            });
-          }
-        });
-      });
+      writeStderr('\nSummary (verbose)\n');
+      debate.rounds.forEach(outputRoundSummary);
       const totalTokens = debate.rounds.reduce((sum, r) => sum + r.contributions.reduce((s, c) => s + (c.metadata.tokensUsed ?? 0), 0), 0);
-      process.stdout.write(`\nTotals: rounds=${result.metadata.totalRounds}, duration=${result.metadata.durationMs}ms, tokens=${totalTokens ?? 'N/A'}\n`);
+      writeStderr(`\nTotals: rounds=${result.metadata.totalRounds}, duration=${result.metadata.durationMs}ms, tokens=${totalTokens ?? 'N/A'}\n`);
     }
   }
 }
@@ -253,32 +307,49 @@ export function debateCommand(program: Command) {
         const agentConfigs = agentConfigsFromSysConfig(sysConfig, options);
 
         const provider = new OpenAIProvider(apiKey);
-        const agents = buildAgents(agentConfigs, provider);
-        const judge = new JudgeAgent(sysConfig.judge!, provider);
+
+        const promptSources: { agents: AgentPromptMetadata[]; judge: JudgePromptMetadata } = {
+          agents: [],
+          judge: { id: sysConfig.judge!.id, source: PROMPT_SOURCES.BUILT_IN },
+        };
+
+        const agents = buildAgents(agentConfigs, provider, sysConfig.configDir || process.cwd(), promptSources);
+
+        // Judge prompt resolution
+        const judgeDefault = JudgeAgent.defaultSystemPrompt();
+        const jres = resolvePrompt({ label: sysConfig.judge!.name, configDir: sysConfig.configDir || process.cwd(), ...((sysConfig.judge!.systemPromptPath !== undefined) && { promptPath: sysConfig.judge!.systemPromptPath }), defaultText: judgeDefault });
+        const judge = new JudgeAgent(
+          sysConfig.judge!,
+          provider,
+          jres.text,
+          jres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jres.absPath !== undefined && { absPath: jres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN })
+        );
+        promptSources.judge = { id: sysConfig.judge!.id, source: jres.source, ...(jres.absPath !== undefined && { path: jres.absPath }) };
+
         const stateManager = new StateManager();
 
         // Verbose header before run
         if (options.verbose) {
-          process.stdout.write('Running debate (verbose)\n');
-          process.stdout.write('Active Agents:\n');
+          writeStderr('Running debate (verbose)\n');
+          writeStderr('Active Agents:\n');
           agentConfigs.forEach(a => {
-            process.stdout.write(`  • ${a.name} (${a.model})\n`);
+            const used = promptSources.agents.find(p => p.agentId === a.id);
+            writeStderr(`  • ${a.name} (${a.model})\n`);
+            writeStderr(`    - System prompt: ${used?.source === 'file' ? (used.path || 'file') : 'built-in default'}\n`);
           });
+          writeStderr(`Judge: ${sysConfig.judge!.name} (${sysConfig.judge!.model})\n`);
+          writeStderr(`  - System prompt: ${promptSources.judge.source === 'file' ? (promptSources.judge.path || 'file') : 'built-in default'}\n`);
         }
 
-        const orchestrator = new DebateOrchestrator(
-          agents as any,
-          judge,
-          stateManager,
-          debateCfg,
-          options.verbose
-            ? { onPhaseComplete: (round, phase) => process.stdout.write(`[Round ${round}] ${phase} complete\n`) }
-            : undefined,
-        );
+        const orchestrator = new DebateOrchestrator(  agents, judge, stateManager, debateCfg, 
+                                                      options.verbose ? { onPhaseComplete: (round, phase) => writeStderr(`[Round ${round}] ${phase} complete\n`) } : undefined, );
         const result: DebateResult = await orchestrator.runDebate(problem);
 
+        // Persist prompt sources once per debate
+        await stateManager.setPromptSources(result.debateId, promptSources);
+
         // Persist path notice (StateManager already persisted during run)
-        process.stderr.write(color(INFO_COLOR, `Saved debate to ./debates/${result.debateId}.json`) + '\n');
+        infoUser(`Saved debate to ./debates/${result.debateId}.json`);
 
         await outputResults(result, stateManager, options);
       } catch (err: any) {

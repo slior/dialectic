@@ -1,4 +1,4 @@
-import { AgentConfig } from '../types/agent.types';
+import { AgentConfig, PromptSource } from '../types/agent.types';
 import { DebateContext, DebateRound, Solution } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 
@@ -25,7 +25,15 @@ const DEFAULT_CONFIDENCE_SCORE = 75;
  * that combines the strongest ideas while acknowledging trade-offs and recommendations.
  */
 export class JudgeAgent {
-  constructor(private config: AgentConfig, private provider: LLMProvider) {}
+  private readonly resolvedSystemPrompt: string;
+  public readonly promptSource?: PromptSource;
+  
+  constructor(private config: AgentConfig, private provider: LLMProvider, resolvedSystemPrompt: string, promptSource?: PromptSource) {
+    this.resolvedSystemPrompt = resolvedSystemPrompt;
+    if (promptSource !== undefined) {
+      this.promptSource = promptSource;
+    }
+  }
 
   /**
    * Synthesizes a final Solution for the given problem using the full debate history.
@@ -37,7 +45,7 @@ export class JudgeAgent {
    */
   async synthesize(problem: string, rounds: DebateRound[], _context: DebateContext): Promise<Solution> {
     const prompt = this.buildSynthesisPrompt(problem, rounds);
-    const systemPrompt = this.config.systemPrompt || DEFAULT_JUDGE_SYSTEM_PROMPT;
+    const systemPrompt = this.resolvedSystemPrompt;
     const temperature = this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE;
 
     const res = await this.provider.complete({
@@ -55,6 +63,11 @@ export class JudgeAgent {
       synthesizedBy: this.config.id,
     };
   }
+
+  /**
+   * Expose the default system prompt text for the judge.
+   */
+  static defaultSystemPrompt(): string { return DEFAULT_JUDGE_SYSTEM_PROMPT; }
 
   /**
    * Builds the synthesis prompt by stitching the problem and the complete debate history

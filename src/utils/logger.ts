@@ -1,3 +1,5 @@
+import { WARNING_COLOR, INFO_COLOR } from '../cli/index';
+
 // Lazy optional chalk import to avoid ESM issues in test environment
 let chalk: any;
 try {
@@ -23,7 +25,7 @@ export class Logger {
   }
 
   warn(message: string): void {
-    console.warn(color('yellow', message));
+    console.warn(color(WARNING_COLOR, message));
   }
 
   error(message: string): void {
@@ -32,7 +34,7 @@ export class Logger {
 
   debug(message: string): void {
     if (this.verbose) {
-      console.log(color('gray', message));
+      console.log(color(INFO_COLOR, message));
     }
   }
 

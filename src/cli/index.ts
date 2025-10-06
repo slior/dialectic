@@ -7,6 +7,38 @@ import { EXIT_GENERAL_ERROR } from '../utils/exit-codes';
 export const WARNING_COLOR = 'yellow';
 export const INFO_COLOR = 'gray';
 
+// Lazy optional chalk import for colored output
+let chalk: any;
+try { chalk = require('chalk'); } catch { chalk = null; }
+
+function color(method: string, msg: string): string {
+  return chalk && chalk[method] ? chalk[method](msg) : msg;
+}
+
+/**
+ * Outputs a warning message to stderr with consistent formatting.
+ * Used for user-facing warnings throughout the CLI.
+ */
+export function warnUser(message: string): void {
+  process.stderr.write(color(WARNING_COLOR, message) + '\n');
+}
+
+/**
+ * Outputs an info message to stderr with consistent formatting.
+ * Used for user-facing informational messages throughout the CLI.
+ */
+export function infoUser(message: string): void {
+  process.stderr.write(color(INFO_COLOR, message) + '\n');
+}
+
+/**
+ * Outputs a diagnostic/verbose message to stderr without coloring.
+ * Used for structured diagnostic output that should not interfere with stdout piping.
+ */
+export function writeStderr(message: string): void {
+  process.stderr.write(message);
+}
+
 /**
  * Runs the CLI for the multi-agent debate system.
  *

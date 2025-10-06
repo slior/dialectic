@@ -15,6 +15,13 @@ export const LLM_PROVIDERS = {
   OPENAI: "openai",
 } as const;
 
+export const PROMPT_SOURCES = {
+  BUILT_IN: "built-in",
+  FILE: "file",
+} as const;
+
+export type PromptSourceType = (typeof PROMPT_SOURCES)[keyof typeof PROMPT_SOURCES];
+
 /**
  * Configuration for an AI agent.
  *
@@ -40,8 +47,8 @@ export interface AgentConfig {
   provider: typeof LLM_PROVIDERS.OPENAI;
   /** Sampling temperature for the LLM (range: 0.0 - 1.0). */
   temperature: number;
-  /** (Optional) System prompt to prime the agent; can be provided by config or use built-in. */
-  systemPrompt?: string;
+  /** (Optional) Filesystem path to a markdown/text file containing the system prompt to prime the agent. Resolved relative to the configuration file directory. */
+  systemPromptPath?: string;
   /** (Optional) Whether the agent is enabled; defaults to true if omitted. */
   enabled?: boolean;
 }
@@ -70,6 +77,45 @@ export interface AgentResponse {
   content: string;
   /** Metadata about the response, such as tokens used, latency, and model. */
   metadata: ContributionMetadata;
+}
+
+/**
+ * Provenance information for a system prompt, indicating whether it was loaded from a file or using built-in defaults.
+ *
+ * @property source - The source of the system prompt ('built-in' for default, 'file' for loaded from filesystem).
+ * @property absPath - (Optional) The absolute filesystem path to the prompt file, if source is 'file'.
+ */
+export interface PromptSource {
+  source: PromptSourceType;
+  absPath?: string;
+}
+
+/**
+ * Metadata about an agent's prompt source for logging and persistence.
+ *
+ * @property agentId - The unique identifier of the agent.
+ * @property role - The role of the agent.
+ * @property source - Whether the prompt came from a file or built-in default.
+ * @property path - (Optional) The file path if loaded from a file.
+ */
+export interface AgentPromptMetadata {
+  agentId: string;
+  role: AgentRole;
+  source: PromptSourceType;
+  path?: string;
+}
+
+/**
+ * Metadata about a judge's prompt source for logging and persistence.
+ *
+ * @property id - The unique identifier of the judge.
+ * @property source - Whether the prompt came from a file or built-in default.
+ * @property path - (Optional) The file path if loaded from a file.
+ */
+export interface JudgePromptMetadata {
+  id: string;
+  source: PromptSourceType;
+  path?: string;
 }
 
 //the next two are just for convenience (readability) and potential future use if we need to distinguish between different types of responses

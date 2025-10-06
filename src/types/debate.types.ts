@@ -1,4 +1,4 @@
-import { AgentRole } from './agent.types';
+import { AgentRole, AgentPromptMetadata, JudgePromptMetadata } from './agent.types';
 
 /** String literal constants for termination types */
 export const TERMINATION_TYPES = {
@@ -66,6 +66,13 @@ export interface DebateState {
   finalSolution?: Solution; /** Final solution, if completed. */
   createdAt: Date; /** Creation timestamp. */
   updatedAt: Date; /** Last updated timestamp. */
+  /**
+   * Provenance of system prompts used by agents and judge for this debate (persisted once per debate).
+   */
+  promptSources?: {
+    agents: AgentPromptMetadata[];
+    judge: JudgePromptMetadata;
+  };
 }
 
 /**

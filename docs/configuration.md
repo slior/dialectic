@@ -53,7 +53,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 | `model` | `string` | Yes | The LLM model name to use for this agent. |
 | `provider` | `string` | Yes | The LLM provider. Currently only `"openai"` is supported. |
 | `temperature` | `number` | Yes | Sampling temperature for the LLM. |
-| `systemPrompt` | `string` | No | Custom system prompt to prime the agent. If omitted, a built-in prompt for the role is used. |
+|| `systemPromptPath` | `string` | No | Path to a markdown/text file containing the system prompt. If omitted, a built-in prompt for the role is used. |
 | `enabled` | `boolean` | No | Whether the agent is enabled. Defaults to `true` if omitted. |
 
 ### Field Details
@@ -102,11 +102,14 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
   - Agents: 0.4-0.7 (balanced creativity)
 - **Example**: `0.5`
 
-#### `systemPrompt`
+#### `systemPromptPath`
 - **Type**: String (optional)
-- **Accepted Values**: Any string
-- **Semantics**: Custom instructions that prime the agent's behavior. If omitted, the system uses a built-in prompt appropriate for the agent's role. Use this to customize agent behavior beyond the default.
-- **Example**: `"You are an expert system architect with 20 years of experience in distributed systems."`
+- **Accepted Values**: File path (absolute or relative to the configuration file directory)
+- **Semantics**: Filesystem path to a markdown/text file containing custom instructions that prime the agent's behavior. If omitted or invalid, the system uses a built-in prompt appropriate for the role.
+- **Resolution**: Relative paths are resolved against the configuration file directory. No environment variable expansion is performed.
+- **Reading**: File is read as UTF-8; the entire file content is used as the system prompt. Empty/whitespace-only files are considered invalid.
+- **Fallback**: If the path is missing/unreadable/invalid, a warning is printed to stderr and the built-in prompt is used.
+- **Example**: `"./prompts/architect.md"`
 
 #### `enabled`
 - **Type**: Boolean (optional)
@@ -125,6 +128,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
   "model": "gpt-4",
   "provider": "openai",
   "temperature": 0.5,
+  "systemPromptPath": "./prompts/architect.md",
   "enabled": true
 }
 ```
@@ -134,6 +138,8 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 The judge is a special agent that synthesizes the final solution after all debate rounds complete. It uses the same `AgentConfig` schema as regular agents.
 
 ### Judge-Specific Considerations
+
+- Supports the same `systemPromptPath` behavior as agents (path resolved relative to the configuration file directory; invalid/empty files cause a warning and fallback to built-in).
 
 - **Role**: Typically set to `"generalist"` to maintain objectivity
 - **Temperature**: Recommended range is 0.2-0.3 for more consistent synthesis
@@ -351,7 +357,9 @@ The CLI accepts the following options that can override configuration file setti
 - **Description**: Enable verbose output showing round-by-round details, agent information, and metadata.
 - **Default**: `false`
 - **Example**: `--verbose`
-- **Behavior**: When enabled and no output file is specified, detailed round information is written to stdout after the solution.
+- **Behavior**:
+  - When enabled and no output file is specified, detailed round information is written to stdout after the solution.
+  - Additionally, for each agent (and the judge), a one-line note shows which system prompt was used: either "built-in default" or the resolved absolute file path.
 
 ## Built-In Defaults
 
@@ -419,6 +427,7 @@ If the configuration file is missing or incomplete, the system uses these built-
 6. **Disabled Agents**: Agents with `enabled: false` are excluded from debate execution.
 
 7. **Agent Filtering**: The `--agents` CLI option filters enabled agents by role. If no agents match, defaults are used, and a warning is printed.
+8. **System Prompt Path Resolution**: If `systemPromptPath` is provided for an agent or judge, the CLI resolves it relative to the configuration file directory and attempts to read the full file as UTF-8. Missing/unreadable/empty files result in a warning to stderr and fallback to a built-in prompt.
 
 ## Exit Codes
 

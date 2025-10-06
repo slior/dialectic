@@ -47,21 +47,33 @@ describe('CLI debate command', () => {
 
   it('prints verbose header and summary with metadata when --verbose', async () => {
     process.env.OPENAI_API_KEY = 'test';
-    const captured: string[] = [];
-    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk: any) => {
-      captured.push(String(chunk));
+    const capturedStdout: string[] = [];
+    const capturedStderr: string[] = [];
+    const stdoutWriteSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk: any) => {
+      capturedStdout.push(String(chunk));
+      return true as any;
+    });
+    const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: any) => {
+      capturedStderr.push(String(chunk));
       return true as any;
     });
 
     await runCli(['debate', 'Design X', '--rounds', '2', '--verbose']);
 
-    const out = captured.join('');
-    expect(out).toContain('Running debate (verbose)');
-    expect(out).toContain('Summary (verbose)');
-    expect(out).toMatch(/Round\s+1/);
-    expect(out).toMatch(/\[Round\s+1\]\s+proposal\s+complete/);
-    expect(out).toMatch(/latency=.+, tokens=/);
+    const stdout = capturedStdout.join('');
+    const stderr = capturedStderr.join('');
+    
+    // Main solution should be on stdout
+    expect(stdout).toContain('Solution text');
+    
+    // Verbose diagnostics should be on stderr
+    expect(stderr).toContain('Running debate (verbose)');
+    expect(stderr).toContain('Summary (verbose)');
+    expect(stderr).toMatch(/Round\s+1/);
+    expect(stderr).toMatch(/\[Round\s+1\]\s+proposal\s+complete/);
+    expect(stderr).toMatch(/latency=.+, tokens=/);
 
-    writeSpy.mockRestore();
+    stdoutWriteSpy.mockRestore();
+    stderrWriteSpy.mockRestore();
   });
 });

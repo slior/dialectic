@@ -201,6 +201,22 @@ export class StateManager {
   }
 
   /**
+   * Persists the prompt source provenance for a debate (agents and judge) and saves the state.
+   * Intended to be called once per debate initialization.
+   */
+  async setPromptSources(debateId: string, sources: DebateState['promptSources']): Promise<void> {
+    const state = this.debates.get(debateId);
+    if (!state) throw new Error(`Debate ${debateId} not found`);
+    if (sources) {
+      state.promptSources = sources;
+    } else {
+      delete state.promptSources;
+    }
+    state.updatedAt = new Date();
+    await this.save(state);
+  }
+
+  /**
    * Ensures the base directory exists on disk.
    */
   private ensureDirectoryExists() {
