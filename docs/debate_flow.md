@@ -25,7 +25,15 @@ sequenceDiagram
 
     CLI->>Cmd: runCli(argv)
     Cmd->>Cmd: parse arguments
-    Cmd->>Cmd: validate problem & API key
+    Cmd->>Cmd: resolveProblemDescription(problem, options)
+    alt problem from string
+        Cmd->>Cmd: trim and return string
+    else problem from file
+        Cmd->>FS: validate file exists
+        Cmd->>FS: read file content (UTF-8)
+        Cmd->>Cmd: validate content non-empty
+    end
+    Cmd->>Cmd: validate API key
     Cmd->>Config: loadConfig(configPath)
     Config->>FS: read config file
     Config-->>Cmd: SystemConfig
@@ -136,20 +144,49 @@ The entry point for the debate system. This function:
 **Location**: `src/cli/commands/debate.ts`
 
 Registers the debate command and its action handler with Commander. Defines:
-- Command name and argument: `debate <problem>`
-- Options: `--agents`, `--rounds`, `--config`, `--output`, `--verbose`
+- Command name and argument: `debate [problem]` (optional problem string)
+- Options: `--problemDescription`, `--agents`, `--rounds`, `--config`, `--output`, `--verbose`
 - Action handler that executes when the command is invoked
 
 **Parameters**:
 - `program`: Commander instance to register the command with
 
-### 3. Validation
+### 3. Problem Resolution
 
-The action handler first validates:
-- **Problem statement**: Must be non-empty string
+**Function**: `resolveProblemDescription(problem: string | undefined, options: any)`  
+**Location**: `src/cli/commands/debate.ts`
+
+Resolves the problem description from either command line string or file path.
+
+**Parameters**:
+- `problem`: Optional problem string from command line argument
+- `options`: CLI options containing optional problemDescription file path
+
+**Returns**: Promise resolving to resolved problem description string
+
+**Behavior**:
+- **Mutual exclusivity validation**: Ensures exactly one of problem string or problemDescription file is provided
+- **String mode**: If problem string provided, trims and returns it
+- **File mode**: If problemDescription option provided:
+  - Resolves file path relative to current working directory
+  - Validates file exists and is not a directory
+  - Reads file content as UTF-8
+  - Validates content is non-empty after trimming (whitespace-only = empty)
+  - Returns raw content (preserving original formatting)
+- **Error handling**: Throws validation errors with appropriate exit codes:
+  - Both provided: EXIT_INVALID_ARGS
+  - Neither provided: EXIT_INVALID_ARGS
+  - File not found: EXIT_INVALID_ARGS
+  - File is directory: EXIT_INVALID_ARGS
+  - File empty: EXIT_INVALID_ARGS
+  - Read error: EXIT_GENERAL_ERROR
+
+### 4. Additional Validation
+
+After problem resolution, additional validation occurs:
 - **OPENAI_API_KEY**: Must be set in environment variables
 
-If validation fails, throws an error with appropriate exit code (EXIT_INVALID_ARGS or EXIT_CONFIG_ERROR).
+If validation fails, throws an error with appropriate exit code (EXIT_CONFIG_ERROR).
 
 ### 4. Configuration Loading
 

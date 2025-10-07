@@ -1,0 +1,9 @@
+Design a simple in-memory cache system with the following requirements:
+
+1. Store key-value pairs where keys are strings and values can be any object
+2. Support TTL (time-to-live) expiration for cache entries
+3. Implement LRU (Least Recently Used) eviction policy when cache reaches capacity
+4. Provide thread-safe operations for concurrent access
+5. Include basic metrics like hit rate and cache size
+
+The system should be lightweight and suitable for a web application handling moderate traffic.

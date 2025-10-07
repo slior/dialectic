@@ -14,7 +14,7 @@ jest.mock('openai', () => {
 });
 
 import { runCli } from '../src/cli/index';
-import { EXIT_CONFIG_ERROR } from '../src/utils/exit-codes';
+import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS } from '../src/utils/exit-codes';
 
 describe('CLI debate command', () => {
   const originalEnv = process.env;
@@ -75,5 +75,15 @@ describe('CLI debate command', () => {
 
     stdoutWriteSpy.mockRestore();
     stderrWriteSpy.mockRestore();
+  });
+
+  it('should error when neither problem string nor --problemDescription are provided', async () => {
+    process.env.OPENAI_API_KEY = 'test';
+    
+    await expect(runCli(['debate']))
+      .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid arguments: problem is required (provide <problem> or --problemDescription)')
+    );
   });
 });

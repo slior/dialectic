@@ -18,6 +18,19 @@ import { Agent } from '../../core/agent';
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
 
+// File handling constants
+const FILE_ENCODING_UTF8 = 'utf-8';
+const JSON_FILE_EXTENSION = '.json';
+const JSON_INDENT_SPACES = 2;
+
+// Problem resolution error messages
+const ERROR_BOTH_PROBLEM_SOURCES = 'Invalid arguments: provide exactly one of <problem> or --problemDescription';
+const ERROR_NO_PROBLEM_SOURCE = 'Invalid arguments: problem is required (provide <problem> or --problemDescription)';
+const ERROR_FILE_NOT_FOUND = 'Invalid arguments: problem description file not found';
+const ERROR_PATH_IS_DIRECTORY = 'Invalid arguments: problem description path is a directory';
+const ERROR_FILE_EMPTY = 'Invalid arguments: problem description file is empty';
+const ERROR_FILE_READ_FAILED = 'Failed to read problem description file';
+
 // Default agent identifiers and names
 const DEFAULT_ARCHITECT_ID = 'agent-architect';
 const DEFAULT_ARCHITECT_NAME = 'System Architect';
@@ -84,7 +97,7 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
     return defaults;
   }
   
-  const raw = await fs.promises.readFile(finalPath, 'utf-8');
+  const raw = await fs.promises.readFile(finalPath, FILE_ENCODING_UTF8);
   const parsed = JSON.parse(raw);
   
   // Ensure shape minimal
@@ -181,9 +194,7 @@ function debateConfigFromSysConfig(sysConfig: SystemConfig, options: any): Debat
   } as DebateConfig;
   
   if (!debateCfg.rounds || debateCfg.rounds < 1) {
-    const err: any = new Error('Invalid arguments: --rounds must be >= 1');
-    err.code = EXIT_INVALID_ARGS;
-    throw err;
+    throw createValidationError('Invalid arguments: --rounds must be >= 1', EXIT_INVALID_ARGS);
   }
   
   return debateCfg;
@@ -213,6 +224,102 @@ function agentConfigsFromSysConfig(sysConfig: SystemConfig, options: any): Agent
   }
   
   return agentConfigs;
+}
+
+/**
+ * Creates an error object with the specified message and exit code.
+ * @param message - Error message to display.
+ * @param code - Exit code for the error.
+ * @returns Error object with code property.
+ */
+function createValidationError(message: string, code: number): Error {
+  const err: any = new Error(message);
+  err.code = code;
+  return err;
+}
+
+/**
+ * Validates the exactly-one constraint for problem sources.
+ * @param hasProblem - Whether problem string is provided.
+ * @param hasFile - Whether problemDescription file is provided.
+ * @throws {Error} If both or neither are provided.
+ */
+function validateExactlyOneProblemSource(hasProblem: boolean, hasFile: boolean): void {
+  if (hasProblem && hasFile) {
+    throw createValidationError(ERROR_BOTH_PROBLEM_SOURCES, EXIT_INVALID_ARGS);
+  }
+  if (!hasProblem && !hasFile) {
+    throw createValidationError(ERROR_NO_PROBLEM_SOURCE, EXIT_INVALID_ARGS);
+  }
+}
+
+/**
+ * Validates that the file path exists and is a file (not directory).
+ * @param filePath - Absolute path to the file.
+ * @throws {Error} If file doesn't exist or is a directory.
+ */
+function validateFilePathExists(filePath: string): void {
+  if (!fs.existsSync(filePath)) {
+    throw createValidationError(`${ERROR_FILE_NOT_FOUND}: ${filePath}`, EXIT_INVALID_ARGS);
+  }
+  
+  const stats = fs.statSync(filePath);
+  if (stats.isDirectory()) {
+    throw createValidationError(`${ERROR_PATH_IS_DIRECTORY}: ${filePath}`, EXIT_INVALID_ARGS);
+  }
+}
+
+/**
+ * Reads and validates file content.
+ * @param filePath - Absolute path to the file.
+ * @returns File content as string.
+ * @throws {Error} If file is empty or read fails.
+ */
+async function readAndValidateFileContent(filePath: string): Promise<string> {
+  try {
+    const content = await fs.promises.readFile(filePath, FILE_ENCODING_UTF8);
+    
+    // Check if content is non-empty after trimming (whitespace-only = empty)
+    if (content.trim().length === 0) {
+      throw createValidationError(`${ERROR_FILE_EMPTY}: ${filePath}`, EXIT_INVALID_ARGS);
+    }
+
+    // Return raw content (preserve formatting)
+    return content;
+  } catch (error: any) {
+    if (error.code === EXIT_INVALID_ARGS) {
+      throw error;
+    }
+    // Handle read errors
+    throw createValidationError(`${ERROR_FILE_READ_FAILED}: ${error.message}`, EXIT_GENERAL_ERROR);
+  }
+}
+
+/**
+ * Resolves the problem description from either command line string or file.
+ * Enforces exactly-one constraint and validates file content.
+ *
+ * @param {string | undefined} problem - Optional problem string from command line.
+ * @param {any} options - Command-line options containing optional problemDescription.
+ * @returns {Promise<string>} The resolved problem description.
+ * @throws {Error} If validation fails or file operations fail.
+ */
+async function resolveProblemDescription(problem: string | undefined, options: any): Promise<string> {
+  const hasProblem = !!(problem && problem.trim().length > 0);
+  const hasFile = !!options.problemDescription;
+
+  // Validate exactly-one constraint
+  validateExactlyOneProblemSource(hasProblem, hasFile);
+
+  // Return problem string if provided
+  if (hasProblem) {
+    return problem!.trim();
+  }
+
+  // Handle file-based problem description
+  const filePath = path.resolve(process.cwd(), options.problemDescription);
+  validateFilePathExists(filePath);
+  return await readAndValidateFileContent(filePath);
 }
 
 /**
@@ -255,11 +362,11 @@ async function outputResults(result: DebateResult, stateManager: StateManager, o
   const finalText = result.solution.description + '\n';
   
   if (outputPath) {
-    if (outputPath.toLowerCase().endsWith('.json')) {
+    if (outputPath.toLowerCase().endsWith(JSON_FILE_EXTENSION)) {
       const fullState = await stateManager.getDebate(result.debateId);
-      await fs.promises.writeFile(outputPath, JSON.stringify(fullState, null, 2), 'utf-8');
+      await fs.promises.writeFile(outputPath, JSON.stringify(fullState, null, JSON_INDENT_SPACES), FILE_ENCODING_UTF8);
     } else {
-      await fs.promises.writeFile(outputPath, finalText, 'utf-8');
+      await fs.promises.writeFile(outputPath, finalText, FILE_ENCODING_UTF8);
     }
   } else {
     // stdout minimal
@@ -281,19 +388,16 @@ async function outputResults(result: DebateResult, stateManager: StateManager, o
 export function debateCommand(program: Command) {
   program
     .command('debate')
-    .argument('<problem>', 'Problem statement to debate')
+    .argument('[problem]', 'Problem statement to debate (provide exactly one of this or --problemDescription)')
     .option('-a, --agents <roles>', 'Comma-separated agent roles (architect,performance,...)')
     .option('-r, --rounds <number>', `Number of rounds (default ${DEFAULT_ROUNDS})`)
     .option('-c, --config <path>', 'Path to configuration file (default ./debate-config.json)')
     .option('-o, --output <path>', 'Output file; .json writes full state, others write final solution text')
+    .option('-p, --problemDescription <path>', 'Path to a text file containing the problem description')
     .option('-v, --verbose', 'Verbose output')
-    .action(async (problem: string, options: any) => {
+    .action(async (problem: string | undefined, options: any) => {
       try {
-        if (!problem || problem.trim().length === 0) {
-          const err: any = new Error('Invalid arguments: problem is required');
-          err.code = EXIT_INVALID_ARGS;
-          throw err;
-        }
+        const resolvedProblem = await resolveProblemDescription(problem, options);
 
         const apiKey = process.env.OPENAI_API_KEY;
         if (!apiKey) {
@@ -343,7 +447,7 @@ export function debateCommand(program: Command) {
 
         const orchestrator = new DebateOrchestrator(  agents, judge, stateManager, debateCfg, 
                                                       options.verbose ? { onPhaseComplete: (round, phase) => writeStderr(`[Round ${round}] ${phase} complete\n`) } : undefined, );
-        const result: DebateResult = await orchestrator.runDebate(problem);
+        const result: DebateResult = await orchestrator.runDebate(resolvedProblem);
 
         // Persist prompt sources once per debate
         await stateManager.setPromptSources(result.debateId, promptSources);

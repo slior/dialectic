@@ -16,9 +16,12 @@ Installation
 - Build (optional for dev via ts-node): `npm run build`
 
 CLI Usage
-- Basic:
+- Basic (string problem):
   - `debate "Design a rate limiting system"`
+- Basic (file-based problem):
+  - `debate --problemDescription problem.txt`
 - Options:
+  - `--problemDescription <path>`: Path to a text file containing the problem description. Provide exactly one of this or the problem string argument.
   - `--agents <list>`: comma-separated roles (architect,performance,security,testing); defaults to architect,performance when not specified.
   - `--rounds <n>`: number of rounds (default 3; must be >= 1). Flow mapping:
     - 1 → proposals only, then synthesis
@@ -29,6 +32,17 @@ CLI Usage
     - If the path ends with `.json`, the full debate state is written
     - Otherwise, only the final solution text is written
   - `--verbose`: enable more detailed logging (agents, round-by-round details, metadata when available)
+
+Problem Description Files
+- Alternative to inline problem strings, you can provide the problem description in a text file
+- File format: Any text format (UTF-8 encoding) - plain text, markdown, etc.
+- File size: No limits imposed (user controls content length)
+- Content: Must be non-empty (whitespace-only files are rejected)
+- Path resolution: Relative paths resolved from current working directory
+- Examples:
+  - `debate --problemDescription complex-problem.md`
+  - `debate --problemDescription ./problems/rate-limiting.txt`
+- Mutual exclusivity: Cannot provide both string problem and file path - exactly one must be specified
 
 Output Behavior
 - By default, the CLI writes only the minimal final solution text to stdout.
@@ -73,6 +87,20 @@ Exit Codes
 Error Handling
 - The CLI prints error messages to stderr and exits with one of the exit codes above.
 - For Flow 1, errors are not handled internally; exceptions are thrown.
+
+Troubleshooting Problem Description Files
+- "Invalid arguments: provide exactly one of <problem> or --problemDescription"
+  - Fix: Use either a string problem OR --problemDescription, not both
+- "Invalid arguments: problem is required (provide <problem> or --problemDescription)"
+  - Fix: Provide either a problem string argument or --problemDescription option
+- "Invalid arguments: problem description file not found: <path>"
+  - Fix: Check file path exists and is accessible
+- "Invalid arguments: problem description file is empty: <path>"
+  - Fix: Add content to the file (whitespace-only files are considered empty)
+- "Invalid arguments: problem description path is a directory: <path>"
+  - Fix: Provide path to a file, not a directory
+- "Failed to read problem description file: <error>"
+  - Fix: Check file permissions and disk space
 
 Testing (TDD)
 - Tests use Jest with ts-jest.
