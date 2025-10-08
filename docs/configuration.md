@@ -325,6 +325,7 @@ The CLI accepts the following options that can override configuration file setti
 - **Default**: All enabled agents from configuration
 - **Example**: `--agents architect,performance`
 - **Behavior**: If no agents match the filter, the system falls back to default agents (architect and performance).
+- **Important**: This option **filters** agents from the configuration file; it does not replace or override agent configurations. The configuration file defines the agent pool (including models, temperatures, custom prompts), while this option selects which configured agents participate in the debate. For example, if your config defines a security agent with a custom prompt and `gpt-4` model, using `--agents security` will use that configured security agent, not a default one.
 
 ### `-r, --rounds <number>`
 - **Type**: Integer
@@ -426,7 +427,8 @@ If the configuration file is missing or incomplete, the system uses these built-
 
 6. **Disabled Agents**: Agents with `enabled: false` are excluded from debate execution.
 
-7. **Agent Filtering**: The `--agents` CLI option filters enabled agents by role. If no agents match, defaults are used, and a warning is printed.
+7. **Agent Filtering**: The `--agents` CLI option filters enabled agents by role. If no agents match, defaults are used, and a warning is printed. The filtering process is: (1) load all agents from config, (2) filter out disabled agents, (3) apply role filter from `--agents` if provided, (4) fall back to defaults if result is empty.
+
 8. **System Prompt Path Resolution**: If `systemPromptPath` is provided for an agent or judge, the CLI resolves it relative to the configuration file directory and attempts to read the full file as UTF-8. Missing/unreadable/empty files result in a warning to stderr and fallback to a built-in prompt.
 
 ## Exit Codes
@@ -482,4 +484,6 @@ The CLI uses specific exit codes to indicate different error conditions:
 7. **Environment Variables**: Use a `.env` file (with appropriate tooling) to manage API keys securely.
 
 8. **Disabled Agents**: Use `enabled: false` to keep agent configurations without removing them entirely.
+
+9. **Configuration vs CLI Filtering**: Use the configuration file to define your agent pool with all settings (models, temperatures, custom prompts), and use `--agents` for quick runtime selection. For example, configure all three agent types in your file, then use `--agents architect,security` for security-focused debates and `--agents architect,performance` for optimization debates—all while preserving each agent's custom configuration.
 
