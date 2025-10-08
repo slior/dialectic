@@ -9,6 +9,7 @@ import { DebateConfig, DebateResult, DebateRound, Contribution, TERMINATION_TYPE
 import { OpenAIProvider } from '../../providers/openai-provider';
 import { ArchitectAgent } from '../../agents/architect-agent';
 import { PerformanceAgent } from '../../agents/performance-agent';
+import { SecurityAgent } from '../../agents/security-agent';
 import { JudgeAgent } from '../../core/judge';
 import { StateManager } from '../../core/state-manager';
 import { DebateOrchestrator } from '../../core/orchestrator';
@@ -124,7 +125,7 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  * Helper to create an agent instance with prompt resolution and metadata collection.
  * Resolves the system prompt from file or default, creates the agent, and records provenance.
  */
-function createAgentWithPromptResolution( agentClass: typeof ArchitectAgent | typeof PerformanceAgent, cfg: AgentConfig, provider: OpenAIProvider, 
+function createAgentWithPromptResolution( agentClass: typeof ArchitectAgent | typeof PerformanceAgent | typeof SecurityAgent, cfg: AgentConfig, provider: OpenAIProvider,
                                           configDir: string, collect: { agents: AgentPromptMetadata[] }): Agent
 {
   const defaultText = agentClass.defaultSystemPrompt();
@@ -171,6 +172,9 @@ function buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider, conf
     }
     if (cfg.role === AGENT_ROLES.PERFORMANCE) {
       return createAgentWithPromptResolution(PerformanceAgent, cfg, provider, configDir, collect);
+    }
+    if (cfg.role === AGENT_ROLES.SECURITY) {
+      return createAgentWithPromptResolution(SecurityAgent, cfg, provider, configDir, collect);
     }
     // Default to architect for unknown roles
     warnUser(`Unknown agent role '${cfg.role}' for agent '${cfg.name}'. Defaulting to architect.`);

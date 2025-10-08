@@ -2,7 +2,7 @@
 
 Overview
 - This project implements a simple fixed-round debate of a multi-agent debate system as a CLI tool named "debate".
-- It supports two agents by default (architect, performance), runs fixed rounds, and synthesizes a final solution via a judge agent.
+- It supports three agent types (architect, performance, security) with two agents by default (architect, performance), runs fixed rounds, and synthesizes a final solution via a judge agent.
 - End-to-end path: CLI → configuration → OpenAI provider → agents/orchestrator → state persisted to ./debates → output to stdout or file.
 
 Requirements
@@ -20,6 +20,9 @@ CLI Usage
   - `debate "Design a rate limiting system"`
 - Basic (file-based problem):
   - `debate --problemDescription problem.txt`
+- With specific agents:
+  - `debate "Design a secure authentication system" --agents architect,security`
+  - `debate "Build a high-performance API" --agents architect,performance,security`
 - Options:
   - `--problemDescription <path>`: Path to a text file containing the problem description. Provide exactly one of this or the problem string argument.
   - `--agents <list>`: comma-separated roles (architect,performance,security,testing); defaults to architect,performance when not specified.
@@ -57,6 +60,15 @@ Configuration
 - Default config file: `./debate-config.json`. If missing:
   - The CLI uses built-in defaults (two agents: architect, performance; judge defaults; debate defaults)
   - A notice is written to stderr indicating defaults are used
+- Example with SecurityAgent:
+  ```json
+  {
+    "agents": [
+      {"id": "agent-architect", "name": "System Architect", "role": "architect", "model": "gpt-4", "provider": "openai", "temperature": 0.5},
+      {"id": "agent-security", "name": "Security Expert", "role": "security", "model": "gpt-4", "provider": "openai", "temperature": 0.4}
+    ]
+  }
+  ```
 - Config structure (root object):
   - `agents: AgentConfig[]` (required; if empty/missing, defaults are used with a notice)
   - `judge?: AgentConfig` (optional; if missing, default judge is used with a notice)
@@ -111,6 +123,7 @@ Testing (TDD)
 Notes
 - Provider Layer: Uses OpenAI SDK with preference for Responses API and fallback to Chat Completions.
 - Persistence: Debate states are written to `./debates` as they progress and on completion.
+- Agent Types: Supports architect (system design), performance (optimization), and security (threat modeling) perspectives.
 - Defaults:
   - Default agents: architect and performance
   - Default model: `gpt-4`
