@@ -47,7 +47,7 @@ export function writeStderr(message: string): void {
  * It is intended to be called with the argument vector (argv) excluding the node and script name.
  *
  * @param argv - The array of command-line arguments to parse (excluding 'node' and script name).
- * @throws Rethrows any error encountered during command parsing.
+ * @throws Any error encountered during command parsing.
  */
 export async function runCli(argv: string[]) {
   const program = new Command();
@@ -56,11 +56,7 @@ export async function runCli(argv: string[]) {
   // Register commands
   debateCommand(program);
 
-  try {
-    await program.parseAsync(['node', 'debate', ...argv]);
-  } catch (err: any) {
-    throw err;
-  }
+  await program.parseAsync(['node', 'debate', ...argv]);
 }
 
 // If called directly from node
