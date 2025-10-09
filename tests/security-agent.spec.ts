@@ -16,11 +16,11 @@ jest.mock('openai', () => {
   };
 });
 
-import { SecurityAgent } from '../src/agents/security-agent';
+import { RoleBasedAgent } from '../src/agents/role-based-agent';
 import { OpenAIProvider } from '../src/providers/openai-provider';
 import { AGENT_ROLES, LLM_PROVIDERS } from '../src/types/agent.types';
 
-describe('SecurityAgent', () => {
+describe('RoleBasedAgent (Security Role)', () => {
   const mockProvider = new OpenAIProvider('test-key');
   const mockConfig = {
     id: 'test-security-agent',
@@ -38,26 +38,26 @@ describe('SecurityAgent', () => {
     history: []
   };
 
-  describe('SecurityAgent.create()', () => {
-    it('should create a SecurityAgent instance', () => {
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test prompt');
+  describe('RoleBasedAgent.create()', () => {
+    it('should create a RoleBasedAgent instance', () => {
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test prompt');
       
-      expect(agent).toBeInstanceOf(SecurityAgent);
+      expect(agent).toBeInstanceOf(RoleBasedAgent);
       expect(agent.config).toBe(mockConfig);
     });
 
-    it('should create a SecurityAgent instance with prompt source metadata', () => {
+    it('should create a RoleBasedAgent instance with prompt source metadata', () => {
       const promptSource = { source: 'built-in' as const };
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test prompt', promptSource);
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test prompt', promptSource);
       
-      expect(agent).toBeInstanceOf(SecurityAgent);
+      expect(agent).toBeInstanceOf(RoleBasedAgent);
       expect(agent.promptSource).toBe(promptSource);
     });
   });
 
   describe('defaultSystemPrompt()', () => {
     it('should return expected security-focused system prompt content', () => {
-      const prompt = SecurityAgent.defaultSystemPrompt();
+      const prompt = RoleBasedAgent.defaultSystemPrompt(AGENT_ROLES.SECURITY);
       
       expect(prompt).toContain('cybersecurity expert');
       expect(prompt).toContain('threat modeling');
@@ -76,7 +76,7 @@ describe('SecurityAgent', () => {
 
   describe('propose()', () => {
     it('should call proposeImpl with security-focused prompts', async () => {
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test security prompt');
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt');
       const proposeImplSpy = jest.spyOn(agent, 'proposeImpl' as any);
       
       const result = await agent.propose('Test problem', mockContext);
@@ -103,7 +103,7 @@ describe('SecurityAgent', () => {
 
   describe('critique()', () => {
     it('should call critiqueImpl with security-focused prompts', async () => {
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test security prompt');
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt');
       const critiqueImplSpy = jest.spyOn(agent, 'critiqueImpl' as any);
       const mockProposal = {
         content: 'Test proposal content',
@@ -137,7 +137,7 @@ describe('SecurityAgent', () => {
 
   describe('refine()', () => {
     it('should call refineImpl with security-focused prompts', async () => {
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test security prompt');
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt');
       const refineImplSpy = jest.spyOn(agent, 'refineImpl' as any);
       const mockProposal = {
         content: 'Original proposal content',
@@ -179,20 +179,20 @@ describe('SecurityAgent', () => {
   describe('prompt source metadata handling', () => {
     it('should handle built-in prompt source metadata', () => {
       const promptSource = { source: 'built-in' as const };
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test prompt', promptSource);
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test prompt', promptSource);
       
       expect(agent.promptSource).toEqual(promptSource);
     });
 
     it('should handle file prompt source metadata', () => {
       const promptSource = { source: 'file' as const, absPath: '/path/to/prompt.md' };
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test prompt', promptSource);
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test prompt', promptSource);
       
       expect(agent.promptSource).toEqual(promptSource);
     });
 
     it('should handle undefined prompt source metadata', () => {
-      const agent = SecurityAgent.create(mockConfig, mockProvider, 'Test prompt');
+      const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test prompt');
       
       expect(agent.promptSource).toBeUndefined();
     });
@@ -201,4 +201,4 @@ describe('SecurityAgent', () => {
 
 // Note: Integration test with buildAgents function would require importing and setting up
 // the entire buildAgents function with mocks, which is complex. The core functionality
-// is already tested above through the SecurityAgent class methods.
+// is already tested above through the RoleBasedAgent class methods.

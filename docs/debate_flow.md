@@ -41,8 +41,7 @@ sequenceDiagram
     Cmd->>Cmd: agentConfigsFromSysConfig()
     Cmd->>Provider: new OpenAIProvider(apiKey)
     Cmd->>Builder: buildAgents(configs, provider)
-    Builder->>Agents: ArchitectAgent.create()
-    Builder->>Agents: PerformanceAgent.create()
+    Builder->>Agents: RoleBasedAgent.create() (for each role)
     Builder-->>Cmd: agents[]
     Cmd->>Judge: new JudgeAgent(config, provider)
     Cmd->>SM: new StateManager()
@@ -276,27 +275,39 @@ Makes LLM completion requests with fallback strategy:
 **Function**: `buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider)`  
 **Location**: `src/cli/commands/debate.ts`
 
-Creates concrete agent instances based on configurations.
+Creates concrete agent instances based on configurations using the `RoleBasedAgent` class.
 
 **Parameters**:
 - `agentConfigs`: Array of agent configurations
 - `provider`: Initialized OpenAI provider
+- `configDir`: Configuration file directory for resolving prompt paths
+- `collect`: Object to collect prompt source metadata
 
 **Returns**: Array of Agent instances
 
 **Behavior**:
-- For role `"architect"`: Creates `ArchitectAgent.create(config, provider, resolvedSystemPrompt, promptSource)`
-- For role `"performance"`: Creates `PerformanceAgent.create(config, provider, resolvedSystemPrompt, promptSource)`
-- For unknown roles: Defaults to `ArchitectAgent` with warning to stderr
+The system uses a single `RoleBasedAgent` class for all roles (architect, performance, security, etc.) rather than separate agent classes. Each agent is created via `RoleBasedAgent.create(config, provider, resolvedSystemPrompt, promptSource)`.
 
-Prompt source resolution occurs at initialization:
+**Role-Based Prompt System**:
+- Prompts are organized in `src/agents/prompts/` with separate files per role (architect-prompts.ts, performance-prompts.ts, security-prompts.ts)
+- Each prompt file exports a `RolePrompts` object containing:
+  - `systemPrompt`: The agent's system instructions
+  - `proposePrompt()`: Function to generate proposal user prompts
+  - `critiquePrompt()`: Function to generate critique user prompts
+  - `refinePrompt()`: Function to generate refinement user prompts
+- A central registry (`src/agents/prompts/index.ts`) maps roles to their prompt configurations
+- Unknown roles default to architect prompts for backward compatibility
+
+**Prompt source resolution** occurs at initialization:
 - If `systemPromptPath` is set on the agent, the CLI resolves it relative to the configuration file directory and attempts to read the entire file (UTF-8)
 - If the file is missing/unreadable/empty, a warning is printed to stderr and the built-in prompt is used instead
+- Built-in prompts are retrieved via `RoleBasedAgent.defaultSystemPrompt(role)`, which looks up the role's default prompt from the registry
 - The chosen source (built-in or absolute file path) is persisted once per debate in `DebateState.promptSources`
 
 Each agent instance is initialized with:
 - Configuration (id, name, role, model, temperature, systemPrompt)
 - Provider reference for making LLM calls
+- Role-specific prompts loaded from the prompt registry
 
 ### 9. Judge Instantiation
 
@@ -762,7 +773,7 @@ The system is single-threaded (Node.js) but uses async/await patterns:
 
 The architecture supports extension through:
 
-1. **New Agent Roles**: Create new agent classes extending `Agent` base class
+1. **New Agent Roles**: Add new roles by creating a prompt file in `src/agents/prompts/` implementing the `RolePrompts` interface, then register it in the prompt registry. No new agent classes needed.
 2. **New Providers**: Implement `LLMProvider` interface for other LLM services
 3. **Custom Synthesis**: Extend `JudgeAgent` or create alternative synthesis methods
 4. **Alternative Storage**: Replace `StateManager` for different persistence strategies

@@ -7,9 +7,7 @@ import { SystemConfig } from '../../types/config.types';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource } from '../../types/agent.types';
 import { DebateConfig, DebateResult, DebateRound, Contribution, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES } from '../../types/debate.types';
 import { OpenAIProvider } from '../../providers/openai-provider';
-import { ArchitectAgent } from '../../agents/architect-agent';
-import { PerformanceAgent } from '../../agents/performance-agent';
-import { SecurityAgent } from '../../agents/security-agent';
+import { RoleBasedAgent } from '../../agents/role-based-agent';
 import { JudgeAgent } from '../../core/judge';
 import { StateManager } from '../../core/state-manager';
 import { DebateOrchestrator } from '../../core/orchestrator';
@@ -125,11 +123,16 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
 /**
  * Helper to create an agent instance with prompt resolution and metadata collection.
  * Resolves the system prompt from file or default, creates the agent, and records provenance.
+ * 
+ * @param cfg - Agent configuration containing role, model, and other settings.
+ * @param provider - OpenAI provider instance for LLM interactions.
+ * @param configDir - Directory path where the configuration file is located.
+ * @param collect - Collection object to record prompt source metadata.
+ * @returns A configured RoleBasedAgent instance.
  */
-function createAgentWithPromptResolution( agentClass: typeof ArchitectAgent | typeof PerformanceAgent | typeof SecurityAgent, cfg: AgentConfig, provider: OpenAIProvider,
-                                          configDir: string, collect: { agents: AgentPromptMetadata[] }): Agent
+function createAgentWithPromptResolution( cfg: AgentConfig, provider: OpenAIProvider, configDir: string, collect: { agents: AgentPromptMetadata[] } ): Agent
 {
-  const defaultText = agentClass.defaultSystemPrompt();
+  const defaultText = RoleBasedAgent.defaultSystemPrompt(cfg.role);
   const res = resolvePrompt({
     label: cfg.name,
     configDir,
@@ -141,7 +144,7 @@ function createAgentWithPromptResolution( agentClass: typeof ArchitectAgent | ty
     ? { source: PROMPT_SOURCES.FILE, ...(res.absPath !== undefined && { absPath: res.absPath }) }
     : { source: PROMPT_SOURCES.BUILT_IN };
   
-  const agent = agentClass.create(cfg, provider, res.text, promptSource);
+  const agent = RoleBasedAgent.create(cfg, provider, res.text, promptSource);
   
   collect.agents.push({
     agentId: cfg.id,
@@ -156,31 +159,20 @@ function createAgentWithPromptResolution( agentClass: typeof ArchitectAgent | ty
 /**
  * Builds an array of Agent instances based on the provided configuration and LLM provider.
  *
- * This function creates an array of Agent instances based on the provided configuration,
- * using the appropriate Agent subclass for each role. It handles the following cases:
- *   - If the role is 'architect', creates an ArchitectAgent instance.
- *   - If the role is 'performance', creates a PerformanceAgent instance.
- *   - For any other role, defaults to creating an ArchitectAgent instance.
+ * Creates RoleBasedAgent instances for each agent configuration, resolving system prompts
+ * from files or defaults, and collecting metadata about prompt sources. The RoleBasedAgent
+ * class handles all roles through a prompt registry, eliminating the need for role-specific
+ * agent classes.
  *
- * @param {AgentConfig[]} agentConfigs - Array of agent configuration objects.
- * @param {OpenAIProvider} provider - The LLM provider to use for agent interactions.
- * @returns {Agent[]} Array of Agent instances.
+ * @param agentConfigs - Array of agent configurations.
+ * @param provider - OpenAI provider instance.
+ * @param configDir - Directory where the config file is located, used for resolving relative prompt paths.
+ * @param collect - Object to collect prompt metadata.
+ * @returns Array of Agent instances.
  */
-function buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider, configDir: string, collect: { agents: AgentPromptMetadata[] }) {
-  return agentConfigs.map((cfg) => {
-    if (cfg.role === AGENT_ROLES.ARCHITECT) {
-      return createAgentWithPromptResolution(ArchitectAgent, cfg, provider, configDir, collect);
-    }
-    if (cfg.role === AGENT_ROLES.PERFORMANCE) {
-      return createAgentWithPromptResolution(PerformanceAgent, cfg, provider, configDir, collect);
-    }
-    if (cfg.role === AGENT_ROLES.SECURITY) {
-      return createAgentWithPromptResolution(SecurityAgent, cfg, provider, configDir, collect);
-    }
-    // Default to architect for unknown roles
-    warnUser(`Unknown agent role '${cfg.role}' for agent '${cfg.name}'. Defaulting to architect.`);
-    return createAgentWithPromptResolution(ArchitectAgent, cfg, provider, configDir, collect);
-  });
+function buildAgents( agentConfigs: AgentConfig[], provider: OpenAIProvider, configDir: string, collect: { agents: AgentPromptMetadata[] } ): Agent[]
+{
+  return agentConfigs.map((cfg) => createAgentWithPromptResolution(cfg, provider, configDir, collect));
 }
 
 /**
