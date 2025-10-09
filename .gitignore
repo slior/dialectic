@@ -7,3 +7,6 @@ debates/
 coverage/
 
 dist/
+
+# Environment variables (contains sensitive API keys)
+.env
