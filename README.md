@@ -26,6 +26,7 @@ CLI Usage
 - Options:
   - `--problemDescription <path>`: Path to a text file containing the problem description. Provide exactly one of this or the problem string argument.
   - `--agents <list>`: comma-separated roles (architect,performance,security,testing); defaults to architect,performance when not specified.
+    - **Note**: This option filters agents from the configuration file by role. It does not replace agent configurations, but selects which configured agents participate. If no matching agents are found in the config, defaults are used.
   - `--rounds <n>`: number of rounds (default 3; must be >= 1). Flow mapping:
     - 1 → proposals only, then synthesis
     - 2 → proposals + critiques, then synthesis
