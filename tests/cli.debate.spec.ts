@@ -13,8 +13,16 @@ jest.mock('openai', () => {
   };
 });
 
+// Mock env-loader
+jest.mock('../src/utils/env-loader', () => ({
+  loadEnvironmentFile: jest.fn()
+}));
+
 import { runCli } from '../src/cli/index';
 import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS } from '../src/utils/exit-codes';
+import { loadEnvironmentFile } from '../src/utils/env-loader';
+
+const mockedLoadEnvironmentFile = loadEnvironmentFile as jest.MockedFunction<typeof loadEnvironmentFile>;
 
 describe('CLI debate command', () => {
   const originalEnv = process.env;
@@ -25,6 +33,7 @@ describe('CLI debate command', () => {
     process.env = { ...originalEnv };
     stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    mockedLoadEnvironmentFile.mockClear();
   });
 
   afterEach(() => {
@@ -85,5 +94,51 @@ describe('CLI debate command', () => {
     expect(stderrSpy).toHaveBeenCalledWith(
       expect.stringContaining('Invalid arguments: problem is required (provide <problem> or --problemDescription)')
     );
+  });
+
+  describe('environment file loading', () => {
+    it('should call loadEnvironmentFile with default parameters', async () => {
+      process.env.OPENAI_API_KEY = 'test';
+      
+      await runCli(['debate', 'Design a system']);
+      
+      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith(undefined, undefined);
+    });
+
+    it('should call loadEnvironmentFile with custom env file path', async () => {
+      process.env.OPENAI_API_KEY = 'test';
+      
+      await runCli(['debate', 'Design a system', '--env-file', 'custom.env']);
+      
+      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith('custom.env', undefined);
+    });
+
+    it('should call loadEnvironmentFile with verbose flag', async () => {
+      process.env.OPENAI_API_KEY = 'test';
+      
+      await runCli(['debate', 'Design a system', '--verbose']);
+      
+      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith(undefined, true);
+    });
+
+    it('should call loadEnvironmentFile with both custom env file and verbose flag', async () => {
+      process.env.OPENAI_API_KEY = 'test';
+      
+      await runCli(['debate', 'Design a system', '--env-file', 'production.env', '--verbose']);
+      
+      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith('production.env', true);
+    });
+
+    it('should handle env loading errors gracefully', async () => {
+      process.env.OPENAI_API_KEY = 'test';
+      mockedLoadEnvironmentFile.mockImplementation(() => {
+        throw new Error('Environment file not found: /path/to/missing.env');
+      });
+      
+      await expect(runCli(['debate', 'Design a system', '--env-file', 'missing.env']))
+        .rejects.toThrow('Environment file not found: /path/to/missing.env');
+      
+      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith('missing.env', undefined);
+    });
   });
 });

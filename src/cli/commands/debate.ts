@@ -14,6 +14,7 @@ import { JudgeAgent } from '../../core/judge';
 import { StateManager } from '../../core/state-manager';
 import { DebateOrchestrator } from '../../core/orchestrator';
 import { resolvePrompt } from '../../utils/prompt-loader';
+import { loadEnvironmentFile } from '../../utils/env-loader';
 import { Agent } from '../../core/agent';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
@@ -398,9 +399,13 @@ export function debateCommand(program: Command) {
     .option('-c, --config <path>', 'Path to configuration file (default ./debate-config.json)')
     .option('-o, --output <path>', 'Output file; .json writes full state, others write final solution text')
     .option('-p, --problemDescription <path>', 'Path to a text file containing the problem description')
+    .option('-e, --env-file <path>', 'Path to environment file (default: .env)')
     .option('-v, --verbose', 'Verbose output')
     .action(async (problem: string | undefined, options: any) => {
       try {
+        // Load environment variables from .env file
+        loadEnvironmentFile(options.envFile, options.verbose);
+        
         const resolvedProblem = await resolveProblemDescription(problem, options);
 
         const apiKey = process.env.OPENAI_API_KEY;

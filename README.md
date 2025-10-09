@@ -7,9 +7,38 @@ Overview
 
 Requirements
 - Node.js >= 18
-- An OpenAI API key exported as an environment variable:
-  - Windows (PowerShell): `$Env:OPENAI_API_KEY = "<your_key>"`
-  - macOS/Linux (bash/zsh): `export OPENAI_API_KEY="<your_key>"`
+- An OpenAI API key (see Environment Variables section below)
+
+Environment Variables
+The application supports loading environment variables from `.env` files using standard dotenv format.
+
+### .env File Support
+- **Default behavior**: Automatically loads `.env` from the current working directory if it exists
+- **Custom file**: Use `--env-file <path>` to specify a different environment file
+- **File format**: Standard `.env` format with `KEY=value` pairs
+- **Precedence**: System environment variables take precedence over `.env` file values
+
+### Setting up your API key
+You can provide your OpenAI API key in any of these ways:
+
+**Option 1: .env file (recommended)**
+Create a `.env` file in your project directory:
+```
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+**Option 2: System environment variables**
+- Windows (PowerShell): `$Env:OPENAI_API_KEY = "<your_key>"`
+- macOS/Linux (bash/zsh): `export OPENAI_API_KEY="<your_key>"`
+
+**Option 3: Custom .env file**
+```bash
+# Create custom environment file
+echo "OPENAI_API_KEY=your_key" > production.env
+
+# Use with --env-file option
+debate "Design a system" --env-file production.env
+```
 
 Installation
 - Install dependencies: `npm install`
@@ -32,6 +61,7 @@ CLI Usage
     - 2 → proposals + critiques, then synthesis
     - >=3 → proposals + critiques + refinement, then synthesis
   - `--config <path>`: configuration file path (default `./debate-config.json`)
+  - `--env-file <path>`: path to environment file (default: attempts to load `.env`)
   - `--output <path>`: output file path
     - If the path ends with `.json`, the full debate state is written
     - Otherwise, only the final solution text is written
@@ -114,6 +144,10 @@ Troubleshooting Problem Description Files
   - Fix: Provide path to a file, not a directory
 - "Failed to read problem description file: <error>"
   - Fix: Check file permissions and disk space
+- "Environment file not found: <path>"
+  - Fix: Ensure the specified .env file exists at the given path, or omit --env-file to use default behavior
+- "Failed to load environment file: <error>"
+  - Fix: Check .env file format - should contain KEY=value pairs, one per line
 
 Testing (TDD)
 - Tests use Jest with ts-jest.
