@@ -67,6 +67,21 @@ CLI Usage
     - Otherwise, only the final solution text is written
   - `--verbose`: enable more detailed logging (agents, round-by-round details, metadata when available)
 
+Progress Display
+- The CLI now features real-time progress indicators (always enabled)
+- Shows current round and phase information
+- Displays active agent activities as they happen
+- Progress updates appear in-place without cluttering the output
+- Example display:
+  ```
+  ┌─ Round 2/3
+  │  Proposals (2/3)
+  │  ⠋ System Architect proposing...
+  │  ⠋ Performance Engineer proposing...
+  └─
+  ```
+- In verbose mode: progress display + detailed summary at the end
+
 Problem Description Files
 - Alternative to inline problem strings, you can provide the problem description in a text file
 - File format: Any text format (UTF-8 encoding) - plain text, markdown, etc.

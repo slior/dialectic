@@ -5,7 +5,7 @@ import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../
 import { warnUser, infoUser, writeStderr } from '../index';
 import { SystemConfig } from '../../types/config.types';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource } from '../../types/agent.types';
-import { DebateConfig, DebateResult, DebateRound, Contribution, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES } from '../../types/debate.types';
+import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES } from '../../types/debate.types';
 import { OpenAIProvider } from '../../providers/openai-provider';
 import { RoleBasedAgent } from '../../agents/role-based-agent';
 import { JudgeAgent } from '../../core/judge';
@@ -14,6 +14,7 @@ import { DebateOrchestrator } from '../../core/orchestrator';
 import { resolvePrompt } from '../../utils/prompt-loader';
 import { loadEnvironmentFile } from '../../utils/env-loader';
 import { Agent } from '../../core/agent';
+import { DebateProgressUI } from '../../utils/progress-ui';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -444,11 +445,44 @@ export function debateCommand(program: Command) {
           });
           writeStderr(`Judge: ${sysConfig.judge!.name} (${sysConfig.judge!.model})\n`);
           writeStderr(`  - System prompt: ${promptSources.judge.source === 'file' ? (promptSources.judge.path || 'file') : 'built-in default'}\n`);
+          writeStderr('\n');
         }
 
-        const orchestrator = new DebateOrchestrator(  agents, judge, stateManager, debateCfg, 
-                                                      options.verbose ? { onPhaseComplete: (round, phase) => writeStderr(`[Round ${round}] ${phase} complete\n`) } : undefined, );
+        // Initialize progress UI
+        const progressUI = new DebateProgressUI();
+        progressUI.initialize(debateCfg.rounds);
+
+        // Create orchestrator hooks to drive progress UI
+        const hooks = {
+          onRoundStart: (roundNumber: number, _totalRounds: number) => {
+            progressUI.startRound(roundNumber);
+          },
+          onPhaseStart: (_roundNumber: number, phase: ContributionType, expectedTaskCount: number) => {
+            progressUI.startPhase(phase, expectedTaskCount);
+          },
+          onAgentStart: (agentName: string, activity: string) => {
+            progressUI.startAgentActivity(agentName, activity);
+          },
+          onAgentComplete: (agentName: string, activity: string) => {
+            progressUI.completeAgentActivity(agentName, activity);
+          },
+          onPhaseComplete: (_roundNumber: number, phase: ContributionType) => {
+            progressUI.completePhase(phase);
+          },
+          onSynthesisStart: () => {
+            progressUI.startSynthesis();
+          },
+          onSynthesisComplete: () => {
+            progressUI.completeSynthesis();
+          },
+        };
+
+        const orchestrator = new DebateOrchestrator(agents, judge, stateManager, debateCfg, hooks);
+        
+        // Start progress UI and run debate
+        await progressUI.start();
         const result: DebateResult = await orchestrator.runDebate(resolvedProblem);
+        await progressUI.complete();
 
         // Persist prompt sources once per debate
         await stateManager.setPromptSources(result.debateId, promptSources);

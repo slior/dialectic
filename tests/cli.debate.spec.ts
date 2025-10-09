@@ -79,7 +79,7 @@ describe('CLI debate command', () => {
     expect(stderr).toContain('Running debate (verbose)');
     expect(stderr).toContain('Summary (verbose)');
     expect(stderr).toMatch(/Round\s+1/);
-    expect(stderr).toMatch(/\[Round\s+1\]\s+proposal\s+complete/);
+    // Progress UI provides real-time updates, verbose summary shows final details
     expect(stderr).toMatch(/latency=.+, tokens=/);
 
     stdoutWriteSpy.mockRestore();

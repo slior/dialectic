@@ -397,13 +397,61 @@ Coordinates the multi-round debate flow, executing N complete rounds where each 
 - `judge`: Initialized judge agent
 - `stateManager`: State manager instance
 - `config`: Debate configuration (includes number of rounds)
-- `hooks`: Optional hooks object with `onPhaseComplete` callback for notifications
+- `hooks`: Optional hooks object for progress notifications
+
+**Orchestrator Hooks**:
+The orchestrator supports optional hooks for receiving real-time progress notifications:
+- `onRoundStart(roundNumber, totalRounds)`: Called when a round begins
+- `onPhaseStart(roundNumber, phase, expectedTaskCount)`: Called when a phase begins with task count
+- `onAgentStart(agentName, activity)`: Called when an agent starts an activity
+- `onAgentComplete(agentName, activity)`: Called when an agent completes an activity
+- `onPhaseComplete(roundNumber, phase)`: Called after each phase completes (legacy)
+- `onSynthesisStart()`: Called when synthesis begins
+- `onSynthesisComplete()`: Called when synthesis completes
 
 **Behavior**:
 - Executes `config.rounds` complete cycles of proposal → critique → refinement
 - Calls `stateManager.beginRound()` at the start of each round
 - All three phases execute in every round
-- Optional `onPhaseComplete` hook invoked after each phase (useful for progress logging)
+- Invokes hooks at appropriate points for progress tracking (used by CLI progress UI)
+
+### 11.1. Progress UI Integration
+
+**Class**: `DebateProgressUI`  
+**Location**: `src/utils/progress-ui.ts`
+
+Manages the real-time progress display for debate execution in the CLI.
+
+**Features**:
+- Shows current round and phase information
+- Displays individual agent activities as they happen
+- Updates progress counts for each phase
+- Uses ANSI escape codes for in-place terminal updates
+- Writes all output to stderr (maintaining stdout for results)
+
+**Integration**:
+The CLI (`src/cli/commands/debate.ts`) creates a `DebateProgressUI` instance and connects it to the orchestrator via hooks:
+1. Instantiate `DebateProgressUI` before debate execution
+2. Initialize with total rounds: `progressUI.initialize(totalRounds)`
+3. Create hook handlers that call progress UI methods
+4. Pass hooks to `DebateOrchestrator` constructor
+5. Start progress UI before `orchestrator.runDebate()`
+6. Complete progress UI after debate finishes
+
+**Display Format**:
+```
+┌─ Round 2/3
+│  Proposals (2/2)
+│  ⠋ System Architect proposing...
+└─
+```
+
+**Progress Tracking**:
+- Round indicators show current/total (e.g., "Round 2/3")
+- Phase progress shows completed/total tasks (e.g., "Proposals (2/2)")
+- Active agents shown with spinner (⠋) and activity description
+- Display updates in-place using ANSI cursor movement codes
+- Automatically clears when debate completes
 
 ### 12. Debate Execution
 
@@ -433,15 +481,21 @@ The orchestrator executes N complete rounds, where N is specified by `config.rou
 **For each round (1 to N)**:
 
 ##### 12.2.1 Begin Round
-Calls `stateManager.beginRound(debateId)` to create a new round object and increment the current round counter. The round is persisted immediately to disk.
+1. **Hook Invoked**: `onRoundStart(roundNumber, totalRounds)` - Notifies progress UI that a new round is starting
+2. Calls `stateManager.beginRound(debateId)` to create a new round object and increment the current round counter
+3. The round is persisted immediately to disk
 
 ##### 12.2.2 Proposal Phase
-**Method**: `proposalPhase(state: DebateState)`
+**Method**: `proposalPhase(state: DebateState, roundNumber: number)`
 
 All agents generate proposals in parallel for this round.
 
-**For each agent**:
+**Phase Start**:
 1. Builds `DebateContext` from current state (includes full history if configured)
+2. **Hook Invoked**: `onPhaseStart(roundNumber, 'proposal', agentCount)` - Notifies progress UI with expected task count
+
+**For each agent (parallel execution)**:
+1. **Hook Invoked**: `onAgentStart(agentName, 'proposing')` - Notifies progress UI that agent is starting
 2. Calls `agent.propose(problem, context)`
    - Agent prepares role-specific prompts
    - Calls `proposeImpl()` which invokes `callLLM()`
@@ -450,50 +504,70 @@ All agents generate proposals in parallel for this round.
 3. Builds `Contribution` object with type "proposal" and normalized metadata
 4. Calls `stateManager.addContribution()` to persist contribution to current round
 5. State manager saves updated JSON to disk
+6. **Hook Invoked**: `onAgentComplete(agentName, 'proposing')` - Notifies progress UI that agent finished
+
+**Phase Complete**:
+7. **Hook Invoked**: `onPhaseComplete(roundNumber, 'proposal')` - Notifies progress UI that phase is complete
 
 **Concurrency**: All agent proposals run in parallel via `Promise.all()`
 
 ##### 12.2.3 Critique Phase
-**Method**: `critiquePhase(state: DebateState)`
+**Method**: `critiquePhase(state: DebateState, roundNumber: number)`
 
 Each agent critiques proposals from other agents within the current round.
 
-**For each agent**:
+**Phase Start**:
 1. Retrieves proposals from current round (just added in proposal phase)
-2. Filters to get proposals from other agents only
-3. **For each other agent's proposal**:
+2. Calculates total critique tasks: `agents × (agents - 1)`
+3. **Hook Invoked**: `onPhaseStart(roundNumber, 'critique', totalCritiques)` - Notifies progress UI with expected task count
+
+**For each agent (sequential)**:
+1. Filters to get proposals from other agents only
+2. **For each other agent's proposal**:
+   - **Hook Invoked**: `onAgentStart(agentName, 'critiquing {targetRole}')` - Notifies progress UI
    - Calls `agent.critique(proposal, context)`
    - Agent builds critique-specific prompts
    - Calls `critiqueImpl()` which invokes `callLLM()`
    - `callLLM()` measures latency and calls `provider.complete()`
    - Returns `Critique` with content and metadata
-4. Builds `Contribution` with type "critique" and target agent ID
-5. Calls `stateManager.addContribution()` to persist to current round
-6. State manager saves updated JSON to disk
+   - Builds `Contribution` with type "critique" and target agent ID
+   - Calls `stateManager.addContribution()` to persist to current round
+   - State manager saves updated JSON to disk
+   - **Hook Invoked**: `onAgentComplete(agentName, 'critiquing {targetRole}')` - Notifies progress UI
+
+**Phase Complete**:
+3. **Hook Invoked**: `onPhaseComplete(roundNumber, 'critique')` - Notifies progress UI that phase is complete
 
 **Concurrency**: Critiques are processed sequentially (outer loop) but could be parallelized
 
 ##### 12.2.4 Refinement Phase
-**Method**: `refinementPhase(state: DebateState)`
+**Method**: `refinementPhase(state: DebateState, roundNumber: number)`
 
 Each agent refines their proposal based on critiques received within the current round.
 
-**For each agent**:
-1. Retrieves agent's proposal from current round
-2. Retrieves all critiques targeting this agent from current round
-3. Calls `agent.refine(original, critiques, context)`
+**Phase Start**:
+1. Retrieves previous round data
+2. **Hook Invoked**: `onPhaseStart(roundNumber, 'refinement', agentCount)` - Notifies progress UI with expected task count
+
+**For each agent (parallel execution)**:
+1. **Hook Invoked**: `onAgentStart(agentName, 'refining')` - Notifies progress UI that agent is starting
+2. Retrieves agent's proposal from current round
+3. Retrieves all critiques targeting this agent from current round
+4. Maps critique contributions to `Critique` objects (extracting content and metadata)
+5. Calls `agent.refine(original, critiques, context)`
    - Agent builds refinement prompts including original and all critiques
    - Calls `refineImpl()` which invokes `callLLM()`
    - `callLLM()` measures latency and calls `provider.complete()`
    - Returns refined content with updated metadata
-4. Builds `Contribution` with type "refinement"
-5. Calls `stateManager.addContribution()` to persist to current round
-6. State manager saves updated JSON to disk
+6. Builds `Contribution` with type "refinement"
+7. Calls `stateManager.addContribution()` to persist to current round
+8. State manager saves updated JSON to disk
+9. **Hook Invoked**: `onAgentComplete(agentName, 'refining')` - Notifies progress UI that agent finished
+
+**Phase Complete**:
+10. **Hook Invoked**: `onPhaseComplete(roundNumber, 'refinement')` - Notifies progress UI that phase is complete
 
 **Concurrency**: All agent refinements run in parallel via `Promise.all()`
-
-##### 12.2.5 Phase Complete Hook
-After each phase completes, if the optional `onPhaseComplete` hook is provided (typically for verbose CLI output), it is invoked with the current round number and phase type.
 
 #### 12.3 Synthesis Phase
 **Method**: `synthesisPhase(state: DebateState)`
@@ -501,20 +575,22 @@ After each phase completes, if the optional `onPhaseComplete` hook is provided (
 Judge synthesizes the final solution from all debate rounds.
 
 **Process**:
-1. Builds `DebateContext` with full history
-2. Calls `judge.synthesize(problem, rounds, context)`
-3. Judge builds comprehensive synthesis prompt:
+1. **Hook Invoked**: `onSynthesisStart()` - Notifies progress UI that synthesis is starting
+2. Builds `DebateContext` with full history
+3. Calls `judge.synthesize(problem, rounds, context)`
+4. Judge builds comprehensive synthesis prompt:
    - Includes problem statement
    - Includes all rounds with each contribution labeled by role and type
    - Adds synthesis instructions
-4. Calls `provider.complete()` with judge's system prompt and synthesis prompt
-5. Provider returns generated text
-6. Judge wraps text in `Solution` object with:
+5. Calls `provider.complete()` with judge's system prompt and synthesis prompt
+6. Provider returns generated text
+7. Judge wraps text in `Solution` object with:
    - `description`: LLM-generated solution text
    - `tradeoffs`: Empty array (future enhancement)
    - `recommendations`: Empty array (future enhancement)
    - `confidence`: Default score of 75 (future enhancement)
    - `synthesizedBy`: Judge agent ID
+8. **Hook Invoked**: `onSynthesisComplete()` - Notifies progress UI that synthesis is complete
 
 **Returns**: `Solution` object
 
@@ -539,6 +615,10 @@ Handles output of debate results based on options.
 
 **Behavior**:
 
+**Progress UI Cleanup**:
+- Progress UI automatically clears itself before result output
+- Ensures clean separation between progress display and results
+
 **If output path specified** (`--output <path>`):
 - **If path ends with `.json`**:
   - Retrieves full debate state via `stateManager.getDebate()`
@@ -549,12 +629,13 @@ Handles output of debate results based on options.
 **If no output path** (default):
 - Writes final solution text to stdout
 - **If verbose mode** (`--verbose`):
-  - Writes detailed summary to stdout:
+  - Writes detailed summary to stderr:
     - Round-by-round breakdown
     - Each contribution with first line preview
     - Metadata (latency, tokens) per contribution
     - Total statistics (rounds, duration, tokens)
   - Prints which system prompt is used per agent and judge: either "built-in default" or the resolved absolute file path.
+  - Progress UI remains visible during execution, verbose summary appears after completion
 
 **Always**: Writes save path notice to stderr: `Saved debate to ./debates/<debate-id>.json`
 
@@ -778,4 +859,6 @@ The architecture supports extension through:
 3. **Custom Synthesis**: Extend `JudgeAgent` or create alternative synthesis methods
 4. **Alternative Storage**: Replace `StateManager` for different persistence strategies
 5. **Additional Phases**: Extend `DebateOrchestrator` to add new debate phases
+6. **Custom Progress UI**: Replace or extend `DebateProgressUI` to implement alternative progress displays (e.g., web-based, GUI, different terminal formats)
+7. **Hook-Based Extensions**: Add custom hooks to `OrchestratorHooks` interface for additional monitoring, logging, or integration needs
 
