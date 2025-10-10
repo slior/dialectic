@@ -1,181 +1,196 @@
-# Multi-Agent Debate
+# Dialectic - Multi-Agent Debate
 
-Overview
-- This project implements a simple fixed-round debate of a multi-agent debate system as a CLI tool named "debate".
-- It supports three agent types (architect, performance, security) with two agents by default (architect, performance), runs fixed rounds, and synthesizes a final solution via a judge agent.
-- End-to-end path: CLI → configuration → OpenAI provider → agents/orchestrator → state persisted to ./debates → output to stdout or file.
+## Overview
 
-Requirements
-- Node.js >= 18
-- An OpenAI API key (see Environment Variables section below)
+Dialectic is a CLI tool that orchestrates multi-agent debates to solve software design problems. Multiple AI agents with different perspectives (architecture, performance, security) debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
 
-Environment Variables
-The application supports loading environment variables from `.env` files using standard dotenv format.
+## Setup
 
-### .env File Support
-- **Default behavior**: Automatically loads `.env` from the current working directory if it exists
-- **Custom file**: Use `--env-file <path>` to specify a different environment file
-- **File format**: Standard `.env` format with `KEY=value` pairs
-- **Precedence**: System environment variables take precedence over `.env` file values
+### Requirements
 
-### Setting up your API key
-You can provide your OpenAI API key in any of these ways:
+- **Node.js** >= 18
+- **OpenAI API Key**: Set `OPENAI_API_KEY` in a `.env` file or as an environment variable
 
-**Option 1: .env file (recommended)**
-Create a `.env` file in your project directory:
-```
-OPENAI_API_KEY=your_openai_api_key_here
-```
+### Installation
 
-**Option 2: System environment variables**
-- Windows (PowerShell): `$Env:OPENAI_API_KEY = "<your_key>"`
-- macOS/Linux (bash/zsh): `export OPENAI_API_KEY="<your_key>"`
-
-**Option 3: Custom .env file**
 ```bash
-# Create custom environment file
-echo "OPENAI_API_KEY=your_key" > production.env
+# Install dependencies
+npm install
 
-# Use with --env-file option
-debate "Design a system" --env-file production.env
+# Build the project
+npm run build
 ```
 
-Installation
-- Install dependencies: `npm install`
-- Build (optional for dev via ts-node): `npm run build`
+## Usage
 
-CLI Usage
-- Basic (string problem):
-  - `debate "Design a rate limiting system"`
-- Basic (file-based problem):
-  - `debate --problemDescription problem.txt`
-- With specific agents:
-  - `debate "Design a secure authentication system" --agents architect,security`
-  - `debate "Build a high-performance API" --agents architect,performance,security`
-- Options:
-  - `--problemDescription <path>`: Path to a text file containing the problem description. Provide exactly one of this or the problem string argument.
-  - `--agents <list>`: comma-separated roles (architect,performance,security,testing); defaults to architect,performance when not specified.
-    - **Note**: This option filters agents from the configuration file by role. It does not replace agent configurations, but selects which configured agents participate. If no matching agents are found in the config, defaults are used.
-  - `--rounds <n>`: number of rounds (default 3; must be >= 1). Flow mapping:
-    - 1 → proposals only, then synthesis
-    - 2 → proposals + critiques, then synthesis
-    - >=3 → proposals + critiques + refinement, then synthesis
-  - `--config <path>`: configuration file path (default `./debate-config.json`)
-  - `--env-file <path>`: path to environment file (default: attempts to load `.env`)
-  - `--output <path>`: output file path
-    - If the path ends with `.json`, the full debate state is written
-    - Otherwise, only the final solution text is written
-  - `--verbose`: enable more detailed logging (agents, round-by-round details, metadata when available)
+### CLI Usage
 
-Progress Display
-- The CLI now features real-time progress indicators (always enabled)
-- Shows current round and phase information
-- Displays active agent activities as they happen
-- Progress updates appear in-place without cluttering the output
-- Example display:
-  ```
-  ┌─ Round 2/3
-  │  Proposals (2/3)
-  │  ⠋ System Architect proposing...
-  │  ⠋ Performance Engineer proposing...
-  └─
-  ```
-- In verbose mode: progress display + detailed summary at the end
+The `debate` command accepts a problem statement and optional configuration parameters.
 
-Problem Description Files
-- Alternative to inline problem strings, you can provide the problem description in a text file
-- File format: Any text format (UTF-8 encoding) - plain text, markdown, etc.
-- File size: No limits imposed (user controls content length)
-- Content: Must be non-empty (whitespace-only files are rejected)
-- Path resolution: Relative paths resolved from current working directory
-- Examples:
-  - `debate --problemDescription complex-problem.md`
-  - `debate --problemDescription ./problems/rate-limiting.txt`
-- Mutual exclusivity: Cannot provide both string problem and file path - exactly one must be specified
+**Basic usage:**
+```bash
+debate "Design a rate limiting system"
+```
 
-Output Behavior
-- By default, the CLI writes only the minimal final solution text to stdout.
-- A complete debate state JSON file is always persisted to `./debates/<debate-id>.json`.
-- The saved path is written to stderr (so it does not interfere with stdout piping).
-- When `--output` is provided:
-  - If it ends with `.json`, the full debate state is written
-  - Otherwise, only the final solution text is written
+**With problem description file:**
+```bash
+debate --problemDescription problem.txt
+```
 
-Configuration
-- For comprehensive configuration documentation, see [docs/configuration.md](docs/configuration.md)
-- Default config file: `./debate-config.json`. If missing:
-  - The CLI uses built-in defaults (two agents: architect, performance; judge defaults; debate defaults)
-  - A notice is written to stderr indicating defaults are used
-- Example with SecurityAgent:
-  ```json
-  {
-    "agents": [
-      {"id": "agent-architect", "name": "System Architect", "role": "architect", "model": "gpt-4", "provider": "openai", "temperature": 0.5},
-      {"id": "agent-security", "name": "Security Expert", "role": "security", "model": "gpt-4", "provider": "openai", "temperature": 0.4}
-    ]
-  }
-  ```
-- Config structure (root object):
-  - `agents: AgentConfig[]` (required; if empty/missing, defaults are used with a notice)
-  - `judge?: AgentConfig` (optional; if missing, default judge is used with a notice)
-  - `debate?: DebateConfig` (optional; used for rounds and basic Flow 1 settings)
-- AgentConfig shape:
-  - `id: string`
-  - `name: string`
-  - `role: "architect" | "security" | "performance" | "testing" | "generalist"`
-  - `model: string` (e.g., `gpt-4`)
-  - `provider: "openai"` (Flow 1 only)
-  - `temperature: number` (0.0 - 1.0)
-  - `systemPrompt?: string`
-  - `enabled?: boolean` (defaults to true)
-- DebateConfig shape:
-  - `rounds: number`
-  - `terminationCondition: { type: "fixed" }`
-  - `synthesisMethod: "judge"`
-  - `includeFullHistory: boolean`
-  - `timeoutPerRound: number` (ms)
+**With specific agent roles:**
+```bash
+debate "Design a secure authentication system" --agents architect,security
+debate "Build a high-performance API" --agents architect,performance,security
+```
 
-Exit Codes
-- 0: success
-- 1: general error
-- 2: invalid CLI arguments (e.g., missing problem, invalid rounds)
-- 3: provider error (reserved for future mapping)
-- 4: configuration error (e.g., missing OPENAI_API_KEY)
+**Available options:**
 
-Error Handling
-- The CLI prints error messages to stderr and exits with one of the exit codes above.
-- For Flow 1, errors are not handled internally; exceptions are thrown.
+- `--problemDescription <path>`: Path to a text file containing the problem description (mutually exclusive with problem string)
+- `--agents <list>`: Comma-separated agent roles to participate (default: `architect,performance`)
+  - Available roles: `architect`, `performance`, `security`, `testing`, `generalist`
+  - Filters agents from configuration file by role; uses defaults if no matches found
+- `--rounds <n>`: Number of debate rounds (default: `3`, minimum: `1`)
+- `--config <path>`: Path to configuration file (default: `./debate-config.json`)
+- `--env-file <path>`: Path to environment file (default: `.env`)
+- `--output <path>`: Output file path
+  - If ending with `.json`: writes full debate state
+  - Otherwise: writes final solution text only
+- `--verbose`: Enable detailed logging with round-by-round breakdown
 
-Troubleshooting Problem Description Files
-- "Invalid arguments: provide exactly one of <problem> or --problemDescription"
-  - Fix: Use either a string problem OR --problemDescription, not both
-- "Invalid arguments: problem is required (provide <problem> or --problemDescription)"
-  - Fix: Provide either a problem string argument or --problemDescription option
-- "Invalid arguments: problem description file not found: <path>"
-  - Fix: Check file path exists and is accessible
-- "Invalid arguments: problem description file is empty: <path>"
-  - Fix: Add content to the file (whitespace-only files are considered empty)
-- "Invalid arguments: problem description path is a directory: <path>"
-  - Fix: Provide path to a file, not a directory
-- "Failed to read problem description file: <error>"
-  - Fix: Check file permissions and disk space
-- "Environment file not found: <path>"
-  - Fix: Ensure the specified .env file exists at the given path, or omit --env-file to use default behavior
-- "Failed to load environment file: <error>"
-  - Fix: Check .env file format - should contain KEY=value pairs, one per line
+### Problem Description Files
 
-Testing (TDD)
-- Tests use Jest with ts-jest.
-- Run tests: `npm test`
-- Watch mode: `npm run test:watch`
-- The test suite mocks OpenAI SDK to avoid network calls.
+Problem descriptions can be provided via text files instead of inline strings.
 
-Notes
-- Provider Layer: Uses OpenAI SDK with preference for Responses API and fallback to Chat Completions.
-- Persistence: Debate states are written to `./debates` as they progress and on completion.
-- Agent Types: Supports architect (system design), performance (optimization), and security (threat modeling) perspectives.
-- Defaults:
-  - Default agents: architect and performance
-  - Default model: `gpt-4`
-  - Default temperature: `0.5`
-  - Default rounds: `3`
+**Format and constraints:**
+- **Encoding**: UTF-8
+- **Format**: Any text format (plain text, markdown, etc.)
+- **Content**: Must be non-empty (whitespace-only files are rejected)
+- **Path resolution**: Relative paths resolved from current working directory
+- **Mutual exclusivity**: Cannot provide both string problem and `--problemDescription` file
+
+**Examples:**
+```bash
+debate --problemDescription complex-problem.md
+debate --problemDescription ./problems/rate-limiting.txt
+```
+
+#### Troubleshooting
+
+**Common errors:**
+
+- **"Invalid arguments: provide exactly one of <problem> or --problemDescription"**
+  - Use either a string problem OR `--problemDescription`, not both
+
+- **"Invalid arguments: problem is required (provide <problem> or --problemDescription)"**
+  - Provide either a problem string or `--problemDescription` option
+
+- **"Invalid arguments: problem description file not found: <path>"**
+  - Verify the file path exists and is accessible
+
+- **"Invalid arguments: problem description file is empty: <path>"**
+  - Add content to the file (whitespace-only files are considered empty)
+
+- **"Invalid arguments: problem description path is a directory: <path>"**
+  - Provide a file path, not a directory path
+
+- **"Failed to read problem description file: <error>"**
+  - Check file permissions and available disk space
+
+- **"Environment file not found: <path>"**
+  - Ensure the specified `.env` file exists, or omit `--env-file` to use default behavior
+
+- **"Failed to load environment file: <error>"**
+  - Verify `.env` file format: `KEY=value` pairs, one per line
+
+### Output
+
+**Default behavior:**
+- Final solution text written to `stdout`
+- Complete debate state saved to `./debates/<debate-id>.json`
+- Save path notification written to `stderr`
+
+**With `--output` option:**
+- If path ends with `.json`: full debate state written to file
+- Otherwise: only final solution text written to file
+
+**Verbose mode (`--verbose`):**
+- Detailed summary written to `stderr` including:
+  - Round-by-round breakdown
+  - Individual contributions with metadata (tokens, latency)
+  - Total statistics (rounds, duration, token counts)
+
+#### Exit Codes
+
+| Code | Description |
+|------|-------------|
+| `0` | Success |
+| `1` | General error |
+| `2` | Invalid CLI arguments (e.g., missing problem, invalid rounds) |
+| `3` | Provider error (reserved for future use) |
+| `4` | Configuration error (e.g., missing `OPENAI_API_KEY`) |
+
+### Configuration
+
+Debate behavior is configured via a JSON file (default: `./debate-config.json`). If the file is missing, built-in defaults are used.
+
+**Configuration file structure:**
+- `agents`: Array of agent configurations defining the agent pool
+- `judge`: Judge agent configuration for synthesis
+- `debate`: Debate execution settings (rounds, termination, synthesis method)
+
+For detailed configuration documentation, including all fields, validation rules, and examples, see [docs/configuration.md](docs/configuration.md).
+
+**Default configuration values:**
+
+- **Agents**: 
+  - System Architect (role: `architect`, model: `gpt-4`, temperature: `0.5`)
+  - Performance Engineer (role: `performance`, model: `gpt-4`, temperature: `0.5`)
+- **Judge**: 
+  - Technical Judge (role: `generalist`, model: `gpt-4`, temperature: `0.3`)
+- **Debate settings**:
+  - Rounds: `3`
+  - Termination: `{ "type": "fixed" }`
+  - Synthesis method: `"judge"`
+  - Include full history: `true`
+  - Timeout per round: `300000` ms (5 minutes)
+
+**Example configuration:**
+```json
+{
+  "agents": [
+    {
+      "id": "agent-architect",
+      "name": "System Architect",
+      "role": "architect",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.5
+    },
+    {
+      "id": "agent-security",
+      "name": "Security Expert",
+      "role": "security",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.4
+    }
+  ]
+}
+```
+
+## Technical Details
+
+**LLM Provider:**
+- Uses OpenAI SDK with preference for Responses API and fallback to Chat Completions API
+
+**Debate Persistence:**
+- Debate states are saved to `./debates/` directory
+- Filename format: `deb-YYYYMMDD-HHMMSS-RAND.json`
+- Files are saved incrementally during execution and upon completion
+
+**Agent Roles:**
+- `architect`: System design and architecture perspective
+- `performance`: Performance optimization and efficiency perspective
+- `security`: Security and threat modeling perspective
+- `testing`: Testing strategy and quality assurance perspective (future use)
+- `generalist`: General-purpose role (typically used for judge)
