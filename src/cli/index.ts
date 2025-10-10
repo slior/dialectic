@@ -6,6 +6,7 @@ import { EXIT_GENERAL_ERROR } from '../utils/exit-codes';
 // Color constants for CLI output
 export const WARNING_COLOR = 'yellow';
 export const INFO_COLOR = 'gray';
+export const PROGRAM_NAME = 'dialectic';
 
 // Lazy optional chalk import for colored output
 let chalk: any;
@@ -51,12 +52,12 @@ export function writeStderr(message: string): void {
  */
 export async function runCli(argv: string[]) {
   const program = new Command();
-  program.name('debate').description('Multi-agent debate system').version('0.1.0');
+  program.name(PROGRAM_NAME).description('Multi-agent debate system').version('0.1.0');
 
   // Register commands
   debateCommand(program);
 
-  await program.parseAsync(['node', 'debate', ...argv]);
+  await program.parseAsync(['node', PROGRAM_NAME, ...argv]);
 }
 
 // If called directly from node

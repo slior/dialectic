@@ -13,34 +13,43 @@ Dialectic is a CLI tool that orchestrates multi-agent debates to solve software 
 
 ### Installation
 
+**For end users (when published to npm):**
+```bash
+npm install -g dialectic
+```
+
+**For local development:**
 ```bash
 # Install dependencies
 npm install
 
 # Build the project
 npm run build
+
+# Link the dialectic command globally
+npm link
 ```
 
 ## Usage
 
 ### CLI Usage
 
-The `debate` command accepts a problem statement and optional configuration parameters.
+The `dialectic` command accepts a problem statement and optional configuration parameters.
 
 **Basic usage:**
 ```bash
-debate "Design a rate limiting system"
+dialectic debate "Design a rate limiting system"
 ```
 
 **With problem description file:**
 ```bash
-debate --problemDescription problem.txt
+dialectic debate --problemDescription problem.txt
 ```
 
 **With specific agent roles:**
 ```bash
-debate "Design a secure authentication system" --agents architect,security
-debate "Build a high-performance API" --agents architect,performance,security
+dialectic debate "Design a secure authentication system" --agents architect,security
+dialectic debate "Build a high-performance API" --agents architect,performance,security
 ```
 
 **Available options:**
@@ -70,8 +79,8 @@ Problem descriptions can be provided via text files instead of inline strings.
 
 **Examples:**
 ```bash
-debate --problemDescription complex-problem.md
-debate --problemDescription ./problems/rate-limiting.txt
+dialectic debate --problemDescription complex-problem.md
+dialectic debate --problemDescription ./problems/rate-limiting.txt
 ```
 
 #### Troubleshooting
