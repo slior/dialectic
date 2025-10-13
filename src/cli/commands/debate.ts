@@ -5,7 +5,8 @@ import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../
 import { warnUser, infoUser, writeStderr } from '../index';
 import { SystemConfig } from '../../types/config.types';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource } from '../../types/agent.types';
-import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES } from '../../types/debate.types';
+import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES, SummarizationConfig } from '../../types/debate.types';
+import { DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD } from '../../types/config.types';
 import { OpenAIProvider } from '../../providers/openai-provider';
 import { RoleBasedAgent } from '../../agents/role-based-agent';
 import { JudgeAgent } from '../../core/judge';
@@ -45,6 +46,9 @@ const DEFAULT_LLM_MODEL = 'gpt-4';
 const DEFAULT_AGENT_TEMPERATURE = 0.5;
 const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 
+// Default summary prompt fallback
+const DEFAULT_SUMMARY_PROMPT_FALLBACK = 'Summarize the following debate history from your perspective, preserving key points and decisions.';
+
 /**
  * Returns the built-in default system configuration for the debate system.
  *
@@ -64,8 +68,23 @@ function builtInDefaults(): SystemConfig {
   ];
   const judge: AgentConfig = {  id: DEFAULT_JUDGE_ID, name: DEFAULT_JUDGE_NAME, role: AGENT_ROLES.GENERALIST, 
                                 model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_JUDGE_TEMPERATURE };
-  const debate: DebateConfig = {  rounds: DEFAULT_ROUNDS, terminationCondition: { type: TERMINATION_TYPES.FIXED }, 
-                                  synthesisMethod: SYNTHESIS_METHODS.JUDGE, includeFullHistory: true, timeoutPerRound: 300000 };
+  
+  // Default summarization configuration
+  const summarization = {
+    enabled: DEFAULT_SUMMARIZATION_ENABLED,
+    threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+    maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+    method: DEFAULT_SUMMARIZATION_METHOD,
+  };
+  
+  const debate: DebateConfig = {  
+    rounds: DEFAULT_ROUNDS, 
+    terminationCondition: { type: TERMINATION_TYPES.FIXED }, 
+    synthesisMethod: SYNTHESIS_METHODS.JUDGE, 
+    includeFullHistory: true, 
+    timeoutPerRound: 300000,
+    summarization,
+  };
   return { agents: defaultAgents, judge, debate } as SystemConfig;
 }
 
@@ -123,16 +142,24 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
 
 /**
  * Helper to create an agent instance with prompt resolution and metadata collection.
- * Resolves the system prompt from file or default, creates the agent, and records provenance.
+ * Resolves system and summary prompts from files or defaults, merges summarization config,
+ * creates the agent, and records provenance.
  * 
  * @param cfg - Agent configuration containing role, model, and other settings.
  * @param provider - OpenAI provider instance for LLM interactions.
  * @param configDir - Directory path where the configuration file is located.
+ * @param systemSummaryConfig - System-wide summarization configuration.
  * @param collect - Collection object to record prompt source metadata.
  * @returns A configured RoleBasedAgent instance.
  */
-function createAgentWithPromptResolution( cfg: AgentConfig, provider: OpenAIProvider, configDir: string, collect: { agents: AgentPromptMetadata[] } ): Agent
-{
+function createAgentWithPromptResolution(
+  cfg: AgentConfig, 
+  provider: OpenAIProvider, 
+  configDir: string,
+  systemSummaryConfig: SummarizationConfig,
+  collect: { agents: AgentPromptMetadata[] }
+): Agent {
+  // Resolve system prompt
   const defaultText = RoleBasedAgent.defaultSystemPrompt(cfg.role);
   const res = resolvePrompt({
     label: cfg.name,
@@ -145,7 +172,28 @@ function createAgentWithPromptResolution( cfg: AgentConfig, provider: OpenAIProv
     ? { source: PROMPT_SOURCES.FILE, ...(res.absPath !== undefined && { absPath: res.absPath }) }
     : { source: PROMPT_SOURCES.BUILT_IN };
   
-  const agent = RoleBasedAgent.create(cfg, provider, res.text, promptSource);
+  // Merge summarization config (agent-level overrides system-level)
+  const mergedSummaryConfig: SummarizationConfig = {
+    ...systemSummaryConfig,
+    ...cfg.summarization,
+  };
+  
+  // Resolve summary prompt
+  // For the default, we use a generic fallback prompt
+  const summaryRes = resolvePrompt({
+    label: `${cfg.name} (summary)`,
+    configDir,
+    ...(cfg.summaryPromptPath !== undefined && { promptPath: cfg.summaryPromptPath }),
+    defaultText: DEFAULT_SUMMARY_PROMPT_FALLBACK
+  });
+  
+  const summaryPromptSource: PromptSource = summaryRes.source === PROMPT_SOURCES.FILE
+    ? { source: PROMPT_SOURCES.FILE, ...(summaryRes.absPath !== undefined && { absPath: summaryRes.absPath }) }
+    : { source: PROMPT_SOURCES.BUILT_IN };
+  
+  // Create agent with all resolved parameters
+  const agent = RoleBasedAgent.create(  cfg, provider, res.text, promptSource,
+                                        mergedSummaryConfig, summaryPromptSource );
   
   collect.agents.push({
     agentId: cfg.id,
@@ -160,20 +208,26 @@ function createAgentWithPromptResolution( cfg: AgentConfig, provider: OpenAIProv
 /**
  * Builds an array of Agent instances based on the provided configuration and LLM provider.
  *
- * Creates RoleBasedAgent instances for each agent configuration, resolving system prompts
- * from files or defaults, and collecting metadata about prompt sources. The RoleBasedAgent
- * class handles all roles through a prompt registry, eliminating the need for role-specific
- * agent classes.
+ * Creates RoleBasedAgent instances for each agent configuration, resolving system and summary
+ * prompts from files or defaults, merging summarization configs, and collecting metadata about
+ * prompt sources. The RoleBasedAgent class handles all roles through a prompt registry,
+ * eliminating the need for role-specific agent classes.
  *
  * @param agentConfigs - Array of agent configurations.
  * @param provider - OpenAI provider instance.
  * @param configDir - Directory where the config file is located, used for resolving relative prompt paths.
+ * @param systemSummaryConfig - System-wide summarization configuration.
  * @param collect - Object to collect prompt metadata.
  * @returns Array of Agent instances.
  */
-function buildAgents( agentConfigs: AgentConfig[], provider: OpenAIProvider, configDir: string, collect: { agents: AgentPromptMetadata[] } ): Agent[]
-{
-  return agentConfigs.map((cfg) => createAgentWithPromptResolution(cfg, provider, configDir, collect));
+function buildAgents(
+  agentConfigs: AgentConfig[], 
+  provider: OpenAIProvider, 
+  configDir: string,
+  systemSummaryConfig: SummarizationConfig,
+  collect: { agents: AgentPromptMetadata[] }
+): Agent[] {
+  return agentConfigs.map((cfg) => createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect));
 }
 
 /**
@@ -322,12 +376,24 @@ async function resolveProblemDescription(problem: string | undefined, options: a
 
 /**
  * Outputs a summary of a single debate round to stderr for verbose mode.
- * Lists all contributions (proposals, critiques, refinements) with metadata.
+ * Lists all contributions (proposals, critiques, refinements) and summaries with metadata.
  *
  * @param {DebateRound} round - The debate round to summarize.
  */
 function outputRoundSummary(round: DebateRound): void {
   writeStderr(`Round ${round.roundNumber}\n`);
+  
+  // Output summaries if present
+  if (round.summaries && Object.keys(round.summaries).length > 0) {
+    writeStderr(`  summaries:\n`);
+    Object.values(round.summaries).forEach((s) => {
+      const tokens = s.metadata.tokensUsed != null ? s.metadata.tokensUsed : 'N/A';
+      const lat = s.metadata.latencyMs != null ? `${s.metadata.latencyMs}ms` : 'N/A';
+      writeStderr(`    [${s.agentRole}] ${s.metadata.beforeChars} → ${s.metadata.afterChars} chars\n`);
+      writeStderr(`      (latency=${lat}, tokens=${tokens}, method=${s.metadata.method})\n`);
+    });
+  }
+  
   const types = [CONTRIBUTION_TYPES.PROPOSAL, CONTRIBUTION_TYPES.CRITIQUE, CONTRIBUTION_TYPES.REFINEMENT] as const;
   types.forEach((t) => {
     const items = round.contributions.filter((c: Contribution) => c.type === t);
@@ -419,18 +485,44 @@ export function debateCommand(program: Command) {
           judge: { id: sysConfig.judge!.id, source: PROMPT_SOURCES.BUILT_IN },
         };
 
-        const agents = buildAgents(agentConfigs, provider, sysConfig.configDir || process.cwd(), promptSources);
+        // Get system-wide summarization config (use defaults if not in config)
+        const systemSummaryConfig: SummarizationConfig = debateCfg.summarization || {
+          enabled: DEFAULT_SUMMARIZATION_ENABLED,
+          threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+          maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+          method: DEFAULT_SUMMARIZATION_METHOD,
+        };
+
+        const agents = buildAgents(agentConfigs, provider, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources);
 
         // Judge prompt resolution
         const judgeDefault = JudgeAgent.defaultSystemPrompt();
         const jres = resolvePrompt({ label: sysConfig.judge!.name, configDir: sysConfig.configDir || process.cwd(), ...((sysConfig.judge!.systemPromptPath !== undefined) && { promptPath: sysConfig.judge!.systemPromptPath }), defaultText: judgeDefault });
+        
+        // Judge summary prompt resolution
+        const judgeSummaryDefault = JudgeAgent.defaultSummaryPrompt('', systemSummaryConfig.maxLength);
+        const jsres = resolvePrompt({ 
+          label: `${sysConfig.judge!.name} (summary)`, 
+          configDir: sysConfig.configDir || process.cwd(), 
+          ...((sysConfig.judge!.summaryPromptPath !== undefined) && { promptPath: sysConfig.judge!.summaryPromptPath }), 
+          defaultText: judgeSummaryDefault 
+        });
+        
         const judge = new JudgeAgent(
           sysConfig.judge!,
           provider,
           jres.text,
-          jres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jres.absPath !== undefined && { absPath: jres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN })
+          jres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jres.absPath !== undefined && { absPath: jres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN }),
+          systemSummaryConfig,
+          jsres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jsres.absPath !== undefined && { absPath: jsres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN })
         );
-        promptSources.judge = { id: sysConfig.judge!.id, source: jres.source, ...(jres.absPath !== undefined && { path: jres.absPath }) };
+        promptSources.judge = { 
+          id: sysConfig.judge!.id, 
+          source: jres.source, 
+          ...(jres.absPath !== undefined && { path: jres.absPath }),
+          summarySource: jsres.source,
+          ...(jsres.absPath !== undefined && { summaryPath: jsres.absPath })
+        };
 
         const stateManager = new StateManager();
 
@@ -445,6 +537,11 @@ export function debateCommand(program: Command) {
           });
           writeStderr(`Judge: ${sysConfig.judge!.name} (${sysConfig.judge!.model})\n`);
           writeStderr(`  - System prompt: ${promptSources.judge.source === 'file' ? (promptSources.judge.path || 'file') : 'built-in default'}\n`);
+          writeStderr('\nSummarization:\n');
+          writeStderr(`  - Enabled: ${systemSummaryConfig.enabled}\n`);
+          writeStderr(`  - Threshold: ${systemSummaryConfig.threshold} characters\n`);
+          writeStderr(`  - Max summary length: ${systemSummaryConfig.maxLength} characters\n`);
+          writeStderr(`  - Method: ${systemSummaryConfig.method}\n`);
           writeStderr('\n');
         }
 
@@ -468,6 +565,15 @@ export function debateCommand(program: Command) {
           },
           onPhaseComplete: (_roundNumber: number, phase: ContributionType) => {
             progressUI.completePhase(phase);
+          },
+          onSummarizationStart: (agentName: string) => {
+            progressUI.startAgentActivity(agentName, 'summarizing context');
+          },
+          onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
+            progressUI.completeAgentActivity(agentName, 'summarizing context');
+            if (options.verbose) {
+              writeStderr(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars\n`);
+            }
           },
           onSynthesisStart: () => {
             progressUI.startSynthesis();
@@ -493,7 +599,7 @@ export function debateCommand(program: Command) {
         await outputResults(result, stateManager, options);
       } catch (err: any) {
         const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
-        process.stderr.write((err?.message || 'Unknown error') + '\n');
+        writeStderr((err?.message || 'Unknown error') + '\n');
         // Rethrow for runCli catch to set process exit when direct run
         throw Object.assign(new Error(err?.message || 'Unknown error'), { code });
       }

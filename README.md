@@ -203,3 +203,13 @@ For detailed configuration documentation, including all fields, validation rules
 - `security`: Security and threat modeling perspective
 - `testing`: Testing strategy and quality assurance perspective (future use)
 - `generalist`: General-purpose role (typically used for judge)
+
+**Context Summarization:**
+- Automatically manages debate history length to avoid context window limitations
+- Each agent independently summarizes their perspective-based history when it exceeds configured thresholds
+- Agent-specific summaries stored per round, keyed by agent ID for isolated access
+- Dynamic retrieval: agents always see their own most recent summary
+- Configurable at both system-wide and per-agent levels
+- Summaries preserve critical insights while reducing context size for subsequent rounds
+- Default threshold: 5000 characters, max summary length: 2500 characters
+- See `docs/configuration.md` and `docs/context_summarization.md` for detailed documentation

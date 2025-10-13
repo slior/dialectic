@@ -1,6 +1,8 @@
 import { architectPrompts } from './architect-prompts';
 import { performancePrompts } from './performance-prompts';
 import { securityPrompts } from './security-prompts';
+import { testingPrompts } from './testing-prompts';
+import { generalistPrompts } from './generalist-prompts';
 import { RolePrompts } from './prompt-types';
 import { AGENT_ROLES, AgentRole } from '../../types/agent.types';
 
@@ -15,6 +17,8 @@ const ROLE_PROMPTS_REGISTRY: Partial<Record<AgentRole, RolePrompts>> = {
   [AGENT_ROLES.ARCHITECT]: architectPrompts,
   [AGENT_ROLES.PERFORMANCE]: performancePrompts,
   [AGENT_ROLES.SECURITY]: securityPrompts,
+  [AGENT_ROLES.TESTING]: testingPrompts,
+  [AGENT_ROLES.GENERALIST]: generalistPrompts,
 };
 
 /**

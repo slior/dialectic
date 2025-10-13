@@ -67,6 +67,20 @@ interface OrchestratorHooks {
    * Called when the synthesis phase is complete (when the judge has finished synthesizing a solution).
    */
   onSynthesisComplete?: () => void;
+
+  /**
+   * Called when an agent begins summarizing their context.
+   * @param agentName - The name of the agent starting summarization.
+   */
+  onSummarizationStart?: (agentName: string) => void;
+
+  /**
+   * Called when an agent completes context summarization.
+   * @param agentName - The name of the agent completing summarization.
+   * @param beforeChars - Character count before summarization.
+   * @param afterChars - Character count after summarization.
+   */
+  onSummarizationComplete?: (agentName: string, beforeChars: number, afterChars: number) => void;
 }
 
 /**
@@ -111,18 +125,22 @@ export class DebateOrchestrator {
   async runDebate(problem: string, context?: string): Promise<DebateResult> {
     const state = await this.stateManager.createDebate(problem, context);
 
-    // Execute N complete rounds: proposal -> critique -> refinement
+    // Execute N complete rounds: summarization -> proposal -> critique -> refinement
     const total = Math.max(1, this.config.rounds);
     for (let r = 1; r <= total; r++) {
       this.hooks?.onRoundStart?.(r, total);
       await this.stateManager.beginRound(state.id);
-      await this.proposalPhase(state, r);
+      
+      // Summarization phase: prepare contexts for all agents
+      const preparedContexts = await this.summarizationPhase(state, r);
+      
+      await this.proposalPhase(state, r, preparedContexts);
       this.hooks?.onPhaseComplete?.(r, CONTRIBUTION_TYPES.PROPOSAL);
 
-      await this.critiquePhase(state, r);
+      await this.critiquePhase(state, r, preparedContexts);
       this.hooks?.onPhaseComplete?.(r, CONTRIBUTION_TYPES.CRITIQUE);
 
-      await this.refinementPhase(state, r);
+      await this.refinementPhase(state, r, preparedContexts);
       this.hooks?.onPhaseComplete?.(r, CONTRIBUTION_TYPES.REFINEMENT);
     }
 
@@ -155,7 +173,44 @@ export class DebateOrchestrator {
     if (this.config.includeFullHistory) {
       base.history = state.rounds;
     }
+    base.includeFullHistory = this.config.includeFullHistory;
     return base as DebateContext;
+  }
+
+  /**
+   * Summarization phase: Each agent prepares and potentially summarizes their context.
+   * 
+   * This phase runs before the proposal phase of each round. Agents evaluate whether
+   * summarization is needed based on their configuration and history size, then generate
+   * summaries if necessary.
+   * 
+   * @param state - Current debate state.
+   * @param roundNumber - Current round number for tracking.
+   * @returns A map of agent ID to prepared context for use in debate phases.
+   */
+  private async summarizationPhase(
+    state: DebateState,
+    roundNumber: number
+  ): Promise<Map<string, DebateContext>> {
+    const baseContext = this.buildContext(state);
+    const preparedContexts = new Map<string, DebateContext>();
+
+    for (const agent of this.agents) {
+      this.hooks?.onSummarizationStart?.(agent.config.name);
+      
+      const result = await agent.prepareContext(baseContext, roundNumber);
+      
+      if (result.summary) {
+        // Summary was created - store it and invoke completion hook
+        await this.stateManager.addSummary(state.id, result.summary);
+        this.hooks?.onSummarizationComplete?.( agent.config.name, result.summary.metadata.beforeChars, result.summary.metadata.afterChars );
+      }
+      
+      // Store the prepared context for this agent
+      preparedContexts.set(agent.config.id, result.context);
+    }
+
+    return preparedContexts;
   }
 
   /**
@@ -199,15 +254,16 @@ export class DebateOrchestrator {
    * Uses a helper to unify contribution metadata handling.
    * @param state - Current debate state.
    * @param roundNumber - Current round number for progress tracking.
+   * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
    */
-  private async proposalPhase(state: DebateState, roundNumber: number) {
-    const ctx = this.buildContext(state);
+  private async proposalPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) {
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.PROPOSAL, this.agents.length);
     
     await Promise.all( //invoke all agents in parallel
       this.agents.map(async (agent) => {
         this.hooks?.onAgentStart?.(agent.config.name, ACTIVITY_PROPOSING);
         const started = Date.now();
+        const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state); // Use the prepared context for this agent
         const proposal = await agent.propose(state.problem, ctx);
         const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.PROPOSAL, proposal.content, proposal.metadata, started );
         await this.stateManager.addContribution(state.id, contribution);
@@ -220,9 +276,9 @@ export class DebateOrchestrator {
    * Each agent critiques other agents' proposals from the previous round.
    * @param state - Current debate state.
    * @param roundNumber - Current round number for progress tracking.
+   * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
    */
-  private async critiquePhase(state: DebateState, roundNumber: number) {
-    const ctx = this.buildContext(state);
+  private async critiquePhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) {
     // Get proposals from last round
     const lastRound: DebateRound | undefined = state.rounds[state.rounds.length - 1];
     const proposals = (lastRound?.contributions || []).filter((c) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
@@ -235,12 +291,14 @@ export class DebateOrchestrator {
     
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.CRITIQUE, totalCritiques);
 
+    // TODO: parallelize this
     for (const agent of this.agents) {
       const others = proposals.filter((p) => p.agentId !== agent.config.id);
       for (const prop of others) {
         const activity = `${ACTIVITY_CRITIQUING} ${prop.agentRole}`;
         this.hooks?.onAgentStart?.(agent.config.name, activity);
         const started = Date.now();
+        const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state); // Use the prepared context for this agent
         const critique = await agent.critique({ content: prop.content, metadata: prop.metadata }, ctx);
         const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.CRITIQUE, critique.content, critique.metadata, started, prop.agentId );
         await this.stateManager.addContribution(state.id, contribution);
@@ -253,9 +311,9 @@ export class DebateOrchestrator {
    * Each agent refines their own prior proposal using critiques from others.
    * @param state - Current debate state.
    * @param roundNumber - Current round number for progress tracking.
+   * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
    */
-  private async refinementPhase(state: DebateState, roundNumber: number) {
-    const ctx = this.buildContext(state);
+  private async refinementPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) {
     const prevRound: DebateRound | undefined = state.rounds[state.rounds.length - 1];
 
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.REFINEMENT, this.agents.length);
@@ -274,6 +332,7 @@ export class DebateOrchestrator {
         }));
         
         const started = Date.now();
+        const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state); // Use the prepared context for this agent
         const refined = await agent.refine({ content: original?.content || '', metadata: original?.metadata || {} }, critiques, ctx);
         const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.REFINEMENT, refined.content, refined.metadata, started );
         await this.stateManager.addContribution(state.id, contribution);
@@ -288,6 +347,14 @@ export class DebateOrchestrator {
    * @returns The synthesized Solution.
    */
   private async synthesisPhase(state: DebateState): Promise<Solution> {
+    // Prepare judge context with potential summarization
+    const result = await this.judge.prepareContext(state.rounds);
+    
+    // Store judge summary if one was created
+    if (result.summary) {
+      await this.stateManager.addJudgeSummary(state.id, result.summary);
+    }
+    
     const ctx = this.buildContext(state);
     const solution = await this.judge.synthesize(state.problem, state.rounds, ctx);
     return solution;

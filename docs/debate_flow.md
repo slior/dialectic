@@ -58,9 +58,25 @@ sequenceDiagram
         SM->>SM: create new DebateRound
         SM->>FS: save updated state JSON
         
-        Orch->>Orch: proposalPhase(state)
+        Orch->>Orch: summarizationPhase(state, roundNumber)
         loop For each agent
-            Orch->>Agents: agent.propose(problem, context)
+            Orch->>Agents: agent.prepareContext(context, roundNumber)
+            Agents->>Agents: shouldSummarize(context)
+            alt Summarization needed
+                Agents->>Agents: filter history to perspective
+                Agents->>Provider: complete(systemPrompt, summaryPrompt)
+                Provider-->>Agents: summary text
+                Agents-->>Orch: {context, summary}
+                Orch->>SM: addSummary(debateId, summary)
+                SM->>FS: save updated state JSON
+            else No summarization
+                Agents-->>Orch: {context}
+            end
+        end
+        
+        Orch->>Orch: proposalPhase(state, preparedContexts)
+        loop For each agent
+            Orch->>Agents: agent.propose(problem, preparedContext)
             Agents->>Agents: prepare prompts
             Agents->>Provider: complete(systemPrompt, userPrompt)
             Provider->>Provider: try Responses API
@@ -99,6 +115,18 @@ sequenceDiagram
     end
     
     Orch->>Orch: synthesisPhase(state)
+    Orch->>Judge: prepareContext(rounds)
+    alt Judge summarization needed
+        Judge->>Judge: shouldSummarize(rounds)
+        Judge->>Judge: getFinalRoundRelevantContent()
+        Judge->>Provider: complete(systemPrompt, summaryPrompt)
+        Provider-->>Judge: {text, usage, latency}
+        Judge-->>Orch: {context, summary}
+        Orch->>SM: addJudgeSummary(debateId, summary)
+        SM->>FS: save updated state JSON
+    else No judge summarization
+        Judge-->>Orch: {context}
+    end
     Orch->>Judge: synthesize(problem, rounds, context)
     Judge->>Judge: buildSynthesisPrompt()
     Judge->>Provider: complete(systemPrompt, userPrompt)
@@ -406,6 +434,8 @@ The orchestrator supports optional hooks for receiving real-time progress notifi
 - `onAgentStart(agentName, activity)`: Called when an agent starts an activity
 - `onAgentComplete(agentName, activity)`: Called when an agent completes an activity
 - `onPhaseComplete(roundNumber, phase)`: Called after each phase completes (legacy)
+- `onSummarizationStart(agentName)`: Called when an agent begins context summarization
+- `onSummarizationComplete(agentName, beforeChars, afterChars)`: Called after successful summarization with character counts
 - `onSynthesisStart()`: Called when synthesis begins
 - `onSynthesisComplete()`: Called when synthesis completes
 
@@ -485,8 +515,89 @@ The orchestrator executes N complete rounds, where N is specified by `config.rou
 2. Calls `stateManager.beginRound(debateId)` to create a new round object and increment the current round counter
 3. The round is persisted immediately to disk
 
-##### 12.2.2 Proposal Phase
-**Method**: `proposalPhase(state: DebateState, roundNumber: number)`
+##### 12.2.2 Summarization Phase (Optional)
+**Method**: `summarizationPhase(state: DebateState, roundNumber: number)`
+
+Each agent independently prepares and potentially summarizes their debate history before the proposal phase.
+
+**Purpose**: Manage debate history length to avoid context window limitations by allowing agents to summarize their perspective-based history when it exceeds configured thresholds.
+
+**Phase Start**:
+1. Builds base `DebateContext` from current state (includes full history if configured)
+2. Creates empty map to store prepared contexts (agentId → context)
+
+**For each agent (sequential)**:
+1. **Hook Invoked**: `onSummarizationStart(agentName)` - Notifies progress UI that agent is starting summarization
+2. Calls `agent.prepareContext(context, roundNumber)`
+   - Agent calls `shouldSummarize(context)` to evaluate if summarization is needed:
+     - Checks if summarization is enabled in agent's config
+     - Filters history to agent's perspective (proposals + received critiques + refinements)
+     - Calculates total character count of filtered history
+     - Returns true if count >= threshold, false otherwise
+   - If summarization not needed:
+     - Returns original context unchanged
+     - No summary created
+   - If summarization needed:
+     - Filters debate history to agent's perspective
+     - Converts filtered history to text format
+     - Generates summary prompt using role-specific template
+     - Calls `summarizer.summarize()` which invokes LLM provider
+     - Measures latency and token usage
+     - Truncates result to maxLength if needed
+     - Builds `DebateSummary` object with metadata (beforeChars, afterChars, method, timestamp, latency, tokens)
+     - **Note**: Context is NOT modified - returned unchanged
+     - Returns {context: originalContext, summary: debateSummary}
+3. If summary was created:
+   - Calls `stateManager.addSummary(debateId, summary)` to persist summary
+   - StateManager stores summary as `round.summaries[agentId] = summary` (keyed by agent ID)
+   - **Hook Invoked**: `onSummarizationComplete(agentName, beforeChars, afterChars)` - Notifies progress UI with character counts
+4. Stores prepared context in map: `preparedContexts.set(agentId, preparedContext)`
+
+**Returns**: Map of agentId → prepared context for use in subsequent debate phases
+
+**Error Handling**:
+- If summarization fails (LLM error, timeout, etc.):
+  - Agent logs warning to stderr with error details
+  - Falls back to original context with full history
+  - Debate continues normally
+  - No summary is persisted
+
+**Persistence**:
+- Summaries stored in current round's `summaries` Record, keyed by agent ID
+- Structure: `round.summaries[agentId] = debateSummary`
+- Each `DebateSummary` includes:
+  - `agentId`: Agent identifier
+  - `agentRole`: Agent's role
+  - `summary`: The summarized text (actual text sent to LLM in prompts)
+  - `metadata`: Summarization metadata
+    - `beforeChars`: Character count before summarization
+    - `afterChars`: Character count after summarization
+    - `method`: Summarization method used (e.g., "length-based")
+    - `timestamp`: When summarization occurred
+    - `latencyMs`: LLM call latency
+    - `tokensUsed`: Tokens consumed by summarization
+
+**Context Usage**:
+- Context object is never modified during summarization
+- When generating prompts (propose, critique, refine):
+  1. Prompt formatter searches backwards through `context.history`
+  2. Looks for `round.summaries[agentId]` in each round
+  3. Uses most recent summary if found
+  4. Falls back to full history if no summary exists
+
+**Configuration**:
+- System-wide defaults: `debate.summarization` in config file
+- Per-agent overrides: `AgentConfig.summarization`
+- Default values: enabled=true, threshold=5000, maxLength=2500, method="length-based"
+- Agent-level settings override system-wide settings
+
+**Verbose Mode**: When `--verbose` is enabled, summarization details are displayed:
+- System-wide config at debate start
+- Per-round: which agents summarized and character count reduction
+- In round summary: latency and token usage for each summary
+
+##### 12.2.3 Proposal Phase
+**Method**: `proposalPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>)`
 
 All agents generate proposals in parallel for this round.
 
@@ -572,25 +683,31 @@ Each agent refines their proposal based on critiques received within the current
 #### 12.3 Synthesis Phase
 **Method**: `synthesisPhase(state: DebateState)`
 
-Judge synthesizes the final solution from all debate rounds.
+Judge synthesizes the final solution from all debate rounds, with optional summarization of the final round's content.
 
 **Process**:
 1. **Hook Invoked**: `onSynthesisStart()` - Notifies progress UI that synthesis is starting
-2. Builds `DebateContext` with full history
-3. Calls `judge.synthesize(problem, rounds, context)`
-4. Judge builds comprehensive synthesis prompt:
+2. **Judge Context Preparation**: Calls `judge.prepareContext(rounds)` to potentially summarize final round content:
+   - Judge evaluates if final round's proposals and refinements exceed threshold
+   - If summarization needed: generates summary of final round's key contributions
+   - If summary created: stores it in `DebateState.judgeSummary` via `stateManager.addJudgeSummary()`
+   - Falls back to final round's proposals and refinements if summarization fails
+3. Builds `DebateContext` with full history
+4. Calls `judge.synthesize(problem, rounds, context)`
+5. Judge builds comprehensive synthesis prompt:
    - Includes problem statement
-   - Includes all rounds with each contribution labeled by role and type
+   - If summarization was used: includes only final round's key contributions
+   - If no summarization: includes all rounds with each contribution labeled by role and type
    - Adds synthesis instructions
-5. Calls `provider.complete()` with judge's system prompt and synthesis prompt
-6. Provider returns generated text
-7. Judge wraps text in `Solution` object with:
+6. Calls `provider.complete()` with judge's system prompt and synthesis prompt
+7. Provider returns generated text
+8. Judge wraps text in `Solution` object with:
    - `description`: LLM-generated solution text
    - `tradeoffs`: Empty array (future enhancement)
    - `recommendations`: Empty array (future enhancement)
    - `confidence`: Default score of 75 (future enhancement)
    - `synthesizedBy`: Judge agent ID
-8. **Hook Invoked**: `onSynthesisComplete()` - Notifies progress UI that synthesis is complete
+9. **Hook Invoked**: `onSynthesisComplete()` - Notifies progress UI that synthesis is complete
 
 **Returns**: `Solution` object
 

@@ -298,6 +298,328 @@ If no debate configuration is specified, the system uses:
 }
 ```
 
+## Context Summarization Configuration
+
+The debate system includes automatic context summarization to manage debate history length and avoid context window limitations. Each agent independently summarizes their perspective-based history when it exceeds configured thresholds. The judge agent also supports summarization for synthesis when the final round's content becomes too large.
+
+### Overview
+
+Context summarization is configured at two levels:
+1. **System-Wide**: Default summarization settings in `debate.summarization`
+2. **Per-Agent**: Agent-specific overrides in `AgentConfig.summarization`
+
+Agent-level settings override system-wide settings, allowing fine-grained control over which agents summarize and how. The judge agent uses the same system-wide summarization configuration for its synthesis process.
+
+### System-Wide Configuration
+
+Add a `summarization` field to the `debate` configuration:
+
+```json
+{
+  "debate": {
+    "rounds": 3,
+    "terminationCondition": { "type": "fixed" },
+    "synthesisMethod": "judge",
+    "includeFullHistory": true,
+    "timeoutPerRound": 300000,
+    "summarization": {
+      "enabled": true,
+      "threshold": 5000,
+      "maxLength": 2500,
+      "method": "length-based"
+    }
+  }
+}
+```
+
+### Summarization Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `enabled` | `boolean` | Yes | Whether summarization is enabled. |
+| `threshold` | `number` | Yes | Character count threshold for triggering summarization. |
+| `maxLength` | `number` | Yes | Maximum length of generated summary in characters. |
+| `method` | `string` | Yes | Summarization method to use. Currently only `"length-based"` is supported. |
+| `promptPath` | `string` | No | Optional path to custom summarization prompt file. |
+
+### Field Details
+
+#### `enabled`
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Controls whether agents perform context summarization. When `false`, agents always receive full history (subject to `includeFullHistory` setting).
+- **Example**: `true`
+
+#### `threshold`
+- **Type**: Number (integer)
+- **Default**: `5000`
+- **Description**: Character count threshold for triggering summarization. When an agent's perspective-based history (their proposals, received critiques, and refinements) exceeds this threshold, summarization is triggered.
+- **Minimum**: 100 (practical minimum)
+- **Example**: `5000`
+
+#### `maxLength`
+- **Type**: Number (integer)
+- **Default**: `2500`
+- **Description**: Maximum length of the generated summary in characters. Summaries exceeding this length are truncated.
+- **Recommendation**: Set to approximately 50% of threshold for effective compression
+- **Example**: `2500`
+
+#### `method`
+- **Type**: String (enum)
+- **Accepted Values**: `"length-based"` (only supported value currently)
+- **Default**: `"length-based"`
+- **Description**: Summarization strategy to use. Future versions may support additional methods like `"semantic"` or `"hierarchical"`.
+- **Example**: `"length-based"`
+
+#### `promptPath`
+- **Type**: String (optional)
+- **Description**: Path to a custom summarization prompt file, resolved relative to the configuration file directory.
+- **Fallback**: If omitted or invalid, uses built-in role-specific summary prompts
+- **Example**: `"./prompts/custom-summary.md"`
+
+### Per-Agent Configuration
+
+Agents can override system-wide summarization settings:
+
+```json
+{
+  "agents": [
+    {
+      "id": "agent-architect",
+      "name": "System Architect",
+      "role": "architect",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.5,
+      "summaryPromptPath": "./prompts/architect-summary.md",
+      "summarization": {
+        "enabled": true,
+        "threshold": 3000,
+        "maxLength": 1500,
+        "method": "length-based"
+      }
+    }
+  ]
+}
+```
+
+### Agent-Specific Fields
+
+In addition to the `summarization` object, agents support:
+
+#### `summaryPromptPath`
+- **Type**: String (optional)
+- **Description**: Path to a custom summary prompt for this specific agent, following the same resolution rules as `systemPromptPath`
+- **Fallback**: If omitted, uses built-in role-specific summary prompt
+- **Resolution**: Relative paths resolved against configuration file directory
+- **Example**: `"./prompts/architect-summary.md"`
+
+### Default Configuration
+
+If no summarization configuration is provided, the system uses:
+
+```json
+{
+  "enabled": true,
+  "threshold": 5000,
+  "maxLength": 2500,
+  "method": "length-based"
+}
+```
+
+### Behavior Details
+
+#### When Summarization Occurs
+
+Summarization happens at the beginning of each round, before the proposal phase:
+
+1. **Decision**: Each agent evaluates whether their history exceeds the threshold
+2. **Filtering**: Agent filters history to their perspective:
+   - Their own proposals
+   - Critiques they received (not critiques of other agents)
+   - Their own refinements
+3. **Calculation**: Total character count is calculated from filtered history
+4. **Trigger**: If count >= threshold, summarization is performed
+5. **LLM Call**: Agent uses configured model and temperature to generate summary
+6. **Storage**: Summary and metadata are persisted as `round.summaries[agentId] = summary` (keyed by agent ID)
+
+**Judge Summarization**: The judge also performs summarization during the synthesis phase if the final round's proposals and refinements exceed the threshold. The judge's summary is stored separately in `DebateState.judgeSummary`.
+
+#### What Gets Summarized
+
+Each agent summarizes **only their perspective** of the debate:
+- **Proposals**: All proposals made by this agent across all rounds
+- **Critiques Received**: Only critiques targeting this agent's proposals
+- **Refinements**: All refinements made by this agent
+
+Critiques of other agents are **excluded** from each agent's summary.
+
+**Judge Summarization**: The judge summarizes only the final round's proposals and refinements (not critiques) when the content exceeds the threshold. This provides a focused view of the most recent solution attempts for synthesis.
+
+#### Context Usage
+
+The system uses summaries dynamically when formatting prompts:
+
+1. **Storage**: Summaries are stored in `round.summaries[agentId]` (Record keyed by agent ID)
+2. **Retrieval**: When generating a prompt, the formatter:
+   - Searches backwards through `context.history` rounds
+   - Looks for `round.summaries[agentId]`
+   - Uses the **most recent summary** if found
+   - Falls back to full history if no summary exists
+3. **Data Isolation**: Each agent only sees their own summary
+4. **Fresh Summaries**: Summary is **recalculated fresh each round** (not incremental)
+5. **Original Context**: The `DebateContext` object is never modified - summaries are retrieved dynamically
+
+**Precedence**: Agent's most recent summary > Full history > No context
+
+#### Verbose Output
+
+When `--verbose` is enabled, summarization information is displayed:
+
+```
+Summarization:
+  - Enabled: true
+  - Threshold: 5000 characters
+  - Max summary length: 2500 characters
+  - Method: length-based
+
+Round 1
+  summaries:
+    [architect] 6234 → 2345 chars
+      (latency=1234ms, tokens=456, method=length-based)
+```
+
+### Summary Prompts
+
+The system provides built-in role-specific summary prompts that instruct agents to:
+- Summarize from their role's perspective
+- Preserve critical insights and decisions
+- Focus on information useful for future rounds
+- Stay within the maximum length
+
+Custom summary prompts can override these using `summaryPromptPath` (per-agent) or `debate.summarization.promptPath` (system-wide).
+
+#### Custom Summary Prompt Format
+
+Custom prompts should include:
+- Instructions to summarize from the role's perspective
+- Guidance on what to preserve (key decisions, open questions, critical points)
+- Maximum length constraint
+- Content placeholder (the history to summarize will be provided)
+
+**Example custom summary prompt:**
+```markdown
+You are summarizing the debate history from an architectural perspective.
+
+Focus on:
+- Key architectural decisions and their rationale
+- Component designs and interfaces
+- Scalability concerns discussed
+- Open architectural questions
+
+Create a concise summary (maximum 2500 characters) that preserves the most important architectural insights and decisions for use in future rounds.
+
+History to summarize:
+{content}
+```
+
+### Fallback Behavior
+
+#### Missing Summary Prompt
+
+If `summaryPromptPath` is specified but the file is missing or invalid:
+- System uses built-in role-specific summary prompt
+- Warning is logged to stderr
+- Debate continues normally
+
+#### Summarization Failure
+
+If summarization fails due to LLM errors:
+- Agent falls back to using full history
+- Warning is logged to stderr with error details
+- Debate continues normally
+
+### Configuration Examples
+
+#### Disable Summarization Globally
+
+```json
+{
+  "debate": {
+    "summarization": {
+      "enabled": false
+    }
+  }
+}
+```
+
+#### Aggressive Summarization (Low Threshold)
+
+```json
+{
+  "debate": {
+    "summarization": {
+      "enabled": true,
+      "threshold": 2000,
+      "maxLength": 1000,
+      "method": "length-based"
+    }
+  }
+}
+```
+
+#### Per-Agent Customization
+
+```json
+{
+  "agents": [
+    {
+      "id": "agent-architect",
+      "name": "System Architect",
+      "role": "architect",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.5,
+      "summarization": {
+        "enabled": true,
+        "threshold": 3000,
+        "maxLength": 1500,
+        "method": "length-based"
+      }
+    },
+    {
+      "id": "agent-security",
+      "name": "Security Specialist",
+      "role": "security",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.4,
+      "summarization": {
+        "enabled": false
+      }
+    }
+  ]
+}
+```
+
+### Best Practices
+
+1. **Default Settings**: The default threshold (5000 characters) and max length (2500 characters) work well for most debates. Start with these and adjust if needed.
+
+2. **Threshold Selection**: Set threshold based on your models' context windows and typical debate verbosity. Consider that proposals, critiques, and refinements add up quickly.
+
+3. **Max Length**: Set maxLength to approximately 40-50% of threshold for effective compression while preserving key information.
+
+4. **Per-Agent Tuning**: Different roles may need different thresholds:
+   - Architect agents often produce longer, more detailed proposals → higher threshold
+   - Security agents may be more concise → lower threshold acceptable
+
+5. **Monitor Verbose Output**: Use `--verbose` to see when summarization triggers and verify summaries are appropriately sized.
+
+6. **Custom Prompts**: For specialized use cases, provide custom summary prompts that emphasize domain-specific information to preserve.
+
+7. **Balance**: Summarization reduces context size but may lose detail. If debates are producing poor results after summarization, increase the threshold or disable it for critical agents.
+
 ## Environment Variables
 
 ### `OPENAI_API_KEY`

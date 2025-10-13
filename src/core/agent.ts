@@ -1,5 +1,5 @@
 import { AgentConfig, Proposal, Critique, ContributionMetadata } from '../types/agent.types';
-import { DebateContext } from '../types/debate.types';
+import { DebateContext, ContextPreparationResult } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 import { CompletionResponse, CompletionUsage } from '../providers/llm-provider';
 
@@ -13,10 +13,14 @@ import { CompletionResponse, CompletionUsage } from '../providers/llm-provider';
  * with a specific role, LLM model, and provider, and interacts with an LLMProvider to
  * generate its outputs.
  *
+ * Additionally, agents manage context summarization to handle large debate histories.
+ *
  * Subclasses must implement the core debate methods:
  *  - propose: Generate a solution proposal for a given problem.
  *  - critique: Critique another agent's proposal.
  *  - refine: Refine an original proposal by incorporating critiques.
+ *  - shouldSummarize: Determine if context summarization is needed.
+ *  - prepareContext: Prepare and potentially summarize the debate context.
  *
  * The base class provides a utility method, callLLM, to standardize LLM interactions,
  * capturing latency and usage metadata.
@@ -56,6 +60,26 @@ export abstract class Agent {
    * @returns A Promise resolving to a new Proposal object with the refined solution and metadata.
    */
   abstract refine(originalProposal: Proposal, critiques: Critique[], context: DebateContext): Promise<Proposal>;
+
+  /**
+   * Determines whether the debate context should be summarized based on configured thresholds.
+   * 
+   * @param context - The current debate context to evaluate.
+   * @returns True if summarization should occur, false otherwise.
+   */
+  abstract shouldSummarize(context: DebateContext): boolean;
+
+  /**
+   * Prepares the debate context for the agent, potentially summarizing it if needed.
+   * 
+   * This method evaluates whether summarization is necessary and, if so, generates
+   * a concise summary of the debate history from the agent's perspective.
+   * 
+   * @param context - The current debate context.
+   * @param roundNumber - The current round number (1-indexed).
+   * @returns A promise resolving to the context preparation result.
+   */
+  abstract prepareContext( context: DebateContext, roundNumber: number ): Promise<ContextPreparationResult>;
 
   /**
    * Template method for generating proposals.

@@ -8,6 +8,8 @@ function createMockAgent(id: string, role: any): Agent {
     propose: async () => ({ content: `${role} proposal`, metadata: {} }),
     critique: async () => ({ content: `${role} critique`, metadata: {} }),
     refine: async () => ({ content: `${role} refined`, metadata: {} }),
+    shouldSummarize: () => false,
+    prepareContext: async (context: any) => ({ context }),
   } as any;
 }
 
@@ -19,6 +21,7 @@ const mockJudge = {
     confidence: 80,
     synthesizedBy: 'judge',
   } as Solution),
+  prepareContext: async (_rounds: DebateRound[]) => ({ context: { problem: '', history: [] } }),
 } as any;
 
 function createMockStateManager() {

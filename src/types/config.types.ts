@@ -1,5 +1,25 @@
 import { AgentConfig } from './agent.types';
-import { DebateConfig } from './debate.types';
+import { DebateConfig, SummarizationMethod } from './debate.types';
+
+export interface SummarizationConfig {
+  enabled: boolean;
+  threshold: number;
+  maxLength: number;
+  method: SummarizationMethod;
+  promptPath?: string;
+}
+
+/** Default value for summarization enabled flag */
+export const DEFAULT_SUMMARIZATION_ENABLED = true;
+
+/** Default character count threshold for triggering summarization */
+export const DEFAULT_SUMMARIZATION_THRESHOLD = 5000;
+
+/** Default maximum length for generated summaries */
+export const DEFAULT_SUMMARIZATION_MAX_LENGTH = 2500;
+
+/** Default summarization method */
+export const DEFAULT_SUMMARIZATION_METHOD: SummarizationMethod = 'length-based';
 
 /**
  * Represents the top-level system configuration for a debate session.

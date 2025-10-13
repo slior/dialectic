@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { writeStderr } from '../cli/index';
 import dotenv from 'dotenv';
 
 // Constants for environment file loading
@@ -29,7 +30,7 @@ export function loadEnvironmentFile(envFilePath?: string, verbose?: boolean): vo
     if (isDefaultFile) { // Silent failure for default .env file, with optional verbose warning
       
       if (verbose === true) {
-        process.stderr.write(`${WARN_DEFAULT_ENV_MISSING} ${resolvedPath}. Continuing without loading environment variables.\n`);
+        writeStderr(`${WARN_DEFAULT_ENV_MISSING} ${resolvedPath}. Continuing without loading environment variables.\n`);
       }
       return;
     } else { // Error for explicitly specified env file
