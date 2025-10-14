@@ -142,6 +142,11 @@ sequenceDiagram
     else output to stdout
         Cmd->>CLI: write to stdout
     end
+    opt report requested (--report)
+        Cmd->>Cmd: generateReport(result, stateManager, agentConfigs, judgeConfig, problem, options)
+        Cmd->>FS: write Markdown report (.md)
+        Cmd-->>CLI: infoUser("Generated report: <path>")
+    end
     
     Cmd-->>CLI: exit code 0
 ```
@@ -172,7 +177,7 @@ The entry point for the debate system. This function:
 
 Registers the debate command and its action handler with Commander. Defines:
 - Command name and argument: `debate [problem]` (optional problem string)
-- Options: `--problemDescription`, `--agents`, `--rounds`, `--config`, `--output`, `--verbose`
+- Options: `--problemDescription`, `--agents`, `--rounds`, `--config`, `--output`, `--verbose`, `--report`
 - Action handler that executes when the command is invoked
 
 **Parameters**:
@@ -718,7 +723,7 @@ Judge synthesizes the final solution from all debate rounds, with optional summa
 4. Saves final complete state to JSON file
 5. Returns `DebateResult` with solution, rounds, and metadata
 
-### 13. Result Output
+### 13. Result Output and Report Generation
 
 **Function**: `outputResults(result: DebateResult, stateManager: StateManager, options: any)`  
 **Location**: `src/cli/commands/debate.ts`
@@ -755,6 +760,15 @@ Handles output of debate results based on options.
   - Progress UI remains visible during execution, verbose summary appears after completion
 
 **Always**: Writes save path notice to stderr: `Saved debate to ./debates/<debate-id>.json`
+
+#### Report Generation (optional)
+If `--report <path>` is provided, the CLI generates a comprehensive Markdown report after outputting the results:
+
+- Ensures the path ends with `.md` (appends if missing)
+- Retrieves full debate state via `stateManager.getDebate()`
+- Builds the report via `generateDebateReport(state, agentConfigs, judgeConfig, problem, { verbose })`
+- Creates parent directories as needed and writes the file (UTF-8)
+- On success: prints `Generated report: <path>` to stderr; failures are non-fatal and logged as warnings
 
 ### 14. Error Handling
 

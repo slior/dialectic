@@ -65,6 +65,10 @@ dialectic debate "Build a high-performance API" --agents architect,performance,s
   - If ending with `.json`: writes full debate state
   - Otherwise: writes final solution text only
 - `--verbose`: Enable detailed logging with round-by-round breakdown
+- `--report <path>`: Generate a detailed Markdown report of the debate
+  - If the path does not end with `.md`, the extension is appended automatically
+  - Creates parent directories as needed
+  - Non-fatal on failure (debate still succeeds even if report generation fails)
 
 ### Problem Description Files
 
@@ -121,6 +125,32 @@ dialectic debate --problemDescription ./problems/rate-limiting.txt
 **With `--output` option:**
 - If path ends with `.json`: full debate state written to file
 - Otherwise: only final solution text written to file
+
+### Markdown Report (`--report`)
+
+Generate a comprehensive Markdown report capturing the full debate transcript and metadata.
+
+```bash
+# Write report to a specific file (extension auto-appended if missing)
+dialectic debate "Design a rate limiting system" --report ./reports/rate-limit
+
+# With verbose metadata in titles (latency, tokens)
+dialectic debate --problemDescription problems/rate-limiting.md --verbose --report ./reports/rate-limit.md
+```
+
+Report contents:
+- Problem Description
+- Agents table and Judge table
+- Rounds with sections:
+  - Proposals
+  - Critiques
+  - Refinements
+- Final Synthesis
+
+Notes:
+- When `--verbose` is provided, contribution titles include metadata such as latency and tokens.
+- If a section has no items, a succinct "No … in this round." line is shown.
+- The report path is normalized to `.md` and parent directories are created automatically.
 
 **Verbose mode (`--verbose`):**
 - Detailed summary written to `stderr` including:
