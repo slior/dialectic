@@ -9,6 +9,15 @@ const ACTIVITY_PROPOSING = 'proposing';
 const ACTIVITY_CRITIQUING = 'critiquing';
 const ACTIVITY_REFINING = 'refining';
 
+/**
+ * Type guard to check if a Promise.allSettled result is fulfilled.
+ * @param result - The result from Promise.allSettled.
+ * @returns True if the result is fulfilled, false if rejected.
+ */
+function isFulfilled<T>(result: PromiseSettledResult<T>): result is PromiseFulfilledResult<T> {
+  return result.status === 'fulfilled';
+}
+
 
 /**
  * Optional hooks for receiving debate progress notifications.
@@ -291,20 +300,32 @@ export class DebateOrchestrator {
     
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.CRITIQUE, totalCritiques);
 
-    // TODO: parallelize this
+    // Build array of async tasks for all agent-proposal pairs
+    const tasks: Array<() => Promise<Contribution>> = [];
+    
     for (const agent of this.agents) {
       const others = proposals.filter((p) => p.agentId !== agent.config.id);
       for (const prop of others) {
-        const activity = `${ACTIVITY_CRITIQUING} ${prop.agentRole}`;
-        this.hooks?.onAgentStart?.(agent.config.name, activity);
-        const started = Date.now();
-        const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state); // Use the prepared context for this agent
-        const critique = await agent.critique({ content: prop.content, metadata: prop.metadata }, ctx);
-        const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.CRITIQUE, critique.content, critique.metadata, started, prop.agentId );
-        await this.stateManager.addContribution(state.id, contribution);
-        this.hooks?.onAgentComplete?.(agent.config.name, activity);
+        tasks.push(async () => {
+          const activity = `${ACTIVITY_CRITIQUING} ${prop.agentRole}`;
+          this.hooks?.onAgentStart?.(agent.config.name, activity);
+          try {
+            const started = Date.now();
+            const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
+            const critique = await agent.critique({ content: prop.content, metadata: prop.metadata }, ctx);
+            const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.CRITIQUE, critique.content, critique.metadata, started, prop.agentId );
+            return contribution;
+          } finally {
+            this.hooks?.onAgentComplete?.(agent.config.name, activity);
+          }
+        });
       }
     }
+
+    // Execute all tasks concurrently
+    const results = await Promise.allSettled(tasks.map((task) => task()));
+    const successfulContributions: Contribution[] = results.filter(isFulfilled).map((result) => result.value);
+    successfulContributions.forEach(async (contribution) => await this.stateManager.addContribution(state.id, contribution));
   }
 
   /**

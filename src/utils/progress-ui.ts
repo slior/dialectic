@@ -34,7 +34,9 @@ const COLOR_SPINNER = chalk.cyan;        // Cyan (lighter blue) for spinner icon
 interface ProgressState {
   currentRound: number;
   currentPhase: string;
-  agentActivity: Map<string, string>;
+  /** Map of agent names to their list of current activities (e.g., ["proposing", "critiquing architect"]) */
+  agentActivity: Map<string, string[]>;
+  /** Map of phase keys to progress counts (e.g., "1-proposal" -> { current: 2, total: 3 }) */
   phaseProgress: Map<string, { current: number; total: number }>;
 }
 
@@ -58,7 +60,7 @@ export class DebateProgressUI {
     this.state = {
       currentRound: 0,
       currentPhase: '',
-      agentActivity: new Map(),
+      agentActivity: new Map<string, string[]>(),
       phaseProgress: new Map(),
     };
   }
@@ -111,10 +113,13 @@ export class DebateProgressUI {
    * Signals that an agent has started an activity.
    * 
    * @param agentName - The name of the agent.
-   * @param activity - Description of the activity (e.g., "proposing").
+   * @param activity - Description of the activity (e.g., "proposing", "critiquing architect"). Multiple activities per agent are supported.
    */
   startAgentActivity(agentName: string, activity: string): void {
-    this.state.agentActivity.set(agentName, activity);
+    // Append activity into Map<agentName, activities[]>
+    const activities = this.state.agentActivity.get(agentName) ?? [];
+    activities.push(activity);
+    this.state.agentActivity.set(agentName, activities);
     this.updateDisplay();
   }
 
@@ -122,10 +127,22 @@ export class DebateProgressUI {
    * Signals that an agent has completed an activity.
    * 
    * @param agentName - The name of the agent.
-   * @param _activity - Description of the activity.
+   * @param activity - Description of the activity to complete. Removes a single matching occurrence.
    */
-  completeAgentActivity(agentName: string, _activity: string): void {
-    this.state.agentActivity.delete(agentName);
+  completeAgentActivity(agentName: string, activity: string): void {
+    // Remove a single occurrence of the activity from the agent's list; delete key if list becomes empty
+    const activities = this.state.agentActivity.get(agentName);
+    if (activities && activities.length > 0) {
+      const idx = activities.indexOf(activity);
+      if (idx >= 0) {
+        activities.splice(idx, 1);
+      }
+      if (activities.length === 0) {
+        this.state.agentActivity.delete(agentName);
+      } else {
+        this.state.agentActivity.set(agentName, activities);
+      }
+    }
     
     // Update phase progress
     const currentPhase = this.state.currentPhase.toLowerCase();
@@ -239,8 +256,11 @@ export class DebateProgressUI {
       
       // Active agent activities with colored spinner
       if (this.state.agentActivity.size > 0) {
-        this.state.agentActivity.forEach((activity, agentName) => {
-          lines.push(COLOR_STRUCTURE('│  ') + COLOR_SPINNER(SPINNER_ICON) + ` ${agentName} ${activity}...`);
+        // Map.forEach callback receives (value, key) = (activities[], agentName)
+        this.state.agentActivity.forEach((activities, agentName) => {
+          activities.forEach((activity) => {
+            lines.push(COLOR_STRUCTURE('│  ') + COLOR_SPINNER(SPINNER_ICON) + ` ${agentName} ${activity}...`);
+          });
         });
       }
     }
