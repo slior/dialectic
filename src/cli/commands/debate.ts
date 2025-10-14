@@ -16,6 +16,7 @@ import { resolvePrompt } from '../../utils/prompt-loader';
 import { loadEnvironmentFile } from '../../utils/env-loader';
 import { Agent } from '../../core/agent';
 import { DebateProgressUI } from '../../utils/progress-ui';
+import { generateDebateReport } from '../../utils/report-generator';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -449,6 +450,65 @@ async function outputResults(result: DebateResult, stateManager: StateManager, o
   }
 }
 
+/**
+ * Generates and writes a markdown report file for the debate.
+ * @param result - The debate result.
+ * @param stateManager - The state manager to retrieve full debate state.
+ * @param agentConfigs - Array of agent configurations.
+ * @param judgeConfig - Judge configuration.
+ * @param problemDescription - The full problem description text.
+ * @param options - CLI options including report path and verbose flag.
+ */
+async function generateReport(
+  result: DebateResult,
+  stateManager: StateManager,
+  agentConfigs: AgentConfig[],
+  judgeConfig: AgentConfig,
+  problemDescription: string,
+  options: any
+): Promise<void> {
+  try {
+    // Validate and normalize report path
+    let reportPath = path.resolve(process.cwd(), options.report);
+    
+    // Enforce .md extension
+    if (!reportPath.toLowerCase().endsWith('.md')) {
+      reportPath += '.md';
+      warnUser(`Report path does not end with .md, appending .md extension: ${path.basename(reportPath)}`);
+    }
+
+    // Get full debate state
+    const debateState = await stateManager.getDebate(result.debateId);
+    if (!debateState) {
+      throw new Error(`Debate state not found for ID: ${result.debateId}`);
+    }
+
+    // Generate report content
+    const reportContent = generateDebateReport(
+      debateState,
+      agentConfigs,
+      judgeConfig,
+      problemDescription,
+      { verbose: options.verbose }
+    );
+
+    // Ensure parent directories exist
+    const reportDir = path.dirname(reportPath);
+    if (!fs.existsSync(reportDir)) {
+      fs.mkdirSync(reportDir, { recursive: true });
+    }
+
+    // Write report file
+    await fs.promises.writeFile(reportPath, reportContent, FILE_ENCODING_UTF8);
+    
+    // Notify user
+    infoUser(`Generated report: ${reportPath}`);
+  } catch (error: any) {
+    warnUser(`Failed to generate report: ${error.message}`);
+    // Don't throw - report generation failure shouldn't fail the debate
+  }
+}
+
 export function debateCommand(program: Command) {
   program
     .command('debate')
@@ -460,6 +520,7 @@ export function debateCommand(program: Command) {
     .option('-p, --problemDescription <path>', 'Path to a text file containing the problem description')
     .option('-e, --env-file <path>', 'Path to environment file (default: .env)')
     .option('-v, --verbose', 'Verbose output')
+    .option('--report <path>', 'Generate markdown report file')
     .action(async (problem: string | undefined, options: any) => {
       try {
         // Load environment variables from .env file
@@ -597,6 +658,11 @@ export function debateCommand(program: Command) {
         infoUser(`Saved debate to ./debates/${result.debateId}.json`);
 
         await outputResults(result, stateManager, options);
+
+        // Generate report if requested
+        if (options.report) {
+          await generateReport(result, stateManager, agentConfigs, sysConfig.judge!, resolvedProblem, options);
+        }
       } catch (err: any) {
         const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
         writeStderr((err?.message || 'Unknown error') + '\n');
