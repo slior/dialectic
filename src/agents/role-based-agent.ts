@@ -172,22 +172,28 @@ export class RoleBasedAgent extends Agent {
     return this.refineImpl(original, critiques, context, system, user);
   }
 
+  
   /**
-   * Helper function to process agent-relevant contributions from debate history.
-   * 
-   * This function iterates through the debate history and applies a callback function
-   * to contributions that are relevant to the current agent. Relevant contributions include:
-   * - Agent's own proposals and refinements
-   * - Critiques received by this agent
-   * 
-   * @param context - The debate context containing the history.
-   * @param callback - Function to apply to each relevant contribution.
-   * @returns The accumulated result from the callback function.
+   * Iterates over all contributions in the debate history that are relevant to the agent
+   * (i.e., the agent's own proposals and refinements),
+   * applies a callback to each, and reduces the results.
+   *
+   * The notion of relevance includes:
+   *   - Proposals and refinements made by this agent
+   *
+   * @template T The type accumulated and returned by the reduction.
+   * @param context DebateContext containing the full history of rounds and contributions.
+   * @param callback Function to apply to each relevant contribution. Takes (contribution, roundNumber) and returns T.
+   * @param initialValue The initial value passed to the reducer.
+   * @param reducer Function combining accumulator and current callback result into new accumulator value.
+   * @returns The final reduction value from processing all relevant contributions.
    */
   private processRelevantContributions<T>(
     context: DebateContext,
-    callback: (contribution: any, roundNumber: number) => T, initialValue: T, reducer: (accumulator: T, current: T) => T ): T
-  {
+    callback: (contribution: any, roundNumber: number) => T,
+    initialValue: T,
+    reducer: (accumulator: T, current: T) => T
+  ): T {
     if (!context.history || context.history.length === 0) {
       return initialValue;
     }
@@ -198,16 +204,20 @@ export class RoleBasedAgent extends Agent {
     for (const round of context.history) {
       for (const contribution of round.contributions) {
         // Include agent's own proposals and refinements
-        if (contribution.agentId === agentId && 
-            (contribution.type === CONTRIBUTION_TYPES.PROPOSAL || 
-             contribution.type === CONTRIBUTION_TYPES.REFINEMENT)) {
+        if (
+          contribution.agentId === agentId &&
+          (contribution.type === CONTRIBUTION_TYPES.PROPOSAL ||
+            contribution.type === CONTRIBUTION_TYPES.REFINEMENT)
+        ) {
           result = reducer(result, callback(contribution, round.roundNumber));
         }
-        // Include critiques received by this agent
-        if (contribution.type === CONTRIBUTION_TYPES.CRITIQUE && 
-            contribution.targetAgentId === agentId) {
-          result = reducer(result, callback(contribution, round.roundNumber));
-        }
+        // // Include critiques received by this agent
+        // if (
+        //   contribution.type === CONTRIBUTION_TYPES.CRITIQUE &&
+        //   contribution.targetAgentId === agentId
+        // ) {
+        //   result = reducer(result, callback(contribution, round.roundNumber));
+        // }
       }
     }
 

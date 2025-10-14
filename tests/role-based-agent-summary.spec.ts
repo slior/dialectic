@@ -164,10 +164,10 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
             agentId: 'test-agent',
             agentRole: AGENT_ROLES.ARCHITECT,
             type: CONTRIBUTION_TYPES.PROPOSAL,
-            content: 'a'.repeat(40),
+            content: 'a'.repeat(60),
             metadata: {}
           },
-          // Critique received by agent (should count)
+          // Critique received by agent (should NOT count - critiques excluded)
           {
             agentId: 'other-agent',
             agentRole: AGENT_ROLES.PERFORMANCE,
@@ -181,7 +181,7 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
             agentId: 'test-agent',
             agentRole: AGENT_ROLES.ARCHITECT,
             type: CONTRIBUTION_TYPES.REFINEMENT,
-            content: 'c'.repeat(40),
+            content: 'c'.repeat(60),
             metadata: {}
           },
           // Critique of another agent (should NOT count)
@@ -197,7 +197,7 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
       }]
     };
 
-    // Total should be 40 + 40 + 40 = 120, above threshold of 100
+    // Total should be 60 + 60 = 120 (only proposals and refinements), above threshold of 100
     expect(agent.shouldSummarize(context)).toBe(true);
   });
 });
@@ -332,15 +332,14 @@ describe('RoleBasedAgent - prepareContext()', () => {
             agentId: 'test-agent',
             agentRole: AGENT_ROLES.ARCHITECT,
             type: CONTRIBUTION_TYPES.PROPOSAL,
-            content: 'a'.repeat(50),
+            content: 'a'.repeat(60),
             metadata: {}
           },
           {
-            agentId: 'other-agent',
-            agentRole: AGENT_ROLES.PERFORMANCE,
-            type: CONTRIBUTION_TYPES.CRITIQUE,
-            content: 'b'.repeat(50),
-            targetAgentId: 'test-agent',
+            agentId: 'test-agent',
+            agentRole: AGENT_ROLES.ARCHITECT,
+            type: CONTRIBUTION_TYPES.REFINEMENT,
+            content: 'b'.repeat(60),
             metadata: {}
           },
           {
@@ -357,7 +356,7 @@ describe('RoleBasedAgent - prepareContext()', () => {
 
     await agent.prepareContext(context, 1);
 
-    // Verify the LLM was called (which means filtering occurred)
+    // Verify the LLM was called (which means filtering occurred and threshold was met)
     expect(provider['currentIndex']).toBe(1);
   });
 
