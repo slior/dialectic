@@ -110,71 +110,82 @@ function formatContributionMetadata(contribution: Contribution, verbose: boolean
   return ` (latency=${latency}ms, tokens=${tokens})`;
 }
 
+type FormattedContribution = { title: string; content: string };
+
 /**
  * Formats proposals for a round.
  * @param contributions - Array of proposal contributions.
  * @param verbose - Whether to include metadata.
- * @returns Formatted proposals string.
+ * @returns Array of formatted proposal entries with title and content.
  */
-function formatProposals(contributions: Contribution[], verbose: boolean): string {
+function formatProposals(contributions: Contribution[], verbose: boolean): FormattedContribution[] {
   const proposals = contributions.filter(c => c.type === CONTRIBUTION_TYPES.PROPOSAL);
   
   if (proposals.length === 0) {
-    return 'No proposals in this round.';
+    return [];
   }
 
-  let result = '';
+  const result: FormattedContribution[] = [];
   for (const proposal of proposals) {
     const metadata = formatContributionMetadata(proposal, verbose);
-    result += `Agent ${proposal.agentId}${metadata}:\n${proposal.content}\n\n`;
+    result.push({
+      title: `Agent ${proposal.agentId}${metadata}:`,
+      content: proposal.content
+    });
   }
 
-  return result.trim();
+  return result;
 }
 
 /**
  * Formats critiques for a round.
  * @param contributions - Array of critique contributions.
  * @param verbose - Whether to include metadata.
- * @returns Formatted critiques string.
+ * @returns Array of formatted critique entries with title and content.
  */
-function formatCritiques(contributions: Contribution[], verbose: boolean): string {
+function formatCritiques(contributions: Contribution[], verbose: boolean): FormattedContribution[] {
   const critiques = contributions.filter(c => c.type === CONTRIBUTION_TYPES.CRITIQUE);
   
   if (critiques.length === 0) {
-    return 'No critiques in this round.';
+    return [];
   }
 
-  let result = '';
+  const result: FormattedContribution[] = [];
   for (const critique of critiques) {
     const metadata = formatContributionMetadata(critique, verbose);
     const target = critique.targetAgentId || 'unknown';
-    result += `${critique.agentId} --> ${target}${metadata}: ${critique.content}\n\n`;
+    result.push({
+      title: `${critique.agentId} --> ${target}${metadata}:`,
+      content: critique.content
+    });
   }
 
-  return result.trim();
+  return result;
 }
 
 /**
  * Formats refinements for a round.
  * @param contributions - Array of refinement contributions.
  * @param verbose - Whether to include metadata.
- * @returns Formatted refinements string.
+ * @returns Array of formatted refinement entries with title and content.
  */
-function formatRefinements(contributions: Contribution[], verbose: boolean): string {
+function formatRefinements(contributions: Contribution[], verbose: boolean): FormattedContribution[] {
   const refinements = contributions.filter(c => c.type === CONTRIBUTION_TYPES.REFINEMENT);
   
   if (refinements.length === 0) {
-    return 'No refinements in this round.';
+    return [];
   }
 
-  let result = '';
+  const result: FormattedContribution[] = [];
   for (const refinement of refinements) {
     const metadata = formatContributionMetadata(refinement, verbose);
-    result += `Agent ${refinement.agentId}${metadata}:\n${refinement.content}\n\n`;
+    result.push({
+      title: `Agent ${refinement.agentId}${metadata}:`,
+      content: refinement.content
+    });
   }
 
-  return result.trim();
+  return result;
 }
 
 /**
@@ -222,15 +233,39 @@ export function generateDebateReport(
 
     // Proposals
     report += `#### Proposals\n`;
-    report += `\`\`\`text\n${formatProposals(round.contributions, verbose)}\n\`\`\`\n\n`;
+    const formattedProposals = formatProposals(round.contributions, verbose);
+    if (formattedProposals.length === 0) {
+      report += `No proposals in this round.\n\n`;
+    } else {
+      for (const p of formattedProposals) {
+        report += `${p.title}\n`;
+        report += `\`\`\`text\n${p.content}\n\`\`\`\n\n`;
+      }
+    }
 
     // Critiques
     report += `#### Critiques\n`;
-    report += `\`\`\`text\n${formatCritiques(round.contributions, verbose)}\n\`\`\`\n\n`;
+    const formattedCritiques = formatCritiques(round.contributions, verbose);
+    if (formattedCritiques.length === 0) {
+      report += `No critiques in this round.\n\n`;
+    } else {
+      for (const c of formattedCritiques) {
+        report += `${c.title}\n`;
+        report += `\`\`\`text\n${c.content}\n\`\`\`\n\n`;
+      }
+    }
 
     // Refinements
     report += `#### Refinements\n`;
-    report += `\`\`\`text\n${formatRefinements(round.contributions, verbose)}\n\`\`\`\n\n`;
+    const formattedRefinements = formatRefinements(round.contributions, verbose);
+    if (formattedRefinements.length === 0) {
+      report += `No refinements in this round.\n\n`;
+    } else {
+      for (const r of formattedRefinements) {
+        report += `${r.title}\n`;
+        report += `\`\`\`text\n${r.content}\n\`\`\`\n\n`;
+      }
+    }
   }
 
   // Final Synthesis section
