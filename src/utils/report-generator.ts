@@ -1,6 +1,15 @@
 import { DebateState, Contribution, CONTRIBUTION_TYPES } from '../types/debate.types';
 import { AgentConfig } from '../types/agent.types';
 
+// File-level constants to avoid magic strings and improve maintainability
+const CODE_FENCE_LANG = 'text';
+const NO_PROPOSALS_MSG = 'No proposals in this round.';
+const NO_CRITIQUES_MSG = 'No critiques in this round.';
+const NO_REFINEMENTS_MSG = 'No refinements in this round.';
+const NA_TEXT = 'N/A';
+const RIGHT_ARROW_HTML = '&rarr;';
+const UNKNOWN_LABEL = 'unknown';
+
 /**
  * Formats a date to YYYY-MM-DD HH:mm:ss local time string.
  * @param date - The date to format.
@@ -47,16 +56,16 @@ function formatAgentsTable(agents: AgentConfig[]): string {
   table += '|----|------|------|-------|----------|-------------|----------|------------------|-------------------|---------------|\n';
 
   for (const agent of agents) {
-    const id = agent.id || 'N/A';
-    const name = agent.name || 'N/A';
-    const role = agent.role || 'N/A';
-    const model = agent.model || 'N/A';
-    const provider = agent.provider || 'N/A';
-    const temperature = agent.temperature !== undefined ? agent.temperature.toString() : 'N/A';
-    const enabled = agent.enabled !== undefined ? agent.enabled.toString() : 'N/A';
-    const systemPromptPath = agent.systemPromptPath !== undefined ? String(agent.systemPromptPath) : 'N/A';
-    const summaryPromptPath = agent.summaryPromptPath !== undefined ? String(agent.summaryPromptPath) : 'N/A';
-    const summarization = agent.summarization !== undefined ? JSON.stringify(agent.summarization) : 'N/A';
+    const id = agent.id || NA_TEXT;
+    const name = agent.name || NA_TEXT;
+    const role = agent.role || NA_TEXT;
+    const model = agent.model || NA_TEXT;
+    const provider = agent.provider || NA_TEXT;
+    const temperature = agent.temperature !== undefined ? agent.temperature.toString() : NA_TEXT;
+    const enabled = agent.enabled !== undefined ? agent.enabled.toString() : NA_TEXT;
+    const systemPromptPath = agent.systemPromptPath !== undefined ? String(agent.systemPromptPath) : NA_TEXT;
+    const summaryPromptPath = agent.summaryPromptPath !== undefined ? String(agent.summaryPromptPath) : NA_TEXT;
+    const summarization = agent.summarization !== undefined ? JSON.stringify(agent.summarization) : NA_TEXT;
     
     table += `| ${id} | ${name} | ${role} | ${model} | ${provider} | ${temperature} | ${enabled} | ${systemPromptPath} | ${summaryPromptPath} | ${summarization} |\n`;
   }
@@ -74,16 +83,17 @@ function formatJudgeTable(judge: AgentConfig): string {
   let table = '| ID | Name | Role | Model | Provider | Temperature | Enabled | SystemPromptPath | SummaryPromptPath | Summarization |\n';
   table += '|----|------|------|-------|----------|-------------|----------|------------------|-------------------|---------------|\n';
 
-  const id = judge.id || 'N/A';
-  const name = judge.name || 'N/A';
-  const role = judge.role || 'N/A';
-  const model = judge.model || 'N/A';
-  const provider = judge.provider || 'N/A';
-  const temperature = judge.temperature !== undefined ? judge.temperature.toString() : 'N/A';
-  const enabled = (judge as any).enabled !== undefined ? String((judge as any).enabled) : 'N/A';
-  const systemPromptPath = judge.systemPromptPath !== undefined ? String(judge.systemPromptPath) : 'N/A';
-  const summaryPromptPath = judge.summaryPromptPath !== undefined ? String(judge.summaryPromptPath) : 'N/A';
-  const summarization = judge.summarization !== undefined ? JSON.stringify(judge.summarization) : 'N/A';
+  const id = judge.id || NA_TEXT;
+  const name = judge.name || NA_TEXT;
+  const role = judge.role || NA_TEXT;
+  const model = judge.model || NA_TEXT;
+  const provider = judge.provider || NA_TEXT;
+  const temperature = judge.temperature !== undefined ? judge.temperature.toString() : NA_TEXT;
+  // Guard for optional property without unsafe cast
+  const enabled = 'enabled' in judge ? String((judge as unknown as { enabled?: unknown }).enabled) : NA_TEXT;
+  const systemPromptPath = judge.systemPromptPath !== undefined ? String(judge.systemPromptPath) : NA_TEXT;
+  const summaryPromptPath = judge.summaryPromptPath !== undefined ? String(judge.summaryPromptPath) : NA_TEXT;
+  const summarization = judge.summarization !== undefined ? JSON.stringify(judge.summarization) : NA_TEXT;
   
   table += `| ${id} | ${name} | ${role} | ${model} | ${provider} | ${temperature} | ${enabled} | ${systemPromptPath} | ${summaryPromptPath} | ${summarization} |\n`;
 
@@ -96,20 +106,18 @@ function formatJudgeTable(judge: AgentConfig): string {
  * @returns Metadata string or empty string if not verbose.
  */
 function formatContributionMetadata(contribution: Contribution, verbose: boolean): string {
-  if (!verbose) {
+  if (!verbose)
     return '';
-  }
 
-  const latency = contribution.metadata.latencyMs !== undefined 
-    ? contribution.metadata.latencyMs.toString() 
-    : 'N/A';
-  const tokens = contribution.metadata.tokensUsed !== undefined 
-    ? contribution.metadata.tokensUsed.toString() 
-    : 'N/A';
+  const latency = contribution.metadata.latencyMs !== undefined  ? contribution.metadata.latencyMs.toString()  : NA_TEXT;
+  const tokens = contribution.metadata.tokensUsed !== undefined  ? contribution.metadata.tokensUsed.toString()  : NA_TEXT;
 
   return ` (latency=${latency}ms, tokens=${tokens})`;
 }
 
+/**
+ * Structured representation of a contribution formatted for markdown output.
+ */
 type FormattedContribution = { title: string; content: string };
 
 /**
@@ -129,7 +137,7 @@ function formatProposals(contributions: Contribution[], verbose: boolean): Forma
   for (const proposal of proposals) {
     const metadata = formatContributionMetadata(proposal, verbose);
     result.push({
-      title: `Agent ${proposal.agentId}${metadata}:`,
+      title: `Agent *${proposal.agentId}*${metadata}:`,
       content: proposal.content
     });
   }
@@ -153,9 +161,9 @@ function formatCritiques(contributions: Contribution[], verbose: boolean): Forma
   const result: FormattedContribution[] = [];
   for (const critique of critiques) {
     const metadata = formatContributionMetadata(critique, verbose);
-    const target = critique.targetAgentId || 'unknown';
+    const target = critique.targetAgentId || UNKNOWN_LABEL;
     result.push({
-      title: `${critique.agentId} --> ${target}${metadata}:`,
+      title: `*${critique.agentId}* ${RIGHT_ARROW_HTML} *${target}*${metadata}:`,
       content: critique.content
     });
   }
@@ -180,12 +188,36 @@ function formatRefinements(contributions: Contribution[], verbose: boolean): For
   for (const refinement of refinements) {
     const metadata = formatContributionMetadata(refinement, verbose);
     result.push({
-      title: `Agent ${refinement.agentId}${metadata}:`,
+      title: `Agent *${refinement.agentId}*${metadata}:`,
       content: refinement.content
     });
   }
 
   return result;
+}
+
+/**
+ * Renders a contribution section with a heading, titles outside code fences, and fenced content.
+ * Extracted to remove repetition across proposals, critiques, and refinements.
+ * @param heading - The section heading label.
+ * @param items - The list of formatted contributions.
+ * @param emptyMessage - Message to display when there are no items.
+ */
+function renderContributionSection(
+  heading: string,
+  items: FormattedContribution[],
+  emptyMessage: string
+): string {
+  let section = `#### ${heading}\n`;
+  if (items.length === 0) {
+    section += `${emptyMessage}\n\n`;
+    return section;
+  }
+  for (const item of items) {
+    section += `${item.title}\n`;
+    section += `\`\`\`${CODE_FENCE_LANG}\n${item.content}\n\`\`\`\n\n`;
+  }
+  return section;
 }
 
 /**
@@ -232,40 +264,16 @@ export function generateDebateReport(
     report += `### Round ${round.roundNumber}\n\n`;
 
     // Proposals
-    report += `#### Proposals\n`;
     const formattedProposals = formatProposals(round.contributions, verbose);
-    if (formattedProposals.length === 0) {
-      report += `No proposals in this round.\n\n`;
-    } else {
-      for (const p of formattedProposals) {
-        report += `${p.title}\n`;
-        report += `\`\`\`text\n${p.content}\n\`\`\`\n\n`;
-      }
-    }
+    report += renderContributionSection('Proposals', formattedProposals, NO_PROPOSALS_MSG);
 
     // Critiques
-    report += `#### Critiques\n`;
     const formattedCritiques = formatCritiques(round.contributions, verbose);
-    if (formattedCritiques.length === 0) {
-      report += `No critiques in this round.\n\n`;
-    } else {
-      for (const c of formattedCritiques) {
-        report += `${c.title}\n`;
-        report += `\`\`\`text\n${c.content}\n\`\`\`\n\n`;
-      }
-    }
+    report += renderContributionSection('Critiques', formattedCritiques, NO_CRITIQUES_MSG);
 
     // Refinements
-    report += `#### Refinements\n`;
     const formattedRefinements = formatRefinements(round.contributions, verbose);
-    if (formattedRefinements.length === 0) {
-      report += `No refinements in this round.\n\n`;
-    } else {
-      for (const r of formattedRefinements) {
-        report += `${r.title}\n`;
-        report += `\`\`\`text\n${r.content}\n\`\`\`\n\n`;
-      }
-    }
+    report += renderContributionSection('Refinements', formattedRefinements, NO_REFINEMENTS_MSG);
   }
 
   // Final Synthesis section
