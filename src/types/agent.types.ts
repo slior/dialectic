@@ -15,6 +15,7 @@ export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES];
 
 export const LLM_PROVIDERS = {
   OPENAI: "openai",
+  OPENROUTER: "openrouter",
 } as const;
 
 export const PROMPT_SOURCES = {
@@ -47,8 +48,8 @@ export interface AgentConfig {
   role: AgentRole;
   /** The LLM model name to use (e.g., "gpt-4"). */
   model: string;
-  /** The LLM provider; currently only supports "openai". */
-  provider: typeof LLM_PROVIDERS.OPENAI;
+  /** The LLM provider; supports "openai" or "openrouter". */
+  provider: typeof LLM_PROVIDERS.OPENAI | typeof LLM_PROVIDERS.OPENROUTER;
   /** Sampling temperature for the LLM (range: 0.0 - 1.0). */
   temperature: number;
   /** (Optional) Filesystem path to a markdown/text file containing the system prompt to prime the agent. Resolved relative to the configuration file directory. */

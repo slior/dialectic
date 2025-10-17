@@ -281,18 +281,22 @@ Filters agent configurations based on CLI options.
 
 ### 7. Provider Initialization
 
-**Class**: `OpenAIProvider`  
-**Location**: `src/providers/openai-provider.ts`
+**Factory Function**: `createProvider(providerType: string)`  
+**Location**: `src/providers/provider-factory.ts`
 
-Creates an instance of the OpenAI LLM provider.
+Creates LLM provider instances based on configuration.
 
-**Constructor Parameters**:
-- `apiKey`: OpenAI API key from environment variable
+**Parameters**:
+- `providerType`: Provider type ("openai" or "openrouter")
+
+**Supported Providers**:
+- **OpenAI Provider**: Direct integration with OpenAI API
+- **OpenRouter Provider**: Integration with OpenRouter API using OpenAI SDK
 
 **Method**: `complete(request: CompletionRequest)`
 
-Makes LLM completion requests with fallback strategy:
-1. **Primary**: Attempts to use OpenAI Responses API
+Both providers make LLM completion requests with fallback strategy:
+1. **Primary**: Attempts to use Responses API
    - Builds payload with input array format
    - Calls `client.responses.create()`
 2. **Fallback**: Uses Chat Completions API
@@ -305,18 +309,20 @@ Makes LLM completion requests with fallback strategy:
 
 ### 8. Agent Instantiation
 
-**Function**: `buildAgents(agentConfigs: AgentConfig[], provider: OpenAIProvider)`  
+**Function**: `buildAgents(agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: { agents: AgentPromptMetadata[] })`  
 **Location**: `src/cli/commands/debate.ts`
 
 Creates concrete agent instances based on configurations using the `RoleBasedAgent` class.
 
 **Parameters**:
 - `agentConfigs`: Array of agent configurations
-- `provider`: Initialized OpenAI provider
 - `configDir`: Configuration file directory for resolving prompt paths
+- `systemSummaryConfig`: System-wide summarization configuration
 - `collect`: Object to collect prompt source metadata
 
 **Returns**: Array of Agent instances
+
+**Provider Selection**: Each agent gets its own provider instance based on the `provider` field in its configuration. This allows for mixed provider configurations where different agents can use different LLM providers.
 
 **Behavior**:
 The system uses a single `RoleBasedAgent` class for all roles (architect, performance, security, etc.) rather than separate agent classes. Each agent is created via `RoleBasedAgent.create(config, provider, resolvedSystemPrompt, promptSource)`.
@@ -355,7 +361,7 @@ Prompt source resolution for the judge:
 
 **Constructor Parameters**:
 - `config`: Agent configuration (typically role: "generalist", lower temperature)
-- `provider`: OpenAI provider instance
+- `provider`: LLM provider instance (created via provider factory)
 
 **Key Method**: `synthesize(problem: string, rounds: DebateRound[], context: DebateContext)`
 

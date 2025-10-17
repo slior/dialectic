@@ -9,7 +9,7 @@ Dialectic is a CLI tool that orchestrates multi-agent debates to solve software 
 ### Requirements
 
 - **Node.js** >= 18
-- **OpenAI API Key**: Set `OPENAI_API_KEY` in a `.env` file or as an environment variable
+- **API Key**: Set `OPENAI_API_KEY` (for OpenAI) or `OPENROUTER_API_KEY` (for OpenRouter) in a `.env` file or as an environment variable
 
 ### Installation
 
@@ -193,7 +193,7 @@ For detailed configuration documentation, including all fields, validation rules
   - Include full history: `true`
   - Timeout per round: `300000` ms (5 minutes)
 
-**Example configuration:**
+**Example configuration (OpenAI):**
 ```json
 {
   "agents": [
@@ -217,10 +217,36 @@ For detailed configuration documentation, including all fields, validation rules
 }
 ```
 
+**Example configuration (OpenRouter with mixed providers):**
+```json
+{
+  "agents": [
+    {
+      "id": "agent-architect",
+      "name": "System Architect",
+      "role": "architect",
+      "model": "openai/gpt-4",
+      "provider": "openrouter",
+      "temperature": 0.5
+    },
+    {
+      "id": "agent-security",
+      "name": "Security Expert",
+      "role": "security",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.4
+    }
+  ]
+}
+```
+
 ## Technical Details
 
-**LLM Provider:**
-- Uses OpenAI SDK with preference for Responses API and fallback to Chat Completions API
+**LLM Providers:**
+- **OpenAI**: Direct integration with OpenAI API using OpenAI SDK
+- **OpenRouter**: Integration with OpenRouter API using OpenAI SDK for compatibility
+- Both providers support Responses API with fallback to Chat Completions API
 
 **Debate Persistence:**
 - Debate states are saved to `./debates/` directory

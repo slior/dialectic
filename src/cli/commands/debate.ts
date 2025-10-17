@@ -1,13 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
-import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
+import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
 import { warnUser, infoUser, writeStderr } from '../index';
 import { SystemConfig } from '../../types/config.types';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource } from '../../types/agent.types';
 import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES, SummarizationConfig } from '../../types/debate.types';
 import { DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD } from '../../types/config.types';
-import { OpenAIProvider } from '../../providers/openai-provider';
+import { LLMProvider } from '../../providers/llm-provider';
+import { createProvider } from '../../providers/provider-factory';
 import { RoleBasedAgent } from '../../agents/role-based-agent';
 import { JudgeAgent } from '../../core/judge';
 import { StateManager } from '../../core/state-manager';
@@ -147,7 +148,7 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  * creates the agent, and records provenance.
  * 
  * @param cfg - Agent configuration containing role, model, and other settings.
- * @param provider - OpenAI provider instance for LLM interactions.
+ * @param provider - LLM provider instance for LLM interactions.
  * @param configDir - Directory path where the configuration file is located.
  * @param systemSummaryConfig - System-wide summarization configuration.
  * @param collect - Collection object to record prompt source metadata.
@@ -155,7 +156,7 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  */
 function createAgentWithPromptResolution(
   cfg: AgentConfig, 
-  provider: OpenAIProvider, 
+  provider: LLMProvider, 
   configDir: string,
   systemSummaryConfig: SummarizationConfig,
   collect: { agents: AgentPromptMetadata[] }
@@ -215,7 +216,6 @@ function createAgentWithPromptResolution(
  * eliminating the need for role-specific agent classes.
  *
  * @param agentConfigs - Array of agent configurations.
- * @param provider - OpenAI provider instance.
  * @param configDir - Directory where the config file is located, used for resolving relative prompt paths.
  * @param systemSummaryConfig - System-wide summarization configuration.
  * @param collect - Object to collect prompt metadata.
@@ -223,12 +223,14 @@ function createAgentWithPromptResolution(
  */
 function buildAgents(
   agentConfigs: AgentConfig[], 
-  provider: OpenAIProvider, 
   configDir: string,
   systemSummaryConfig: SummarizationConfig,
   collect: { agents: AgentPromptMetadata[] }
 ): Agent[] {
-  return agentConfigs.map((cfg) => createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect));
+  return agentConfigs.map((cfg) => {
+    const provider = createProvider(cfg.provider);
+    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect);
+  });
 }
 
 /**
@@ -528,18 +530,9 @@ export function debateCommand(program: Command) {
         
         const resolvedProblem = await resolveProblemDescription(problem, options);
 
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-          const err: any = new Error('OPENAI_API_KEY is not set');
-          err.code = EXIT_CONFIG_ERROR;
-          throw err;
-        }
-
         const sysConfig = await loadConfig(options.config);
         const debateCfg = debateConfigFromSysConfig(sysConfig, options);
         const agentConfigs = agentConfigsFromSysConfig(sysConfig, options);
-
-        const provider = new OpenAIProvider(apiKey);
 
         const promptSources: { agents: AgentPromptMetadata[]; judge: JudgePromptMetadata } = {
           agents: [],
@@ -554,7 +547,7 @@ export function debateCommand(program: Command) {
           method: DEFAULT_SUMMARIZATION_METHOD,
         };
 
-        const agents = buildAgents(agentConfigs, provider, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources);
+        const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources);
 
         // Judge prompt resolution
         const judgeDefault = JudgeAgent.defaultSystemPrompt();
@@ -569,9 +562,10 @@ export function debateCommand(program: Command) {
           defaultText: judgeSummaryDefault 
         });
         
+        const judgeProvider = createProvider(sysConfig.judge!.provider);
         const judge = new JudgeAgent(
           sysConfig.judge!,
-          provider,
+          judgeProvider,
           jres.text,
           jres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jres.absPath !== undefined && { absPath: jres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN }),
           systemSummaryConfig,

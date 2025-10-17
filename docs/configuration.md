@@ -51,7 +51,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 | `name` | `string` | Yes | Human-readable name for the agent. Used in output and logging. |
 | `role` | `AgentRole` | Yes | The functional role of the agent. |
 | `model` | `string` | Yes | The LLM model name to use for this agent. |
-| `provider` | `string` | Yes | The LLM provider. Currently only `"openai"` is supported. |
+| `provider` | `string` | Yes | The LLM provider. Supports `"openai"` or `"openrouter"`. |
 | `temperature` | `number` | Yes | Sampling temperature for the LLM. |
 || `systemPromptPath` | `string` | No | Path to a markdown/text file containing the system prompt. If omitted, a built-in prompt for the role is used. |
 | `enabled` | `boolean` | No | Whether the agent is enabled. Defaults to `true` if omitted. |
@@ -83,16 +83,17 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 
 #### `model`
 - **Type**: String
-- **Accepted Values**: Any valid OpenAI model name
-- **Common Values**: `"gpt-4"`, `"gpt-4-turbo"`, `"gpt-3.5-turbo"`
+- **Accepted Values**: 
+  - For OpenAI provider: Any valid OpenAI model name (e.g., `"gpt-4"`, `"gpt-4-turbo"`, `"gpt-3.5-turbo"`)
+  - For OpenRouter provider: Full qualified model names (e.g., `"openai/gpt-4"`, `"anthropic/claude-3-sonnet"`)
 - **Semantics**: Specifies which LLM model the agent uses. More capable models generally produce better reasoning but cost more.
-- **Example**: `"gpt-4"`
+- **Example**: `"gpt-4"` (OpenAI) or `"openai/gpt-4"` (OpenRouter)
 
 #### `provider`
 - **Type**: String (literal)
-- **Accepted Values**: `"openai"` (only supported value currently)
-- **Semantics**: Specifies the LLM provider. Future versions may support additional providers.
-- **Example**: `"openai"`
+- **Accepted Values**: `"openai"` or `"openrouter"`
+- **Semantics**: Specifies the LLM provider. Each provider requires its own API key and supports different model naming conventions.
+- **Example**: `"openai"` or `"openrouter"`
 
 #### `temperature`
 - **Type**: Number
@@ -120,6 +121,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 
 ### Example Agent Configuration
 
+#### Single Provider (OpenAI)
 ```json
 {
   "id": "agent-architect",
@@ -129,6 +131,42 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
   "provider": "openai",
   "temperature": 0.5,
   "systemPromptPath": "./prompts/architect.md",
+  "enabled": true
+}
+```
+
+#### Single Provider (OpenRouter)
+```json
+{
+  "id": "agent-architect",
+  "name": "System Architect",
+  "role": "architect",
+  "model": "openai/gpt-4",
+  "provider": "openrouter",
+  "temperature": 0.5,
+  "systemPromptPath": "./prompts/architect.md",
+  "enabled": true
+}
+```
+
+#### Mixed Provider Configuration
+```json
+{
+  "id": "agent-architect",
+  "name": "System Architect",
+  "role": "architect",
+  "model": "openai/gpt-4",
+  "provider": "openrouter",
+  "temperature": 0.5,
+  "enabled": true
+},
+{
+  "id": "agent-security",
+  "name": "Security Specialist",
+  "role": "security",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.4,
   "enabled": true
 }
 ```
@@ -624,11 +662,20 @@ If summarization fails due to LLM errors:
 
 ### `OPENAI_API_KEY`
 - **Type**: String
-- **Required**: Yes
+- **Required**: Yes (when using OpenAI provider)
 - **Description**: Your OpenAI API key for authenticating with the OpenAI API.
 - **How to Set**:
   - Windows PowerShell: `$Env:OPENAI_API_KEY = "sk-..."`
   - macOS/Linux bash/zsh: `export OPENAI_API_KEY="sk-..."`
+- **Security**: Never commit this value to version control. Use environment variables or secret management systems.
+
+### `OPENROUTER_API_KEY`
+- **Type**: String
+- **Required**: Yes (when using OpenRouter provider)
+- **Description**: Your OpenRouter API key for authenticating with the OpenRouter API.
+- **How to Set**:
+  - Windows PowerShell: `$Env:OPENROUTER_API_KEY = "sk-or-..."`
+  - macOS/Linux bash/zsh: `export OPENROUTER_API_KEY="sk-or-..."`
 - **Security**: Never commit this value to version control. Use environment variables or secret management systems.
 
 ## Command Line Options

@@ -17,12 +17,22 @@ jest.mock('openai', () => {
 });
 
 import { RoleBasedAgent } from '../src/agents/role-based-agent';
-import { OpenAIProvider } from '../src/providers/openai-provider';
+import { createProvider } from '../src/providers/provider-factory';
 import { AGENT_ROLES, LLM_PROVIDERS } from '../src/types/agent.types';
 import { DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD } from '../src/types/config.types';
 
 describe('RoleBasedAgent (Security Role)', () => {
-  const mockProvider = new OpenAIProvider('test-key');
+  // Mock environment variable for provider factory
+  const originalEnv = process.env;
+  let mockProvider: any;
+
+  beforeAll(() => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    mockProvider = createProvider('openai');
+  });
+  afterAll(() => {
+    process.env = originalEnv;
+  });
   const mockConfig = {
     id: 'test-security-agent',
     name: 'Test Security Agent',

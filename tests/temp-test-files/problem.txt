@@ -1,2 +1,0 @@
-Design a distributed caching system
-with high availability and low latency
