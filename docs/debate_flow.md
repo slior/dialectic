@@ -4,7 +4,7 @@ This document provides a detailed explanation of the execution flow for the deba
 
 ## Overview
 
-The debate system orchestrates multi-agent discussions to solve software design problems. The flow involves configuration loading, agent initialization, multiple debate rounds (each executing proposal, critique, and refinement phases), judge synthesis, and result output. Each round is a complete cycle where agents propose solutions, critique each other's proposals, and refine their own proposals based on feedback.
+The debate system orchestrates multi-agent discussions to solve software design problems. The flow involves configuration loading, agent initialization, an optional pre-debate clarifications phase, multiple debate rounds (each executing proposal, critique, and refinement phases), judge synthesis, and result output. Each round is a complete cycle where agents propose solutions, critique each other's proposals, and refine their own proposals based on feedback.
 
 ## Sequence Diagram
 
@@ -47,11 +47,33 @@ sequenceDiagram
     Cmd->>SM: new StateManager()
     SM->>FS: ensure debates/ directory exists
     Cmd->>Orch: new DebateOrchestrator(agents, judge, sm, config)
-    Cmd->>Orch: runDebate(problem)
+    
+    opt clarifications enabled (--clarify or config.interactiveClarifications)
+        Cmd->>Cmd: collectClarifications(problem, agents, maxPerAgent)
+        loop For each agent
+            Cmd->>Agents: agent.askClarifyingQuestions(problem, context)
+            Agents->>Provider: complete(systemPrompt, clarificationPrompt)
+            Provider-->>Agents: {text, usage, latency}
+            Agents-->>Cmd: {questions: [{id, text}]}
+        end
+        Cmd->>Cmd: collectAndAnswerClarifications()
+        loop For each agent's questions
+            Cmd->>CLI: prompt user for answer
+            CLI-->>Cmd: user input (empty = "NA")
+        end
+        Cmd->>Cmd: build AgentClarifications[] with answers
+    end
+    
+    Cmd->>Orch: runDebate(problem, context?, clarifications?)
     
     Orch->>SM: createDebate(problem, context)
     SM->>FS: save initial state JSON
     SM-->>Orch: DebateState
+    
+    opt clarifications provided
+        Orch->>SM: setClarifications(debateId, clarifications)
+        SM->>FS: save updated state JSON
+    end
     
     loop For each round (1 to N)
         Orch->>SM: beginRound(debateId)
@@ -177,7 +199,7 @@ The entry point for the debate system. This function:
 
 Registers the debate command and its action handler with Commander. Defines:
 - Command name and argument: `debate [problem]` (optional problem string)
-- Options: `--problemDescription`, `--agents`, `--rounds`, `--config`, `--output`, `--verbose`, `--report`
+- Options: `--problemDescription`, `--agents`, `--rounds`, `--config`, `--output`, `--verbose`, `--report`, `--clarify`
 - Action handler that executes when the command is invoked
 
 **Parameters**:
@@ -494,9 +516,58 @@ The CLI (`src/cli/commands/debate.ts`) creates a `DebateProgressUI` instance and
 - Display updates in-place using ANSI cursor movement codes
 - Automatically clears when debate completes
 
-### 12. Debate Execution
+### 12. Clarifications Phase (Optional)
 
-**Method**: `orchestrator.runDebate(problem: string, context?: string)`  
+**Function**: `collectAndAnswerClarifications(resolvedProblem: string, agents: Agent[], maxPerAgent: number)`  
+**Location**: `src/cli/commands/debate.ts`
+
+When the `--clarify` option is provided or `debate.interactiveClarifications` is enabled in configuration, the system runs a pre-debate clarifications phase where agents can ask clarifying questions about the problem statement.
+
+**Parameters**:
+- `resolvedProblem`: The resolved problem statement
+- `agents`: Array of participating agents
+- `maxPerAgent`: Maximum questions per agent (default: 5)
+
+**Returns**: `AgentClarifications[]` containing grouped questions and answers
+
+**Execution Flow**:
+
+#### 12.1 Question Collection
+1. **Function**: `collectClarifications(problem, agents, maxPerAgent, warn)`
+   - Calls `agent.askClarifyingQuestions(problem, context)` for each agent
+   - Each agent generates role-specific clarifying questions using their clarification prompt
+   - Questions are truncated to `maxPerAgent` limit with warnings if exceeded
+   - Returns grouped questions without answers
+
+#### 12.2 Interactive Q&A Session
+1. **User Interface**: Creates readline interface for interactive input
+2. **Question Presentation**: For each agent with questions:
+   - Displays agent name and role
+   - Shows each question with ID: `Q (q1): What is the expected load?`
+   - Prompts user for answer: `> `
+3. **Answer Collection**:
+   - User can provide an answer or press Enter to skip
+   - Empty input is recorded as "NA"
+   - Each answer is stored with the corresponding question
+
+#### 12.3 Clarifications Persistence
+1. **State Storage**: Clarifications are passed to `orchestrator.runDebate()`
+2. **Persistence**: Orchestrator calls `stateManager.setClarifications()` to store Q&A
+3. **Context Integration**: Clarifications are included in agent contexts for round 1
+
+**Configuration Options**:
+- `debate.interactiveClarifications`: Enable by default (boolean, default: false)
+- `debate.clarificationsMaxPerAgent`: Maximum questions per agent (number, default: 5)
+- `AgentConfig.clarificationPromptPath`: Custom clarification prompt for specific agents
+
+**Error Handling**:
+- If agent returns malformed JSON: warning printed, empty question list used
+- If agent exceeds limit: warning printed, questions truncated
+- If no questions generated: clarifications phase skipped
+
+### 13. Debate Execution
+
+**Method**: `orchestrator.runDebate(problem: string, context?: string, clarifications?: AgentClarifications[])`  
 **Location**: `src/core/orchestrator.ts`
 
 Main orchestration method that executes the complete debate workflow.
@@ -504,6 +575,7 @@ Main orchestration method that executes the complete debate workflow.
 **Parameters**:
 - `problem`: The problem statement to debate
 - `context`: Optional additional context
+- `clarifications`: Optional clarifications from pre-debate phase
 
 **Returns**: `DebateResult` containing:
 - `debateId`: Unique identifier
@@ -513,20 +585,26 @@ Main orchestration method that executes the complete debate workflow.
 
 **Execution Flow**:
 
-#### 12.1 State Creation
+#### 13.1 State Creation
 Calls `stateManager.createDebate()` to initialize debate state and persist initial JSON file.
 
-#### 12.2 Round Loop
+#### 13.2 Clarifications Persistence (if provided)
+If clarifications are provided:
+1. Calls `stateManager.setClarifications(debateId, clarifications)`
+2. Clarifications are stored in `DebateState.clarifications`
+3. Updated state is persisted to disk
+
+#### 13.3 Round Loop
 The orchestrator executes N complete rounds, where N is specified by `config.rounds`. Each round performs all three phases in sequence: proposal → critique → refinement.
 
 **For each round (1 to N)**:
 
-##### 12.2.1 Begin Round
+##### 13.3.1 Begin Round
 1. **Hook Invoked**: `onRoundStart(roundNumber, totalRounds)` - Notifies progress UI that a new round is starting
 2. Calls `stateManager.beginRound(debateId)` to create a new round object and increment the current round counter
 3. The round is persisted immediately to disk
 
-##### 12.2.2 Summarization Phase (Optional)
+##### 13.3.2 Summarization Phase (Optional)
 **Method**: `summarizationPhase(state: DebateState, roundNumber: number)`
 
 Each agent independently prepares and potentially summarizes their debate history before the proposal phase.
@@ -591,10 +669,11 @@ Each agent independently prepares and potentially summarizes their debate histor
 **Context Usage**:
 - Context object is never modified during summarization
 - When generating prompts (propose, critique, refine):
-  1. Prompt formatter searches backwards through `context.history`
-  2. Looks for `round.summaries[agentId]` in each round
-  3. Uses most recent summary if found
-  4. Falls back to full history if no summary exists
+  1. If clarifications exist, they are rendered first in the context via `formatClarifications()`
+  2. Prompt formatter searches backwards through `context.history`
+  3. Looks for `round.summaries[agentId]` in each round
+  4. Uses most recent summary if found
+  5. Falls back to full history if no summary exists
 
 **Configuration**:
 - System-wide defaults: `debate.summarization` in config file
@@ -607,7 +686,7 @@ Each agent independently prepares and potentially summarizes their debate histor
 - Per-round: which agents summarized and character count reduction
 - In round summary: latency and token usage for each summary
 
-##### 12.2.3 Proposal Phase
+##### 13.3.3 Proposal Phase
 **Method**: `proposalPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>)`
 
 All agents generate proposals in parallel for this round.
@@ -633,7 +712,7 @@ All agents generate proposals in parallel for this round.
 
 **Concurrency**: All agent proposals run in parallel via `Promise.all()`
 
-##### 12.2.3 Critique Phase
+##### 13.3.4 Critique Phase
 **Method**: `critiquePhase(state: DebateState, roundNumber: number)`
 
 Each agent critiques proposals from other agents within the current round.
@@ -662,7 +741,7 @@ Each agent critiques proposals from other agents within the current round.
 
 **Concurrency**: Critiques are processed sequentially (outer loop) but could be parallelized
 
-##### 12.2.4 Refinement Phase
+##### 13.3.5 Refinement Phase
 **Method**: `refinementPhase(state: DebateState, roundNumber: number)`
 
 Each agent refines their proposal based on critiques received within the current round.
@@ -691,7 +770,7 @@ Each agent refines their proposal based on critiques received within the current
 
 **Concurrency**: All agent refinements run in parallel via `Promise.all()`
 
-#### 12.3 Synthesis Phase
+#### 13.4 Synthesis Phase
 **Method**: `synthesisPhase(state: DebateState)`
 
 Judge synthesizes the final solution from all debate rounds, with optional summarization of the final round's content.
@@ -722,14 +801,14 @@ Judge synthesizes the final solution from all debate rounds, with optional summa
 
 **Returns**: `Solution` object
 
-#### 12.4 Debate Completion
+#### 13.5 Debate Completion
 1. Calls `stateManager.completeDebate(debateId, solution)`
 2. State manager updates status to "completed"
 3. Attaches final solution to state
 4. Saves final complete state to JSON file
 5. Returns `DebateResult` with solution, rounds, and metadata
 
-### 13. Result Output and Report Generation
+### 14. Result Output and Report Generation
 
 **Function**: `outputResults(result: DebateResult, stateManager: StateManager, options: any)`  
 **Location**: `src/cli/commands/debate.ts`
@@ -776,7 +855,14 @@ If `--report <path>` is provided, the CLI generates a comprehensive Markdown rep
 - Creates parent directories as needed and writes the file (UTF-8)
 - On success: prints `Generated report: <path>` to stderr; failures are non-fatal and logged as warnings
 
-### 14. Error Handling
+**Report Content with Clarifications**:
+- If clarifications exist, they are included in a dedicated "## Clarifications" section
+- Clarifications appear before the "## Rounds" section
+- Each agent's questions and answers are grouped under "### {Agent Name} ({role})"
+- Questions and answers are rendered in fenced code blocks
+- "NA" responses are included for skipped questions
+
+### 15. Error Handling
 
 The system uses structured error handling with exit codes:
 
@@ -804,6 +890,7 @@ Represents the complete state of a debate:
 - `status`: "pending" | "running" | "completed" | "failed"
 - `currentRound`: Current round number (0 when no rounds started, 1-indexed after beginRound())
 - `rounds`: Array of `DebateRound` objects
+- `clarifications`: Optional array of `AgentClarifications` (from pre-debate phase)
 - `finalSolution`: Solution object (when complete)
 - `createdAt`: Creation timestamp
 - `updatedAt`: Last update timestamp
@@ -837,6 +924,19 @@ Represents the final synthesized solution:
 - `recommendations`: Array of recommendations
 - `confidence`: Confidence score (0-100)
 - `synthesizedBy`: Judge agent ID
+
+### AgentClarifications
+Represents clarifications collected from a specific agent:
+- `agentId`: Agent identifier
+- `agentName`: Agent display name
+- `role`: Agent role
+- `items`: Array of `ClarificationItem` objects
+
+### ClarificationItem
+Represents a single question-answer pair:
+- `id`: Unique identifier for the question (e.g., "q1", "q2")
+- `question`: The clarifying question text
+- `answer`: The user's answer (or "NA" if skipped)
 
 ## Phase Execution Rules
 

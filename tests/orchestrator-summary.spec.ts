@@ -50,6 +50,11 @@ class MockAgent extends Agent {
     }
     return { context };
   }
+
+  // New abstract method requirement: return no clarifications by default
+  async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<{ questions: { id?: string; text: string }[] }> {
+    return { questions: [] };
+  }
 }
 
 // Mock Judge
@@ -95,6 +100,11 @@ class MockJudge extends Agent {
       confidence: 90,
       synthesizedBy: 'judge'
     };
+  }
+
+  // New abstract method requirement: judge does not ask questions
+  async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<{ questions: { id?: string; text: string }[] }> {
+    return { questions: [] };
   }
 }
 

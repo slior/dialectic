@@ -42,5 +42,17 @@ ${content}
 Create a concise summary (maximum ${maxLength} characters) that preserves the most important insights, decisions, and trade-offs across all perspectives. Focus on information that will be useful for future rounds of the debate.`;
     return appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.SUMMARIZATION);
   },
+
+  clarifyPrompt: (problem: string, context?: DebateContext, agentId?: string, includeFullHistory?: boolean) => {
+    const basePrompt = `You are preparing clarifying questions from a balanced, holistic perspective.
+
+Problem to clarify:
+${problem}
+
+Ask zero or more concise, high-signal questions that would most improve the overall solution quality across architecture, performance, security, and testability.
+`;
+    const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
+    return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CLARIFICATION);
+  },
 };
 

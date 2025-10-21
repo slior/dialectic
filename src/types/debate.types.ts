@@ -103,6 +103,10 @@ export interface DebateConfig {
   includeFullHistory: boolean; /** Whether to include full debate history in the context passed to agents and judge. */
   timeoutPerRound: number; /** Maximum time allowed per round in milliseconds. */
   summarization?: SummarizationConfig; /** Optional system-wide summarization configuration. Agents can override with their own settings. */
+  /** Whether to run a one-time interactive clarifications phase before the debate starts. */
+  interactiveClarifications?: boolean;
+  /** Maximum number of clarification questions to accept per agent (default 5). */
+  clarificationsMaxPerAgent?: number;
 }
 
 /**
@@ -126,6 +130,8 @@ export interface DebateState {
     agents: AgentPromptMetadata[];
     judge: JudgePromptMetadata;
   };
+  /** Optional clarifications collected from agents and answered by the user before round 1. */
+  clarifications?: AgentClarifications[];
 }
 
 /**
@@ -190,4 +196,39 @@ export interface DebateContext {
   context?: string; /** Optional additional context for the current request. */
   history?: DebateRound[]; /** Optional full history of rounds when enabled. */
   includeFullHistory?: boolean; /** Whether to fall back to full history when no summary is found. */
+  clarifications?: AgentClarifications[]; /** Optional clarifications to include in prompts (grouped by agent). */
+}
+
+/**
+ * A single clarification item: a question and its answer (or "NA").
+ */
+export interface ClarificationItem {
+  id: string;
+  question: string;
+  answer: string; // may be "NA"
+}
+
+/**
+ * Group of clarifications produced by a single agent.
+ */
+export interface AgentClarifications {
+  agentId: string;
+  agentName: string;
+  role: import('./agent.types').AgentRole;
+  items: ClarificationItem[];
+}
+
+/**
+ * A single clarifying question as produced by an agent before the debate.
+ */
+export interface ClarificationQuestion {
+  id?: string;
+  text: string;
+}
+
+/**
+ * Structured response returned by an agent when asked for clarifying questions.
+ */
+export interface ClarificationQuestionsResponse {
+  questions: ClarificationQuestion[];
 }

@@ -11,7 +11,8 @@ export const INSTRUCTION_TYPES = {
   PROPOSAL: 'proposal', 
   CRITIQUE: 'critique',
   REFINEMENT: 'refinement',
-  SUMMARIZATION: 'summarization'
+  SUMMARIZATION: 'summarization',
+  CLARIFICATION: 'clarification'
 } as const;
 
 export type InstructionType = typeof INSTRUCTION_TYPES[keyof typeof INSTRUCTION_TYPES];
@@ -62,6 +63,17 @@ export function getSharedSummarizationInstructions(): string {
 }
 
 /**
+ * Returns shared instructions for the clarification phase.
+ * Ensures agents return only the expected JSON schema and provides
+ * consistent guidance across roles.
+ * 
+ * @returns Formatted string containing shared clarification instructions
+ */
+export function getSharedClarificationInstructions(): string {
+  return `\n\n## Clarification Guidelines\n\nRespond with ONLY JSON using this exact schema (no prose):\n{"questions":[{"text":"..."}]}\n\nIf none are needed, return {"questions":[]}.\n Prioritize questions that are most likely to improve the overall solution quality`;
+}
+
+/**
  * Helper function to append appropriate shared instructions to a prompt.
  * 
  * @param prompt - The base prompt to append instructions to
@@ -86,6 +98,7 @@ function getSharedInstructionsByType(type: InstructionType): string {
     case INSTRUCTION_TYPES.CRITIQUE: return getSharedCritiqueInstructions();
     case INSTRUCTION_TYPES.REFINEMENT: return getSharedRefinementInstructions();
     case INSTRUCTION_TYPES.SUMMARIZATION: return getSharedSummarizationInstructions();
+    case INSTRUCTION_TYPES.CLARIFICATION: return getSharedClarificationInstructions();
     default: 
       // This should never happen with proper TypeScript types
       throw new Error(`Unknown instruction type: ${type}`);

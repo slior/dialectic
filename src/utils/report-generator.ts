@@ -252,6 +252,19 @@ export function generateDebateReport(
   report += formatAgentsTable(agentConfigs);
   report += `\n\n`;
 
+  // Clarifications section (if any)
+  if (debateState.clarifications && debateState.clarifications.length > 0) {
+    report += `## Clarifications\n\n`;
+    for (const group of debateState.clarifications) {
+      report += `### ${group.agentName} (${group.role})\n`;
+      for (const item of group.items) {
+        report += `Question (${item.id}):\n\n\`\`\`${CODE_FENCE_LANG}\n${item.question}\n\`\`\`\n\n`;
+        report += `Answer:\n\n\`\`\`${CODE_FENCE_LANG}\n${item.answer}\n\`\`\`\n\n`;
+      }
+    }
+    report += `\n`;
+  }
+
   // Judge section
   report += `## Judge\n\n`;
   report += formatJudgeTable(judgeConfig);

@@ -1,4 +1,4 @@
-import type { DebateContext, DebateRound } from '../types/debate.types';
+import type { DebateContext, DebateRound, AgentClarifications } from '../types/debate.types';
 
 /**
  * Formats debate history into a readable string for LLM prompts.
@@ -76,11 +76,27 @@ export function prependContext(prompt: string, context?: DebateContext, agentId?
     return prompt;
   }
   
-  const contextSection = formatContextSection(context, agentId, includeFullHistory);
-  if (!contextSection) {
-    return prompt;
+  // Render clarifications first (if any), then previous summaries/history
+  const clar = context.clarifications && context.clarifications.length > 0 ? formatClarifications(context.clarifications) : '';
+
+  const rest = formatContextSection(context, agentId, includeFullHistory);
+  const full = `${clar}${clar ? '\n' : ''}${rest}`.trim();
+  if (!full) return prompt;
+  return full + '\n' + prompt;
+}
+
+/**
+ * Formats Clarifications section for prompts, grouped by agent.
+ */
+export function formatClarifications(groups: AgentClarifications[]): string {
+  let text = '## Clarifications\n\n';
+  for (const group of groups) {
+    text += `### ${group.agentName} (${group.role})\n`;
+    for (const item of group.items) {
+      text += `Question (${item.id}):\n\n\`\`\`text\n${item.question}\n\`\`\`\n\n`;
+      text += `Answer:\n\n\`\`\`text\n${item.answer}\n\`\`\`\n\n`;
+    }
   }
-  
-  return contextSection + prompt;
+  return text + '\n';
 }
 

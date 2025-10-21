@@ -1,7 +1,7 @@
 import { Agent } from './agent';
 import { JudgeAgent } from './judge';
 import { StateManager } from './state-manager';
-import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType } from '../types/debate.types';
+import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType, AgentClarifications } from '../types/debate.types';
 import { AgentRole, Critique } from '../types/agent.types';
 
 // Constants for agent activity descriptions used in progress tracking
@@ -18,11 +18,6 @@ function isFulfilled<T>(result: PromiseSettledResult<T>): result is PromiseFulfi
   return result.status === 'fulfilled';
 }
 
-
-/**
- * Optional hooks for receiving debate progress notifications.
- * Useful for CLI logging and progress UI updates during debate execution.
- */
 /**
  * OrchestratorHooks provides optional callbacks for receiving real-time notifications
  * about debate progress. These hooks are intended for use by UI components, logging,
@@ -131,8 +126,11 @@ export class DebateOrchestrator {
    * @param context - Optional additional context for agents and judge.
    * @returns The DebateResult including final solution and metadata.
    */
-  async runDebate(problem: string, context?: string): Promise<DebateResult> {
+  async runDebate(problem: string, context?: string, clarifications?: AgentClarifications[]): Promise<DebateResult> {
     const state = await this.stateManager.createDebate(problem, context);
+    if (clarifications && clarifications.length > 0) {
+      await this.stateManager.setClarifications(state.id, clarifications);
+    }
 
     // Execute N complete rounds: summarization -> proposal -> critique -> refinement
     const total = Math.max(1, this.config.rounds);
@@ -183,6 +181,9 @@ export class DebateOrchestrator {
       base.history = state.rounds;
     }
     base.includeFullHistory = this.config.includeFullHistory;
+    if (state.clarifications) {
+      base.clarifications = state.clarifications;
+    }
     return base as DebateContext;
   }
 

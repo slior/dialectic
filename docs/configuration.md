@@ -53,8 +53,9 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 | `model` | `string` | Yes | The LLM model name to use for this agent. |
 | `provider` | `string` | Yes | The LLM provider. Supports `"openai"` or `"openrouter"`. |
 | `temperature` | `number` | Yes | Sampling temperature for the LLM. |
-|| `systemPromptPath` | `string` | No | Path to a markdown/text file containing the system prompt. If omitted, a built-in prompt for the role is used. |
+| `systemPromptPath` | `string` | No | Path to a markdown/text file containing the system prompt. If omitted, a built-in prompt for the role is used. |
 | `enabled` | `boolean` | No | Whether the agent is enabled. Defaults to `true` if omitted. |
+| `clarificationPromptPath` | `string` | No | Path to a markdown/text file containing the clarifications prompt for this agent. If omitted, a built-in role-specific prompt is used. |
 
 ### Field Details
 
@@ -216,6 +217,8 @@ The `DebateConfig` schema controls how debates execute:
 | `synthesisMethod` | `string` | Yes | Method for synthesizing the final solution. |
 | `includeFullHistory` | `boolean` | Yes | Whether to include full debate history in agent context. |
 | `timeoutPerRound` | `number` | Yes | Maximum time allowed per round in milliseconds. |
+| `interactiveClarifications` | `boolean` | No | Run a one-time pre-debate clarifications phase (default: false). |
+| `clarificationsMaxPerAgent` | `number` | No | Max questions per agent in clarifications phase (default: 5; excess truncated with a warning). |
 
 ### Field Details
 
@@ -686,6 +689,11 @@ If summarization fails due to LLM errors:
 ## Command Line Options
 
 The CLI accepts the following options that can override configuration file settings:
+- ### `--clarify`
+- **Type**: Boolean flag
+- **Description**: Forces a one-time pre-debate clarifications phase regardless of configuration.
+- **Precedence**: Takes precedence over `debate.interactiveClarifications` in the configuration file.
+
 
 ### `debate <problem>`
 - **Description**: Main command to run a debate

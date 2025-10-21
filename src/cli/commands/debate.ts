@@ -1,11 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import readline from 'readline';
 import { Command } from 'commander';
 import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
 import { warnUser, infoUser, writeStderr } from '../index';
 import { SystemConfig } from '../../types/config.types';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource } from '../../types/agent.types';
-import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES, SummarizationConfig } from '../../types/debate.types';
+import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES, SummarizationConfig, AgentClarifications } from '../../types/debate.types';
 import { DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD } from '../../types/config.types';
 import { LLMProvider } from '../../providers/llm-provider';
 import { createProvider } from '../../providers/provider-factory';
@@ -18,9 +19,11 @@ import { loadEnvironmentFile } from '../../utils/env-loader';
 import { Agent } from '../../core/agent';
 import { DebateProgressUI } from '../../utils/progress-ui';
 import { generateDebateReport } from '../../utils/report-generator';
+import { collectClarifications } from '../../core/clarifications';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
+const DEFAULT_CLARIFICATIONS_MAX_PER_AGENT = 5;
 
 // File handling constants
 const FILE_ENCODING_UTF8 = 'utf-8';
@@ -50,6 +53,138 @@ const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 
 // Default summary prompt fallback
 const DEFAULT_SUMMARY_PROMPT_FALLBACK = 'Summarize the following debate history from your perspective, preserving key points and decisions.';
+
+/**
+ * Collects clarifying questions from agents and prompts the user for answers.
+ * Returns the collected clarifications with user-provided answers.
+ * 
+ * @param resolvedProblem - The problem statement to clarify
+ * @param agents - Array of agents to collect questions from
+ * @param maxPerAgent - Maximum questions per agent
+ * @returns Promise resolving to collected clarifications with answers
+ */
+async function collectAndAnswerClarifications( resolvedProblem: string, agents: Agent[], maxPerAgent: number ): Promise<AgentClarifications[]>
+{
+  // Collect questions from agents (grouped, truncated with warnings)
+  const collected: AgentClarifications[] = await collectClarifications( resolvedProblem, agents, maxPerAgent, (msg) => warnUser(msg) );
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+
+  
+  async function askUser(promptText: string): Promise<string> { // Inline helper to convert readline callback to Promise, scoped to this readline instance
+    return await new Promise((resolve) => rl.question(promptText, resolve));
+  }
+
+  try { // Prompt user for answers (empty line => NA)
+    for (const group of collected) {
+      if (group.items.length === 0) continue;
+      writeStderr(`\n[${group.agentName}] Clarifying Questions\n`);
+      for (const item of group.items) {
+        const ans = (await askUser(`Q (${item.id}): ${item.question}\n> `)).trim();
+        item.answer = ans.length === 0 ? 'NA' : ans;
+      }
+    }
+  } finally {
+    rl.close();
+  }
+  
+  return collected;
+}
+
+/**
+ * Creates orchestrator hooks that drive the progress UI during debate execution.
+ * 
+ * @param progressUI - The progress UI instance to drive
+ * @param options - CLI options containing verbose flag
+ * @returns Object containing all orchestrator hook functions
+ */
+function createOrchestratorHooks(progressUI: DebateProgressUI, options: any) {
+  return {
+    onRoundStart: (roundNumber: number, _totalRounds: number) => {
+      progressUI.startRound(roundNumber);
+    },
+    onPhaseStart: (_roundNumber: number, phase: ContributionType, expectedTaskCount: number) => {
+      progressUI.startPhase(phase, expectedTaskCount);
+    },
+    onAgentStart: (agentName: string, activity: string) => {
+      progressUI.startAgentActivity(agentName, activity);
+    },
+    onAgentComplete: (agentName: string, activity: string) => {
+      progressUI.completeAgentActivity(agentName, activity);
+    },
+    onPhaseComplete: (_roundNumber: number, phase: ContributionType) => {
+      progressUI.completePhase(phase);
+    },
+    onSummarizationStart: (agentName: string) => {
+      progressUI.startAgentActivity(agentName, 'summarizing context');
+    },
+    onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
+      progressUI.completeAgentActivity(agentName, 'summarizing context');
+      if (options.verbose) {
+        writeStderr(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars\n`);
+      }
+    },
+    onSynthesisStart: () => {
+      progressUI.startSynthesis();
+    },
+    onSynthesisComplete: () => {
+      progressUI.completeSynthesis();
+    },
+  };
+}
+
+/**
+ * Creates a judge agent with resolved prompts and metadata collection.
+ * 
+ * @param sysConfig - System configuration containing judge settings
+ * @param systemSummaryConfig - System-wide summarization configuration
+ * @param promptSources - Collection object to record prompt source metadata
+ * @returns Configured JudgeAgent instance
+ */
+function createJudgeWithPromptResolution(
+  sysConfig: SystemConfig,
+  systemSummaryConfig: SummarizationConfig,
+  promptSources: { judge: JudgePromptMetadata }
+): JudgeAgent {
+  // Judge prompt resolution
+  const judgeDefault = JudgeAgent.defaultSystemPrompt();
+  const jres = resolvePrompt({ 
+    label: sysConfig.judge!.name, 
+    configDir: sysConfig.configDir || process.cwd(), 
+    ...((sysConfig.judge!.systemPromptPath !== undefined) && { promptPath: sysConfig.judge!.systemPromptPath }), 
+    defaultText: judgeDefault 
+  });
+  
+  // Judge summary prompt resolution
+  const judgeSummaryDefault = JudgeAgent.defaultSummaryPrompt('', systemSummaryConfig.maxLength);
+  const jsres = resolvePrompt({ 
+    label: `${sysConfig.judge!.name} (summary)`, 
+    configDir: sysConfig.configDir || process.cwd(), 
+    ...((sysConfig.judge!.summaryPromptPath !== undefined) && { promptPath: sysConfig.judge!.summaryPromptPath }), 
+    defaultText: judgeSummaryDefault 
+  });
+  
+  const judgeProvider = createProvider(sysConfig.judge!.provider);
+  const judge = new JudgeAgent(
+    sysConfig.judge!,
+    judgeProvider,
+    jres.text,
+    jres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jres.absPath !== undefined && { absPath: jres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN }),
+    systemSummaryConfig,
+    jsres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jsres.absPath !== undefined && { absPath: jsres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN })
+  );
+  
+  // Record prompt source metadata
+  promptSources.judge = { 
+    id: sysConfig.judge!.id, 
+    source: jres.source, 
+    ...(jres.absPath !== undefined && { path: jres.absPath }),
+    summarySource: jsres.source,
+    ...(jsres.absPath !== undefined && { summaryPath: jsres.absPath })
+  };
+  
+  return judge;
+}
 
 /**
  * Returns the built-in default system configuration for the debate system.
@@ -193,9 +328,18 @@ function createAgentWithPromptResolution(
     ? { source: PROMPT_SOURCES.FILE, ...(summaryRes.absPath !== undefined && { absPath: summaryRes.absPath }) }
     : { source: PROMPT_SOURCES.BUILT_IN };
   
+  // Resolve clarification prompt (optional)
+  const clarificationRes = resolvePrompt({
+    label: `${cfg.name} (clarifications)`,
+    configDir,
+    ...(cfg.clarificationPromptPath !== undefined && { promptPath: cfg.clarificationPromptPath }),
+    defaultText: ''
+  });
+
   // Create agent with all resolved parameters
   const agent = RoleBasedAgent.create(  cfg, provider, res.text, promptSource,
-                                        mergedSummaryConfig, summaryPromptSource );
+                                        mergedSummaryConfig, summaryPromptSource,
+                                        clarificationRes.text );
   
   collect.agents.push({
     agentId: cfg.id,
@@ -523,6 +667,7 @@ export function debateCommand(program: Command) {
     .option('-e, --env-file <path>', 'Path to environment file (default: .env)')
     .option('-v, --verbose', 'Verbose output')
     .option('--report <path>', 'Generate markdown report file')
+    .option('--clarify', 'Run a one-time pre-debate clarifications phase')
     .action(async (problem: string | undefined, options: any) => {
       try {
         // Load environment variables from .env file
@@ -549,37 +694,18 @@ export function debateCommand(program: Command) {
 
         const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources);
 
-        // Judge prompt resolution
-        const judgeDefault = JudgeAgent.defaultSystemPrompt();
-        const jres = resolvePrompt({ label: sysConfig.judge!.name, configDir: sysConfig.configDir || process.cwd(), ...((sysConfig.judge!.systemPromptPath !== undefined) && { promptPath: sysConfig.judge!.systemPromptPath }), defaultText: judgeDefault });
-        
-        // Judge summary prompt resolution
-        const judgeSummaryDefault = JudgeAgent.defaultSummaryPrompt('', systemSummaryConfig.maxLength);
-        const jsres = resolvePrompt({ 
-          label: `${sysConfig.judge!.name} (summary)`, 
-          configDir: sysConfig.configDir || process.cwd(), 
-          ...((sysConfig.judge!.summaryPromptPath !== undefined) && { promptPath: sysConfig.judge!.summaryPromptPath }), 
-          defaultText: judgeSummaryDefault 
-        });
-        
-        const judgeProvider = createProvider(sysConfig.judge!.provider);
-        const judge = new JudgeAgent(
-          sysConfig.judge!,
-          judgeProvider,
-          jres.text,
-          jres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jres.absPath !== undefined && { absPath: jres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN }),
-          systemSummaryConfig,
-          jsres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jsres.absPath !== undefined && { absPath: jsres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN })
-        );
-        promptSources.judge = { 
-          id: sysConfig.judge!.id, 
-          source: jres.source, 
-          ...(jres.absPath !== undefined && { path: jres.absPath }),
-          summarySource: jsres.source,
-          ...(jsres.absPath !== undefined && { summaryPath: jsres.absPath })
-        };
+        // Create judge with prompt resolution
+        const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources);
 
         const stateManager = new StateManager();
+
+        // Clarifications phase (optional)
+        const shouldClarify: boolean = (options.clarify === true) || (sysConfig.debate?.interactiveClarifications === true);
+        let finalClarifications: AgentClarifications[] | undefined = undefined;
+        if (shouldClarify) {
+          const maxPer = sysConfig.debate?.clarificationsMaxPerAgent ?? DEFAULT_CLARIFICATIONS_MAX_PER_AGENT;
+          finalClarifications = await collectAndAnswerClarifications(resolvedProblem, agents, maxPer);
+        }
 
         // Verbose header before run
         if (options.verbose) {
@@ -605,44 +731,13 @@ export function debateCommand(program: Command) {
         progressUI.initialize(debateCfg.rounds);
 
         // Create orchestrator hooks to drive progress UI
-        const hooks = {
-          onRoundStart: (roundNumber: number, _totalRounds: number) => {
-            progressUI.startRound(roundNumber);
-          },
-          onPhaseStart: (_roundNumber: number, phase: ContributionType, expectedTaskCount: number) => {
-            progressUI.startPhase(phase, expectedTaskCount);
-          },
-          onAgentStart: (agentName: string, activity: string) => {
-            progressUI.startAgentActivity(agentName, activity);
-          },
-          onAgentComplete: (agentName: string, activity: string) => {
-            progressUI.completeAgentActivity(agentName, activity);
-          },
-          onPhaseComplete: (_roundNumber: number, phase: ContributionType) => {
-            progressUI.completePhase(phase);
-          },
-          onSummarizationStart: (agentName: string) => {
-            progressUI.startAgentActivity(agentName, 'summarizing context');
-          },
-          onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
-            progressUI.completeAgentActivity(agentName, 'summarizing context');
-            if (options.verbose) {
-              writeStderr(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars\n`);
-            }
-          },
-          onSynthesisStart: () => {
-            progressUI.startSynthesis();
-          },
-          onSynthesisComplete: () => {
-            progressUI.completeSynthesis();
-          },
-        };
+        const hooks = createOrchestratorHooks(progressUI, options);
 
         const orchestrator = new DebateOrchestrator(agents, judge, stateManager, debateCfg, hooks);
         
         // Start progress UI and run debate
         await progressUI.start();
-        const result: DebateResult = await orchestrator.runDebate(resolvedProblem);
+        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, undefined, finalClarifications);
         await progressUI.complete();
 
         // Persist prompt sources once per debate

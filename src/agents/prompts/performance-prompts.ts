@@ -42,5 +42,17 @@ ${content}
 Create a concise summary (maximum ${maxLength} characters) that preserves the most important performance insights, optimization decisions, and critical performance requirements. Focus on information that will be useful for future rounds of the debate.`;
     return appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.SUMMARIZATION);
   },
+
+  clarifyPrompt: (problem: string, context?: DebateContext, agentId?: string, includeFullHistory?: boolean) => {
+    const basePrompt = `You are preparing clarifying questions from a performance engineering perspective.
+
+Problem to clarify:
+${problem}
+
+Ask zero or more concise, high-signal questions focused on latency targets, throughput, resource constraints, load profiles, and measurement.
+`;
+    const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
+    return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CLARIFICATION);
+  },
 };
 

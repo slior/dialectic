@@ -51,5 +51,18 @@ export interface RolePrompts {
    * @returns A formatted prompt instructing the agent to summarize the content from their perspective.
    */
   summarizePrompt: (content: string, maxLength: number) => string;
+
+  /**
+   * Generates a user prompt for the clarifications phase, asking zero or more
+   * structured clarifying questions. The LLM must respond with ONLY JSON in the
+   * schema: { "questions": [ { "text": string } ] }.
+   *
+   * @param problem - The problem statement to clarify.
+   * @param context - Optional debate context containing history or summaries.
+   * @param agentId - Optional agent ID for summary/history context selection.
+   * @param includeFullHistory - Whether to fall back to full history when no summary is found.
+   * @returns A formatted prompt instructing the agent to produce structured clarifying questions.
+   */
+  clarifyPrompt: (problem: string, context?: DebateContext, agentId?: string, includeFullHistory?: boolean) => string;
 }
 

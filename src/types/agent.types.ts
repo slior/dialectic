@@ -56,6 +56,8 @@ export interface AgentConfig {
   systemPromptPath?: string;
   /** (Optional) Filesystem path to a markdown/text file containing the summary prompt. Resolved relative to the configuration file directory. */
   summaryPromptPath?: string;
+  /** (Optional) Filesystem path to a markdown/text file containing the clarification questions prompt. Resolved relative to the configuration file directory. */
+  clarificationPromptPath?: string;
   /** (Optional) Per-agent summarization configuration that overrides system-wide settings. */
   summarization?: SummarizationConfig;
   /** (Optional) Whether the agent is enabled; defaults to true if omitted. */

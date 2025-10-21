@@ -1,6 +1,6 @@
 import { Agent } from '../core/agent';
 import { AgentConfig, Proposal, Critique, PromptSource, AgentRole } from '../types/agent.types';
-import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES } from '../types/debate.types';
+import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 import { getPromptsForRole, RolePrompts } from './prompts';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
@@ -37,6 +37,8 @@ export class RoleBasedAgent extends Agent {
   private readonly summaryConfig: SummarizationConfig;
   public readonly summaryPromptSource?: PromptSource;
 
+  private readonly resolvedClarificationPromptText?: string;
+
   /**
    * Private constructor to prevent direct instantiation and extension.
    * Use the static `create` method instead.
@@ -47,10 +49,11 @@ export class RoleBasedAgent extends Agent {
    * @param promptSource - Optional provenance metadata for verbose/persistence.
    * @param summaryConfig - Summarization configuration for this agent.
    * @param summaryPromptSource - Optional provenance metadata for summary prompt.
+   * @param resolvedClarificationPromptText - Optional resolved clarification prompt text.
    */
   private constructor(  config: AgentConfig, provider: LLMProvider, resolvedSystemPrompt: string,
                         promptSource: PromptSource | undefined, summaryConfig: SummarizationConfig,
-                        summaryPromptSource?: PromptSource )
+                        summaryPromptSource?: PromptSource, resolvedClarificationPromptText?: string )
   {
     super(config, provider);
     this.resolvedSystemPrompt = resolvedSystemPrompt;
@@ -63,6 +66,9 @@ export class RoleBasedAgent extends Agent {
 
     if (summaryPromptSource !== undefined) {
       this.summaryPromptSource = summaryPromptSource;
+    }
+    if (resolvedClarificationPromptText !== undefined) {
+      this.resolvedClarificationPromptText = resolvedClarificationPromptText;
     }
     
     // Initialize summarizer if summarization is enabled
@@ -80,14 +86,17 @@ export class RoleBasedAgent extends Agent {
    * @param promptSource - Optional provenance metadata for verbose/persistence.
    * @param summaryConfig - Summarization configuration for this agent.
    * @param summaryPromptSource - Optional provenance metadata for summary prompt.
+   * @param resolvedClarificationPromptText - Optional resolved clarification prompt text.
    * @returns A new RoleBasedAgent instance configured for the specified role.
    */
   static create(  config: AgentConfig, provider: LLMProvider, resolvedSystemPrompt: string,
                   promptSource: PromptSource | undefined, summaryConfig: SummarizationConfig,
-                  summaryPromptSource?: PromptSource ): RoleBasedAgent
+                  summaryPromptSource?: PromptSource,
+                  resolvedClarificationPromptText?: string ): RoleBasedAgent
   {
     return new RoleBasedAgent(  config, provider, resolvedSystemPrompt,
-                                promptSource, summaryConfig, summaryPromptSource );
+                                promptSource, summaryConfig, summaryPromptSource,
+                                resolvedClarificationPromptText );
   }
 
   /**
@@ -170,6 +179,32 @@ export class RoleBasedAgent extends Agent {
     const critiquesText = critiques.map((c, i) => `Critique ${i + 1}:\n${c.content}`).join('\n\n');
     const user = this.rolePrompts.refinePrompt(original.content, critiquesText, context, this.config.id, context.includeFullHistory);
     return this.refineImpl(original, critiques, context, system, user);
+  }
+
+  /**
+   * Ask role-specific clarifying questions. Returns ONLY structured questions.
+   */
+  async askClarifyingQuestions(problem: string, context: DebateContext): Promise<ClarificationQuestionsResponse> {
+    const system = this.resolvedSystemPrompt;
+    let user = this.rolePrompts.clarifyPrompt(problem, context, this.config.id, context.includeFullHistory);
+    if (this.resolvedClarificationPromptText && this.resolvedClarificationPromptText.trim().length > 0) {
+      user = `${user}\n\n${this.resolvedClarificationPromptText}`;
+    }
+    const { text } = await this.callLLM(system, user);
+    try {
+      // Extract first JSON object if any extra tokens sneak in
+      const match = text.match(/\{[\s\S]*\}/);
+      const json = match ? match[0] : text;
+      const parsed = JSON.parse(json);
+      const list = Array.isArray(parsed?.questions) ? parsed.questions : [];
+      const normalized = list
+        .filter((q: any) => typeof q?.text === 'string' && q.text.trim().length > 0)
+        .map((q: any, idx: number) => ({ id: q.id || `q${idx + 1}`, text: q.text }));
+      return { questions: normalized };
+    } catch (err: any) {
+      writeStderr(`Warning: Agent ${this.config.name}: Invalid clarifications JSON. Error: ${err.message}\n`);
+      return { questions: [] };
+    }
   }
 
   

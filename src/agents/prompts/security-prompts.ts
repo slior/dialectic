@@ -42,5 +42,15 @@ ${content}
 Create a concise summary (maximum ${maxLength} characters) that preserves the most important security insights, threat models, and security decisions. Focus on information that will be useful for future rounds of the debate.`;
     return appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.SUMMARIZATION);
   },
+
+  clarifyPrompt: (problem: string, context?: DebateContext, agentId?: string, includeFullHistory?: boolean) => {
+    const basePrompt = `You are preparing clarifying questions from a security perspective.
+
+Problem to clarify:
+${problem}
+`;
+    const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
+    return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CLARIFICATION);
+  },
 };
 

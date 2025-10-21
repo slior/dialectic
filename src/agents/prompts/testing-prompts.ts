@@ -42,5 +42,17 @@ ${content}
 Create a concise summary (maximum ${maxLength} characters) that preserves the most important testing insights, quality requirements, and testability decisions. Focus on information that will be useful for future rounds of the debate.`;
     return appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.SUMMARIZATION);
   },
+
+  clarifyPrompt: (problem: string, context?: DebateContext, agentId?: string, includeFullHistory?: boolean) => {
+    const basePrompt = `You are preparing clarifying questions from a testing and quality perspective.
+
+Problem to clarify:
+${problem}
+
+Ask zero or more concise, high-signal questions focused on acceptance criteria, quality thresholds, test environments, and edge cases.
+`;
+    const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
+    return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CLARIFICATION);
+  },
 };
 

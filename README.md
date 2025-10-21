@@ -52,6 +52,12 @@ dialectic debate "Design a secure authentication system" --agents architect,secu
 dialectic debate "Build a high-performance API" --agents architect,performance,security
 ```
 
+**With clarifications phase:**
+```bash
+dialectic debate "Design a rate limiting system" --clarify
+dialectic debate --problemDescription complex-problem.md --clarify --agents architect,security,performance
+```
+
 **Available options:**
 
 - `--problemDescription <path>`: Path to a text file containing the problem description (mutually exclusive with problem string)
@@ -69,6 +75,10 @@ dialectic debate "Build a high-performance API" --agents architect,performance,s
   - If the path does not end with `.md`, the extension is appended automatically
   - Creates parent directories as needed
   - Non-fatal on failure (debate still succeeds even if report generation fails)
+- `--clarify`: Run a one-time pre-debate clarifications phase
+  - Each agent can ask up to 5 clarifying questions (configurable)
+  - Interactive Q&A session before the debate begins
+  - Questions and answers are included in the debate context and final report
 
 ### Problem Description Files
 
@@ -113,6 +123,9 @@ dialectic debate --problemDescription problems/rate-limiting.md --verbose --repo
 Report contents:
 - Problem Description
 - Agents table and Judge table
+- Clarifications (if `--clarify` was used):
+  - Questions and answers grouped by agent
+  - Includes "NA" responses for skipped questions
 - Rounds with sections:
   - Proposals
   - Critiques
@@ -139,6 +152,35 @@ Notes:
 | `2` | Invalid CLI arguments (e.g., missing problem, invalid rounds) |
 | `3` | Provider error (reserved for future use) |
 | `4` | Configuration error (e.g., missing `OPENAI_API_KEY`) |
+
+### Interactive Clarifications
+
+The `--clarify` option enables a pre-debate interactive clarification phase where agents can ask clarifying questions about the problem statement. This feature helps ensure all agents have a clear understanding before the debate begins.
+
+**How it works:**
+1. Each participating agent generates up to 5 clarifying questions (configurable via `clarificationsMaxPerAgent` in config)
+2. The CLI presents questions grouped by agent in an interactive session
+3. You can answer each question or press Enter to skip (recorded as "NA")
+4. Questions and answers are included in the debate context and final report
+5. The judge does not participate in the clarification phase
+
+**Configuration options:**
+- `debate.interactiveClarifications`: Enable clarifications by default (boolean, default: false)
+- `debate.clarificationsMaxPerAgent`: Maximum questions per agent (number, default: 5)
+- `AgentConfig.clarificationPromptPath`: Custom clarification prompt for specific agents
+
+**Example workflow:**
+```bash
+dialectic debate "Design a distributed cache system" --clarify
+# Agents ask questions like:
+# [Architect] Q1: What are the expected read/write ratios?
+# > 80% reads, 20% writes
+# [Performance] Q2: What's the target latency requirement?
+# > < 10ms for 95th percentile
+# [Security] Q3: What data sensitivity level?
+# > (press Enter to skip)
+# Q3: NA
+```
 
 ### Configuration
 

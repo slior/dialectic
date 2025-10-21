@@ -1,5 +1,5 @@
 import { AgentConfig, Proposal, Critique, ContributionMetadata } from '../types/agent.types';
-import { DebateContext, ContextPreparationResult } from '../types/debate.types';
+import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 import { CompletionResponse, CompletionUsage } from '../providers/llm-provider';
 
@@ -80,6 +80,15 @@ export abstract class Agent {
    * @returns A promise resolving to the context preparation result.
    */
   abstract prepareContext( context: DebateContext, roundNumber: number ): Promise<ContextPreparationResult>;
+
+  /**
+   * Requests role-specific clarifying questions before the debate starts.
+   * Implementations should return ONLY structured questions; zero or more items are allowed.
+   *
+   * @param problem - The software design problem to clarify.
+   * @param context - The current debate context.
+   */
+  abstract askClarifyingQuestions(problem: string, context: DebateContext): Promise<ClarificationQuestionsResponse>;
 
   /**
    * Template method for generating proposals.

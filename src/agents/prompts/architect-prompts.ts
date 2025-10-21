@@ -42,5 +42,17 @@ ${content}
 Create a concise summary (maximum ${maxLength} characters) that preserves the most important architectural insights, decisions, and open questions. Focus on information that will be useful for future rounds of the debate.`;
     return appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.SUMMARIZATION);
   },
+
+  clarifyPrompt: (problem: string, context?: DebateContext, agentId?: string, includeFullHistory?: boolean) => {
+    const basePrompt = `You are preparing clarifying questions from an architectural perspective.
+
+Problem to clarify:
+${problem}
+
+Ask zero or more concise, high-signal questions focused on scalability, performance, component boundaries, interfaces, architectural patterns, data flow, state management, and operational concerns.
+`;
+    const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
+    return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CLARIFICATION);
+  },
 };
 

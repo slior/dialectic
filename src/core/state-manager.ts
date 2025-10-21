@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { Contribution, DebateRound, DebateState, Solution, DebateSummary, DEBATE_STATUS } from '../types/debate.types';
+import { Contribution, DebateRound, DebateState, Solution, DebateSummary, DEBATE_STATUS, AgentClarifications } from '../types/debate.types';
 
 // File-level constants to eliminate magic strings and improve clarity
 const DEFAULT_DEBATES_DIR = 'debates';
@@ -122,6 +122,19 @@ export class StateManager {
     if (!state) throw new Error(`Debate ${debateId} not found`);
 
     state.judgeSummary = summary;
+    state.updatedAt = new Date();
+    await this.save(state);
+  }
+
+  /**
+   * Persists clarifications (Q&A) collected before round 1.
+   * @param debateId - The unique identifier of the debate.
+   * @param clarifications - Grouped clarifications by agent.
+   */
+  async setClarifications(debateId: string, clarifications: AgentClarifications[]): Promise<void> {
+    const state = this.debates.get(debateId);
+    if (!state) throw new Error(`Debate ${debateId} not found`);
+    state.clarifications = clarifications;
     state.updatedAt = new Date();
     await this.save(state);
   }
