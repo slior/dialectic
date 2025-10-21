@@ -87,34 +87,6 @@ dialectic debate --problemDescription complex-problem.md
 dialectic debate --problemDescription ./problems/rate-limiting.txt
 ```
 
-#### Troubleshooting
-
-**Common errors:**
-
-- **"Invalid arguments: provide exactly one of <problem> or --problemDescription"**
-  - Use either a string problem OR `--problemDescription`, not both
-
-- **"Invalid arguments: problem is required (provide <problem> or --problemDescription)"**
-  - Provide either a problem string or `--problemDescription` option
-
-- **"Invalid arguments: problem description file not found: <path>"**
-  - Verify the file path exists and is accessible
-
-- **"Invalid arguments: problem description file is empty: <path>"**
-  - Add content to the file (whitespace-only files are considered empty)
-
-- **"Invalid arguments: problem description path is a directory: <path>"**
-  - Provide a file path, not a directory path
-
-- **"Failed to read problem description file: <error>"**
-  - Check file permissions and available disk space
-
-- **"Environment file not found: <path>"**
-  - Ensure the specified `.env` file exists, or omit `--env-file` to use default behavior
-
-- **"Failed to load environment file: <error>"**
-  - Verify `.env` file format: `KEY=value` pairs, one per line
-
 ### Output
 
 **Default behavior:**
@@ -171,75 +143,8 @@ Notes:
 ### Configuration
 
 Debate behavior is configured via a JSON file (default: `./debate-config.json`). If the file is missing, built-in defaults are used.
-
-**Configuration file structure:**
-- `agents`: Array of agent configurations defining the agent pool
-- `judge`: Judge agent configuration for synthesis
-- `debate`: Debate execution settings (rounds, termination, synthesis method)
-
 For detailed configuration documentation, including all fields, validation rules, and examples, see [docs/configuration.md](docs/configuration.md).
 
-**Default configuration values:**
-
-- **Agents**: 
-  - System Architect (role: `architect`, model: `gpt-4`, temperature: `0.5`)
-  - Performance Engineer (role: `performance`, model: `gpt-4`, temperature: `0.5`)
-- **Judge**: 
-  - Technical Judge (role: `generalist`, model: `gpt-4`, temperature: `0.3`)
-- **Debate settings**:
-  - Rounds: `3`
-  - Termination: `{ "type": "fixed" }`
-  - Synthesis method: `"judge"`
-  - Include full history: `true`
-  - Timeout per round: `300000` ms (5 minutes)
-
-**Example configuration (OpenAI):**
-```json
-{
-  "agents": [
-    {
-      "id": "agent-architect",
-      "name": "System Architect",
-      "role": "architect",
-      "model": "gpt-4",
-      "provider": "openai",
-      "temperature": 0.5
-    },
-    {
-      "id": "agent-security",
-      "name": "Security Expert",
-      "role": "security",
-      "model": "gpt-4",
-      "provider": "openai",
-      "temperature": 0.4
-    }
-  ]
-}
-```
-
-**Example configuration (OpenRouter with mixed providers):**
-```json
-{
-  "agents": [
-    {
-      "id": "agent-architect",
-      "name": "System Architect",
-      "role": "architect",
-      "model": "openai/gpt-4",
-      "provider": "openrouter",
-      "temperature": 0.5
-    },
-    {
-      "id": "agent-security",
-      "name": "Security Expert",
-      "role": "security",
-      "model": "gpt-4",
-      "provider": "openai",
-      "temperature": 0.4
-    }
-  ]
-}
-```
 
 ## Technical Details
 

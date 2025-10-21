@@ -171,6 +171,11 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 }
 ```
 
+### Default agents values:
+
+- System Architect (role: `architect`, model: `gpt-4`, temperature: `0.5`)
+- Performance Engineer (role: `performance`, model: `gpt-4`, temperature: `0.5`)
+
 ## Judge Configuration
 
 The judge is a special agent that synthesizes the final solution after all debate rounds complete. It uses the same `AgentConfig` schema as regular agents.
