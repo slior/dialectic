@@ -57,7 +57,11 @@ export class JudgeAgent {
     
     // Initialize summarizer if summarization is enabled
     if (summaryConfig.enabled) {
-      this.summarizer = new LengthBasedSummarizer(provider);
+      this.summarizer = new LengthBasedSummarizer(provider, {
+        model: this.config.model,
+        temperature: this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+        provider: this.config.provider,
+      });
     }
   }
 

@@ -309,6 +309,9 @@ describe('RoleBasedAgent - prepareContext()', () => {
     expect(result.summary?.agentId).toBe('test-agent');
     expect(result.summary?.agentRole).toBe(AGENT_ROLES.ARCHITECT);
     expect(result.summary?.summary).toBe('Generated summary text');
+    expect(result.summary?.metadata.model).toBe(agentConfig.model);
+    expect(result.summary?.metadata.temperature).toBe(agentConfig.temperature);
+    expect(result.summary?.metadata.provider).toBe(agentConfig.provider);
   });
 
   it('should filter history to agent perspective', async () => {
@@ -397,6 +400,9 @@ describe('RoleBasedAgent - prepareContext()', () => {
     expect(result.summary?.metadata.afterChars).toBe('Summary text'.length);
     expect(result.summary?.metadata.method).toBe(SUMMARIZATION_METHODS.LENGTH_BASED);
     expect(result.summary?.metadata.timestamp).toBeInstanceOf(Date);
+    expect(result.summary?.metadata.model).toBe(agentConfig.model);
+    expect(result.summary?.metadata.temperature).toBe(agentConfig.temperature);
+    expect(result.summary?.metadata.provider).toBe(agentConfig.provider);
   });
 
   it('should fallback to full history on error with warning', async () => {

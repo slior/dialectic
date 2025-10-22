@@ -32,9 +32,9 @@ describe('LengthBasedSummarizer', () => {
     method: SUMMARIZATION_METHODS.LENGTH_BASED,
   };
 
-  it('should return summary with correct metadata', async () => {
+  it('should return summary with correct metadata (configured values)', async () => {
     const provider = new MockLLMProvider('Test summary content');
-    const summarizer = new LengthBasedSummarizer(provider);
+    const summarizer = new LengthBasedSummarizer(provider, { model: 'gpt-4o', temperature: 0.55, provider: 'openai' as any });
     
     const content = 'This is the debate history to summarize.';
     const role = AGENT_ROLES.ARCHITECT;
@@ -50,9 +50,12 @@ describe('LengthBasedSummarizer', () => {
     expect(result.metadata.timestamp).toBeInstanceOf(Date);
     expect(result.metadata.latencyMs).toBeGreaterThanOrEqual(0);
     expect(result.metadata.tokensUsed).toBe(100);
+    expect(result.metadata.model).toBe('gpt-4o');
+    expect(result.metadata.temperature).toBe(0.55);
+    expect(result.metadata.provider).toBe('openai');
   });
 
-  it('should call LLM provider with correct prompts', async () => {
+  it('should call LLM provider with correct prompts (defaults as fallbacks)', async () => {
     const provider = new MockLLMProvider();
     const completeSpy = jest.spyOn(provider, 'complete');
     const summarizer = new LengthBasedSummarizer(provider);

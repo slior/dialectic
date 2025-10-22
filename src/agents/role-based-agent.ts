@@ -73,7 +73,11 @@ export class RoleBasedAgent extends Agent {
     
     // Initialize summarizer if summarization is enabled
     if (summaryConfig.enabled) {
-      this.summarizer = new LengthBasedSummarizer(provider);
+      this.summarizer = new LengthBasedSummarizer(provider, {
+        model: config.model,
+        temperature: config.temperature,
+        provider: config.provider,
+      });
     }
   }
 

@@ -486,7 +486,7 @@ Summarization happens at the beginning of each round, before the proposal phase:
    - Their own refinements
 3. **Calculation**: Total character count is calculated from filtered history
 4. **Trigger**: If count >= threshold, summarization is performed
-5. **LLM Call**: Agent uses configured model and temperature to generate summary
+5. **LLM Call**: Agent uses configured model, temperature, and provider to generate summary (falls back to defaults if not provided: model `gpt-4`, temperature `0.3`)
 6. **Storage**: Summary and metadata are persisted as `round.summaries[agentId] = summary` (keyed by agent ID)
 
 **Judge Summarization**: The judge also performs summarization during the synthesis phase if the final round's proposals and refinements exceed the threshold. The judge's summary is stored separately in `DebateState.judgeSummary`.

@@ -32,7 +32,7 @@ Summarization happens **at the beginning of each round**, before the proposal ph
 
 1. **Evaluation**: Each agent calculates the total character count of their perspective-based history
 2. **Decision**: If the count exceeds the configured threshold (default: 5000 characters), summarization is triggered
-3. **Generation**: The agent calls an LLM to create a concise summary (max length: 2500 characters by default)
+3. **Generation**: The agent calls an LLM to create a concise summary (max length: 2500 characters by default) using the agent's configured model, temperature, and provider (with fallbacks)
 4. **Storage**: The summary and metadata are persisted in the debate state
 5. **Usage**: The agent uses the summary instead of full history for subsequent debate phases in this round
 
@@ -48,7 +48,7 @@ For each agent:
       ├─> Below threshold? → Use full history (no summarization)
       └─> Above threshold? → Generate summary
           ├─> Filter history to agent's perspective
-          ├─> Call LLM with summarization prompt
+          ├─> Call LLM with summarization prompt (using configured model/temperature/provider with fallbacks)
           ├─> Store summary with metadata
           └─> Use summary for this round's debate phases
 
@@ -57,7 +57,7 @@ Synthesis phase starts
 Judge:
   └─> Calculate character count of final round's proposals and refinements
       ├─> Below threshold? → Use full history for synthesis
-      └─> Above threshold? → Generate summary
+      └─> Above threshold? → Generate summary (using judge-configured model/temperature/provider with fallbacks)
           ├─> Filter to final round's proposals and refinements
           ├─> Call LLM with judge-specific summarization prompt
           ├─> Store summary in DebateState.judgeSummary
@@ -193,6 +193,9 @@ interface DebateSummary {
     timestamp: Date;
     latencyMs?: number;
     tokensUsed?: number;
+    model?: string;
+    temperature?: number;
+    provider?: 'openai' | 'openrouter';
   };
 }
 ```

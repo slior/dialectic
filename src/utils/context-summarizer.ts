@@ -1,4 +1,4 @@
-import type { AgentRole } from '../types/agent.types';
+import type { AgentRole, LLM_PROVIDERS } from '../types/agent.types';
 import type { SummarizationConfig, SummarizationMetadata } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 
@@ -51,7 +51,28 @@ export interface ContextSummarizer {
  * Summarizes content when it exceeds a character threshold.
  */
 export class LengthBasedSummarizer implements ContextSummarizer {
-  constructor(private provider: LLMProvider) {}
+  private readonly model?: string;
+  private readonly temperature?: number;
+  private readonly providerName?: typeof LLM_PROVIDERS[keyof typeof LLM_PROVIDERS];
+
+  constructor(
+    private provider: LLMProvider,
+    options?: { 
+      model?: string; 
+      temperature?: number; 
+      provider?: typeof LLM_PROVIDERS[keyof typeof LLM_PROVIDERS]; 
+    }
+  ) {
+    if (options && options.model !== undefined) {
+      this.model = options.model;
+    }
+    if (options && options.temperature !== undefined) {
+      this.temperature = options.temperature;
+    }
+    if (options && options.provider !== undefined) {
+      this.providerName = options.provider;
+    }
+  }
 
   /**
    * Summarizes content using an LLM call with role-specific prompts.
@@ -73,10 +94,13 @@ export class LengthBasedSummarizer implements ContextSummarizer {
     const beforeChars = content.length;
     const startTime = Date.now();
 
-    // Call LLM to generate summary
+    // Call LLM to generate summary using configured values with fallbacks
+    const selectedModel = this.model ?? DEFAULT_SUMMARY_MODEL;
+    const selectedTemperature = this.temperature ?? DEFAULT_SUMMARY_TEMPERATURE;
+
     const response = await this.provider.complete({
-      model: DEFAULT_SUMMARY_MODEL,
-      temperature: DEFAULT_SUMMARY_TEMPERATURE,
+      model: selectedModel,
+      temperature: selectedTemperature,
       systemPrompt,
       userPrompt: summaryPrompt,
     });
@@ -101,6 +125,13 @@ export class LengthBasedSummarizer implements ContextSummarizer {
 
     if (response.usage?.totalTokens != null) {
       metadata.tokensUsed = response.usage.totalTokens;
+    }
+
+    // Record model, temperature, and provider used for summarization
+    metadata.model = selectedModel;
+    metadata.temperature = selectedTemperature;
+    if (this.providerName) {
+      metadata.provider = this.providerName;
     }
 
     return {

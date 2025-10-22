@@ -1,4 +1,4 @@
-import { AgentRole, AgentPromptMetadata, JudgePromptMetadata } from './agent.types';
+import { AgentRole, AgentPromptMetadata, JudgePromptMetadata, LLM_PROVIDERS } from './agent.types';
 
 /** String literal constants for termination types */
 export const TERMINATION_TYPES = {
@@ -59,6 +59,9 @@ export interface SummarizationMetadata {
   timestamp: Date; /** When the summarization occurred. */
   latencyMs?: number; /** Optional latency in milliseconds for the summarization LLM call. */
   tokensUsed?: number; /** Optional number of tokens used in the summarization LLM call. */
+  model?: string; /** Optional model used for the summarization. */
+  temperature?: number; /** Optional temperature used for the summarization. */
+  provider?: typeof LLM_PROVIDERS[keyof typeof LLM_PROVIDERS]; /** Optional provider used for the summarization. */
 }
 
 /**
