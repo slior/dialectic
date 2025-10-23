@@ -27,6 +27,7 @@ const ANSI_CLEAR_LINE = '\x1b[2K';  // Clear entire line
 
 // UI styling constants
 const SPINNER_ICON = '⠋';
+const SUMMARIZATION_SECTION_LABEL = 'Summarization';
 const COLOR_STRUCTURE = chalk.blue;      // Blue for lines and round header
 const COLOR_SPINNER = chalk.cyan;        // Cyan (lighter blue) for spinner icon
 
@@ -81,6 +82,17 @@ export class DebateProgressUI {
   async start(): Promise<void> {
     // Clear any previous output
     this.clearOutput();
+  }
+
+  /**
+   * Writes a log message to stderr without leaving orphaned UI artifacts.
+   * Clears the current UI, writes the message, then redraws the UI.
+   */
+  log(message: string): void {
+    this.clearOutput();
+    const text = message.endsWith('\n') ? message : `${message}\n`;
+    writeStderr(text);
+    this.updateDisplay();
   }
 
   /**
@@ -263,6 +275,14 @@ export class DebateProgressUI {
           });
         });
       }
+    } else if (this.state.agentActivity.size > 0) {
+      // No active phase, but there are activities (e.g., summarization)
+      lines.push(COLOR_STRUCTURE('│  ') + SUMMARIZATION_SECTION_LABEL);
+      this.state.agentActivity.forEach((activities, agentName) => {
+        activities.forEach((activity) => {
+          lines.push(COLOR_STRUCTURE('│  ') + COLOR_SPINNER(SPINNER_ICON) + ` ${agentName} ${activity}...`);
+        });
+      });
     }
     
     lines.push(COLOR_STRUCTURE('└─'));

@@ -99,6 +99,7 @@ async function collectAndAnswerClarifications( resolvedProblem: string, agents: 
  * @returns Object containing all orchestrator hook functions
  */
 function createOrchestratorHooks(progressUI: DebateProgressUI, options: any) {
+  const SUMMARY_ACTIVITY_LABEL = 'summarizing context';
   return {
     onRoundStart: (roundNumber: number, _totalRounds: number) => {
       progressUI.startRound(roundNumber);
@@ -116,13 +117,17 @@ function createOrchestratorHooks(progressUI: DebateProgressUI, options: any) {
       progressUI.completePhase(phase);
     },
     onSummarizationStart: (agentName: string) => {
-      progressUI.startAgentActivity(agentName, 'summarizing context');
+      progressUI.startAgentActivity(agentName, SUMMARY_ACTIVITY_LABEL);
     },
     onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
-      progressUI.completeAgentActivity(agentName, 'summarizing context');
+      progressUI.completeAgentActivity(agentName, SUMMARY_ACTIVITY_LABEL);
       if (options.verbose) {
-        writeStderr(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars\n`);
+        progressUI.log(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars`);
       }
+    },
+    // Ensure activity is cleared even when no summary is produced
+    onSummarizationEnd: (agentName: string) => {
+      progressUI.completeAgentActivity(agentName, SUMMARY_ACTIVITY_LABEL);
     },
     onSynthesisStart: () => {
       progressUI.startSynthesis();

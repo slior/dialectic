@@ -86,6 +86,11 @@ interface OrchestratorHooks {
    * @param afterChars - Character count after summarization.
    */
   onSummarizationComplete?: (agentName: string, beforeChars: number, afterChars: number) => void;
+  /**
+   * Called at the end of summarization for an agent even if no summary was produced,
+   * allowing the UI to clear any pending activity.
+   */
+  onSummarizationEnd?: (agentName: string) => void;
 }
 
 /**
@@ -215,6 +220,9 @@ export class DebateOrchestrator {
         // Summary was created - store it and invoke completion hook
         await this.stateManager.addSummary(state.id, result.summary);
         this.hooks?.onSummarizationComplete?.( agent.config.name, result.summary.metadata.beforeChars, result.summary.metadata.afterChars );
+      } else {
+        // Ensure UI activity is cleared even when no summary is produced
+        this.hooks?.onSummarizationEnd?.(agent.config.name);
       }
       
       // Store the prepared context for this agent
@@ -261,6 +269,27 @@ export class DebateOrchestrator {
   }
 
   /**
+   * Invokes an agent's LLM to produce a proposal contribution for the current round.
+   *
+   * This method resolves the prepared context for the agent (if provided; otherwise falls back to a full buildContext),
+   * calls the agent's `propose` method to obtain the proposal, and wraps the result as a normalized Contribution object,
+   * including proper metadata such as tokens used, latency, and model identifier.
+   * 
+   * @param agent - The agent instance generating the proposal.
+   * @param state - The current debate state, including problem and full debate context.
+   * @param preparedContexts - A map of agent IDs to their prepared context objects (possibly summarized).
+   * @param startedAtMs - The wall-clock timestamp (in ms) when the agent's proposal process started, 
+   *                      used as a fallback for latency computation.
+   * @returns A Promise resolving to the constructed proposal Contribution, ready to be added to debate state.
+   */
+  private async buildProposalContributionFromLLM( agent: Agent, state: DebateState, preparedContexts: Map<string, DebateContext>, startedAtMs: number ): Promise<Contribution>
+  {
+    const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
+    const proposal = await agent.propose(state.problem, ctx);
+    return this.buildContribution( agent, CONTRIBUTION_TYPES.PROPOSAL, proposal.content, proposal.metadata, startedAtMs );
+  }
+
+  /**
    * Generates initial proposals from all agents for the given debate state.
    * Uses a helper to unify contribution metadata handling.
    * @param state - Current debate state.
@@ -270,68 +299,31 @@ export class DebateOrchestrator {
   private async proposalPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) {
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.PROPOSAL, this.agents.length);
 
-    // Round 1: generate proposals via LLM
-    if (roundNumber === 1) {
-      await Promise.all(
-        this.agents.map(async (agent) => {
-          this.hooks?.onAgentStart?.(agent.config.name, ACTIVITY_PROPOSING);
-          const started = Date.now();
-          const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
-          const proposal = await agent.propose(state.problem, ctx);
-          const contribution = this.buildContribution(
-            agent,
-            CONTRIBUTION_TYPES.PROPOSAL,
-            proposal.content,
-            proposal.metadata,
-            started
-          );
-          await this.stateManager.addContribution(state.id, contribution);
-          this.hooks?.onAgentComplete?.(agent.config.name, ACTIVITY_PROPOSING);
-        })
-      );
-      return;
-    }
-
-    // Rounds >= 2: carry over prior round refinements as this round's proposals; fallback to LLM if missing
-    const prevRoundIndex = state.rounds.length - 2; // previous round before the one just begun
+    // Determine previous round once (if applicable). beginRound() appended the current round,
+    // so the prior round resides at length - 2 (persisted state order).
+    const prevRoundIndex = state.rounds.length - 2;
     const prevRound: DebateRound | undefined = prevRoundIndex >= 0 ? state.rounds[prevRoundIndex] : undefined;
 
     await Promise.all(
       this.agents.map(async (agent) => {
         this.hooks?.onAgentStart?.(agent.config.name, ACTIVITY_PROPOSING);
         const started = Date.now();
-
-        // Attempt to find the agent's refinement from the previous round
-        const prevRefinement = (prevRound?.contributions || []).find(
-          (c) => c.type === CONTRIBUTION_TYPES.REFINEMENT && c.agentId === agent.config.id
-        );
-
-        if (prevRefinement) {
-          // Create a proposal from the prior refinement with zeroed tokens/latency
-          const carryMetadata = { tokensUsed: 0, latencyMs: 0 } as Contribution['metadata'];
-          const contribution = this.buildContribution(
-            agent,
-            CONTRIBUTION_TYPES.PROPOSAL,
-            prevRefinement.content,
-            carryMetadata,
-            started
-          );
-          await this.stateManager.addContribution(state.id, contribution);
-          this.hooks?.onAgentComplete?.(agent.config.name, ACTIVITY_PROPOSING);
-          return;
+        let contribution: Contribution | undefined;
+        if (roundNumber === 1) {
+          contribution = await this.buildProposalContributionFromLLM(agent, state, preparedContexts, started);
         }
+        else { // Rounds >= 2: carry over prior round refinements as this round's proposals; fallback to LLM if missing
 
-        // Fallback: warn and perform LLM proposal
-        writeStderr(`Warning: [Round ${roundNumber}] Missing previous refinement for ${agent.config.name}; falling back to LLM proposal.\n`);
-        const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
-        const proposal = await agent.propose(state.problem, ctx);
-        const contribution = this.buildContribution(
-          agent,
-          CONTRIBUTION_TYPES.PROPOSAL,
-          proposal.content,
-          proposal.metadata,
-          started
-        );
+          const prevRefinement = (prevRound?.contributions || []).find((c) => c.type === CONTRIBUTION_TYPES.REFINEMENT && c.agentId === agent.config.id);
+          if (prevRefinement) {
+            const carryMetadata = { tokensUsed: 0, latencyMs: 0 } as Contribution['metadata'];
+            contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.PROPOSAL, prevRefinement.content, carryMetadata, started );
+          }
+          else { // Fallback: warn and perform LLM proposal
+            writeStderr(`Warning: [Round ${roundNumber}] Missing previous refinement for ${agent.config.name}; falling back to LLM proposal.\n`);
+            contribution = await this.buildProposalContributionFromLLM(agent, state, preparedContexts, started);
+          }
+        }
         await this.stateManager.addContribution(state.id, contribution);
         this.hooks?.onAgentComplete?.(agent.config.name, ACTIVITY_PROPOSING);
       })
