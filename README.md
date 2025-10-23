@@ -195,6 +195,10 @@ For detailed configuration documentation, including all fields, validation rules
 - **OpenRouter**: Integration with OpenRouter API using OpenAI SDK for compatibility
 - Both providers support Responses API with fallback to Chat Completions API
 
+**Debate Round Flow:**
+- Round 1: Proposals are generated via LLM, then critiques, then refinements.
+- Rounds ≥ 2: Each agent's proposal is the previous round's refinement (no LLM call). If a prior refinement is missing, the system warns to stderr and falls back to generating a proposal via LLM for that agent only. Critiques and refinements proceed as usual against the current round's proposals.
+
 **Debate Persistence:**
 - Debate states are saved to `./debates/` directory
 - Filename format: `deb-YYYYMMDD-HHMMSS-RAND.json`

@@ -97,20 +97,39 @@ sequenceDiagram
         end
         
         Orch->>Orch: proposalPhase(state, preparedContexts)
-        loop For each agent
-            Orch->>Agents: agent.propose(problem, preparedContext)
-            Agents->>Agents: prepare prompts
-            Agents->>Provider: complete(systemPrompt, userPrompt)
-            Provider->>Provider: try Responses API
-            alt Responses API available
-                Provider->>Provider: call responses.create()
-            else Fallback
-                Provider->>Provider: call chat.completions.create()
+        alt Round 1
+            loop For each agent
+                Orch->>Agents: agent.propose(problem, preparedContext)
+                Agents->>Agents: prepare prompts
+                Agents->>Provider: complete(systemPrompt, userPrompt)
+                Provider->>Provider: try Responses API
+                alt Responses API available
+                    Provider->>Provider: call responses.create()
+                else Fallback
+                    Provider->>Provider: call chat.completions.create()
+                end
+                Provider-->>Agents: {text, usage, latency}
+                Agents-->>Orch: Proposal {content, metadata}
+                Orch->>SM: addContribution(debateId, contribution)
+                SM->>FS: save updated state JSON
             end
-            Provider-->>Agents: {text, usage, latency}
-            Agents-->>Orch: Proposal {content, metadata}
-            Orch->>SM: addContribution(debateId, contribution)
-            SM->>FS: save updated state JSON
+        else Rounds ≥ 2
+            loop For each agent
+                Orch->>SM: read previous round refinement (agent)
+                alt Refinement found
+                    Orch->>Orch: convert refinement → proposal (tokens=0, latency=0)
+                    Orch->>SM: addContribution(debateId, proposal)
+                    SM->>FS: save updated state JSON
+                else Refinement missing
+                    Orch-->>CLI: writeStderr("Warning: Missing previous refinement; falling back to LLM proposal")
+                    Orch->>Agents: agent.propose(problem, preparedContext)
+                    Agents->>Provider: complete(systemPrompt, userPrompt)
+                    Provider-->>Agents: {text, usage, latency}
+                    Agents-->>Orch: Proposal {content, metadata}
+                    Orch->>SM: addContribution(debateId, contribution)
+                    SM->>FS: save updated state JSON
+                end
+            end
         end
         
         Orch->>Orch: critiquePhase(state)
@@ -689,7 +708,7 @@ Each agent independently prepares and potentially summarizes their debate histor
 ##### 13.3.3 Proposal Phase
 **Method**: `proposalPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>)`
 
-All agents generate proposals in parallel for this round.
+All agents produce proposals in parallel for this round.
 
 **Phase Start**:
 1. Builds `DebateContext` from current state (includes full history if configured)
@@ -697,11 +716,17 @@ All agents generate proposals in parallel for this round.
 
 **For each agent (parallel execution)**:
 1. **Hook Invoked**: `onAgentStart(agentName, 'proposing')` - Notifies progress UI that agent is starting
-2. Calls `agent.propose(problem, context)`
-   - Agent prepares role-specific prompts
-   - Calls `proposeImpl()` which invokes `callLLM()`
-   - `callLLM()` measures latency and calls `provider.complete()`
-   - Returns `Proposal` with content and metadata (tokens, latency, model)
+2. Behavior by round:
+   - Round 1: Calls `agent.propose(problem, context)`
+     - Agent prepares role-specific prompts
+     - Calls `proposeImpl()` which invokes `callLLM()`
+     - `callLLM()` measures latency and calls `provider.complete()`
+     - Returns `Proposal` with content and metadata (tokens, latency, model)
+   - Rounds ≥ 2: Uses the agent's refinement from the previous round as the proposal (no LLM call)
+     - Finds previous round refinement for the same agent
+     - Creates a new `proposal` contribution whose content equals that refinement
+     - Metadata is set with `tokensUsed=0`, `latencyMs=0`, and `model` recorded
+     - If a prior refinement is missing, a warning is written to stderr and the system falls back to `agent.propose(problem, context)` for that agent only
 3. Builds `Contribution` object with type "proposal" and normalized metadata
 4. Calls `stateManager.addContribution()` to persist contribution to current round
 5. State manager saves updated JSON to disk
@@ -944,7 +969,7 @@ The debate system executes N complete rounds, where N is specified by `config.ro
 
 ### Round Structure
 Each round consists of three phases executed in sequence:
-1. **Proposal Phase**: All agents generate proposals in parallel
+1. **Proposal Phase**: All agents produce proposals in parallel
 2. **Critique Phase**: Each agent critiques proposals from other agents
 3. **Refinement Phase**: Each agent refines their proposal based on received critiques
 
@@ -952,20 +977,21 @@ All three phases execute in every round, regardless of the round count.
 
 ### Multiple Rounds
 - **1 Round**: Single cycle of proposal → critique → refinement → synthesis
-  - Agents propose fresh ideas
+  - Agents propose fresh ideas (LLM-generated)
   - Critique each other's proposals
   - Refine based on critiques
   - Judge synthesizes final solution
   - **Use case**: Standard debate with peer review and refinement
 
 - **2 Rounds**: Two complete cycles of proposal → critique → refinement → synthesis
-  - Round 1: Initial proposals, critiques, and refinements
-  - Round 2: New proposals (potentially informed by full history if enabled), new critiques, new refinements
+  - Round 1: Initial proposals (LLM), critiques, and refinements
+  - Round 2: Proposals are the prior round's refinements (no LLM), then new critiques and refinements
+  - Missing prior refinement for an agent triggers a warning and falls back to an LLM proposal for that agent
   - Judge synthesizes from all rounds
   - **Use case**: Iterative exploration with two passes
 
 - **3+ Rounds**: Multiple complete cycles
-  - Each round: Fresh proposals → critiques → refinements
+  - Round 1 proposals are LLM-generated; for subsequent rounds, proposals are carried over from the previous round's refinements (no LLM)
   - Full history can be included in context (via `includeFullHistory: true`)
   - Agents can build on previous rounds when history is enabled
   - Judge synthesizes from complete debate history

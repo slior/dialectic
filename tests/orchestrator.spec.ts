@@ -104,4 +104,104 @@ describe('DebateOrchestrator (Flow 1)', () => {
     const hasRefinement = state.rounds[0].contributions.some((c: any) => c.type === 'refinement');
     expect(hasProposal && hasCritique && hasRefinement).toBe(true);
   });
+
+  it('round 2 proposals are sourced from round 1 refinements with zeroed metadata', async () => {
+    const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
+    const sm = createMockStateManager();
+    const cfg: DebateConfig = {
+      rounds: 2,
+      terminationCondition: { type: 'fixed' },
+      synthesisMethod: 'judge',
+      includeFullHistory: true,
+      timeoutPerRound: 300000,
+    };
+
+    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    await orchestrator.runDebate('Design X');
+
+    const state = (sm as any).getState();
+    expect(state.rounds.length).toBe(2);
+
+    const r1 = state.rounds[0];
+    const r2 = state.rounds[1];
+
+    const r1RefByAgent: Record<string, string> = {};
+    r1.contributions.filter((c: any) => c.type === 'refinement').forEach((c: any) => {
+      r1RefByAgent[c.agentId] = c.content;
+    });
+
+    const r2Props = r2.contributions.filter((c: any) => c.type === 'proposal');
+    expect(r2Props.length).toBe(agents.length);
+
+    // Proposals in round 2 must equal refinements from round 1 per agent, with tokens/latency zero
+    for (const p of r2Props) {
+      expect(p.content).toBe(r1RefByAgent[p.agentId]);
+      expect(p.metadata?.tokensUsed ?? 0).toBe(0);
+      expect(p.metadata?.latencyMs ?? 0).toBe(0);
+      expect(typeof p.metadata?.model).toBe('string');
+    }
+  });
+
+  it('falls back to LLM proposal and warns when prior refinement is missing', async () => {
+    const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
+
+    // Custom SM that drops refinement for agent a2 in round 1
+    const state: any = {
+      id: 'deb-test', problem: '', status: 'running', currentRound: 0, rounds: [], createdAt: new Date(), updatedAt: new Date(),
+    };
+    const sm = {
+      createDebate: async (problem: string) => ({ ...state, problem }),
+      beginRound: async (_id: string) => {
+        const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
+        state.rounds.push(round);
+        state.currentRound = round.roundNumber;
+        state.updatedAt = new Date();
+        return round;
+      },
+      addContribution: async (_id: string, contrib: any) => {
+        const round = state.rounds[state.currentRound - 1];
+        if (!round) throw new Error('No active round');
+        // Drop refinement for a2 in round 1 only
+        if (round.roundNumber === 1 && contrib.type === 'refinement' && contrib.agentId === 'a2') {
+          return;
+        }
+        round.contributions.push(contrib);
+        state.updatedAt = new Date();
+      },
+      completeDebate: async (_id: string, solution: Solution) => { state.status = 'completed'; (state as any).finalSolution = solution; state.updatedAt = new Date(); },
+      getState: () => state,
+    } as any;
+
+    // Spy on stderr warnings
+    const cli = await import('../src/cli/index');
+    const warnSpy = jest.spyOn(cli, 'writeStderr').mockImplementation(() => {});
+
+    const cfg: DebateConfig = {
+      rounds: 2,
+      terminationCondition: { type: 'fixed' },
+      synthesisMethod: 'judge',
+      includeFullHistory: true,
+      timeoutPerRound: 300000,
+    };
+
+    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    await orchestrator.runDebate('Design Y');
+
+    const r1 = state.rounds[0];
+    const r2 = state.rounds[1];
+
+    // a1 should be carried over; a2 should fall back to LLM proposal content
+    const r1RefA1 = r1.contributions.find((c: any) => c.type === 'refinement' && c.agentId === 'a1')?.content;
+    const r2PropA1 = r2.contributions.find((c: any) => c.type === 'proposal' && c.agentId === 'a1')?.content;
+    expect(r2PropA1).toBe(r1RefA1);
+
+    const r2PropA2 = r2.contributions.find((c: any) => c.type === 'proposal' && c.agentId === 'a2')?.content;
+    expect(r2PropA2).toBe('performance proposal');
+
+    expect(warnSpy).toHaveBeenCalled();
+    const calls = warnSpy.mock.calls.flat().join(' ');
+    expect(calls).toMatch(/Missing previous refinement/);
+
+    warnSpy.mockRestore();
+  });
 });
