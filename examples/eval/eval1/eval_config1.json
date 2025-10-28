@@ -1,0 +1,13 @@
+{
+  "agents": [
+    {
+      "id": "eval-1",
+      "name": "Gemini Flash Evaluator",
+      "model": "google/gemini-2.5-flash-preview-09-2025",
+      "provider": "openrouter",
+      "timeout": 30000,
+      "enabled": true
+    }
+  ]
+}
+
