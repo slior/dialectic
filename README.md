@@ -220,3 +220,23 @@ For detailed configuration documentation, including all fields, validation rules
 - Summaries preserve critical insights while reducing context size for subsequent rounds
 - Default threshold: 5000 characters, max summary length: 2500 characters
 - See `docs/configuration.md` and `docs/context_summarization.md` for detailed documentation
+
+## Evaluator Command
+
+Evaluate a completed debate using evaluator agents:
+
+```bash
+dialectic eval --config ./eval-config.json --debate ./debates/deb-YYYYMMDD-HHMMSS-XYZ.json
+
+# JSON output (includes averages and per-agent results)
+dialectic eval --config ./eval-config.json --debate ./deb.json --output ./result.json
+```
+
+Options:
+- `-c, --config <path>`: Evaluator configuration JSON (required)
+- `-d, --debate <path>`: Debate state JSON to evaluate (required)
+- `--env-file <path>`: Optional .env file
+- `-v, --verbose`: Verbose logs to stderr
+- `-o, --output <path>`: If ends with `.json`, writes JSON; otherwise writes Markdown (or stdout by default)
+
+See detailed docs: [docs/evaluator.md](docs/evaluator.md)
