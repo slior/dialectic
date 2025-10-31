@@ -1,0 +1,21 @@
+{
+  "agents": [
+    {
+      "id": "eval-1",
+      "name": "Sonnet 4 Evaluator 1",
+      "model": "claude-sonnet-4",
+      "provider": "openai",
+      "timeout": 30000,
+      "enabled": true
+    },
+    {
+      "id": "eval-2",
+      "name": "Sonnet 4 Evaluator 2",
+      "model": "claude-sonnet-4",
+      "provider": "openai",
+      "timeout": 30000,
+      "enabled": true
+    }
+  ]
+}
+

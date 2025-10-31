@@ -1,0 +1,54 @@
+{
+    "agents": [
+      {
+        "id": "agent-architect",
+        "name": "System Architect",
+        "role": "architect",
+        "model": "claude-sonnet-4",
+        "provider": "openai",
+        "temperature": 0.5,
+        "enabled": true
+      },
+      {
+        "id": "agent-performance",
+        "name": "Performance Engineer",
+        "role": "performance",
+        "model": "claude-sonnet-4",
+        "provider": "openai",
+        "temperature": 0.5,
+        "enabled": true
+      },
+      {
+        "id": "agent-security",
+        "name": "Security Specialist",
+        "role": "security",
+        "model": "claude-sonnet-4",
+        "provider": "openai",
+        "temperature": 0.5,
+        "enabled": true
+      }
+    ],
+    "judge": {
+      "id": "judge-main",
+      "name": "Technical Judge",
+      "role": "generalist",
+      "model": "claude-sonnet-4",
+      "provider": "openai",
+      "temperature": 0.5
+    },
+    "debate": {
+      "rounds": 3,
+      "terminationCondition": {
+        "type": "fixed"
+      },
+      "synthesisMethod": "judge",
+      "includeFullHistory": true,
+      "timeoutPerRound": 300000,
+      "summarization": {
+        "enabled": true,
+        "threshold": 1250,
+        "maxLength": 625,
+        "method": "length-based"
+      }
+    }
+  }
