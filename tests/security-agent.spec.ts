@@ -77,18 +77,17 @@ describe('RoleBasedAgent (Security Role)', () => {
     it('should return expected security-focused system prompt content', () => {
       const prompt = RoleBasedAgent.defaultSystemPrompt(AGENT_ROLES.SECURITY);
       
-      expect(prompt).toContain('cybersecurity expert');
-      expect(prompt).toContain('threat modeling');
-      expect(prompt).toContain('risk assessment');
-      expect(prompt).toContain('security architecture');
-      expect(prompt).toContain('authentication');
+      expect(prompt).toContain('security architect and engineer');
+      expect(prompt).toContain('Threat modeling');
+      expect(prompt).toContain('risk vectors');
+      expect(prompt).toContain('architectural security');
+      expect(prompt).toContain('Authentication');
       expect(prompt).toContain('authorization');
       expect(prompt).toContain('data protection');
-      expect(prompt).toContain('network security');
-      expect(prompt).toContain('application security');
-      expect(prompt).toContain('compliance frameworks');
-      expect(prompt).toContain('security vulnerabilities');
+      expect(prompt).toContain('compliance');
       expect(prompt).toContain('security controls');
+      expect(prompt).toContain('defense in depth');
+      expect(prompt).toContain('zero trust');
     });
   });
 
@@ -102,17 +101,17 @@ describe('RoleBasedAgent (Security Role)', () => {
       expect(proposeImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('cybersecurity expert')
+        expect.stringContaining('security specialist')
       );
       expect(proposeImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('security requirements')
+        expect.stringContaining('Threat Model')
       );
       expect(proposeImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('threat modeling')
+        expect.stringContaining('Security Objectives')
       );
       expect(result).toBeDefined();
       expect(result.content).toBe('Security solution text');
@@ -134,19 +133,19 @@ describe('RoleBasedAgent (Security Role)', () => {
         mockProposal,
         mockContext,
         'Test security prompt',
-        expect.stringContaining('cybersecurity expert')
+        expect.stringContaining('security engineering perspective')
       );
       expect(critiqueImplSpy).toHaveBeenCalledWith(
         mockProposal,
         mockContext,
         'Test security prompt',
-        expect.stringContaining('security vulnerabilities')
+        expect.stringContaining('vulnerabilities')
       );
       expect(critiqueImplSpy).toHaveBeenCalledWith(
         mockProposal,
         mockContext,
         'Test security prompt',
-        expect.stringContaining('missing security controls')
+        expect.stringContaining('missing controls')
       );
       expect(result).toBeDefined();
       expect(result.content).toBe('Security solution text');
@@ -180,14 +179,14 @@ describe('RoleBasedAgent (Security Role)', () => {
         mockCritiques,
         mockContext,
         'Test security prompt',
-        expect.stringContaining('strengthening security measures')
+        expect.stringContaining('strengthen the protection')
       );
       expect(refineImplSpy).toHaveBeenCalledWith(
         mockProposal,
         mockCritiques,
         mockContext,
         'Test security prompt',
-        expect.stringContaining('security feedback')
+        expect.stringContaining('Revised Security Architecture')
       );
       expect(result).toBeDefined();
       expect(result.content).toBe('Security solution text');
