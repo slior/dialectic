@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { debateCommand, loadConfig as loadDebateConfig } from './commands/debate';
 import { evalCommand } from './commands/eval';
+import { reportCommand } from './commands/report';
 import { EXIT_GENERAL_ERROR } from '../utils/exit-codes';
 
 // Color constants for CLI output
@@ -58,6 +59,7 @@ export async function runCli(argv: string[]) {
   // Register commands
   debateCommand(program);
   evalCommand(program);
+  reportCommand(program);
 
   await program.parseAsync(['node', PROGRAM_NAME, ...argv]);
 }

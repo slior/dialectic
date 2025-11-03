@@ -1,0 +1,48 @@
+{
+  "agents": [
+    {
+      "id": "agent-architect",
+      "name": "System Architect",
+      "role": "architect",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.5,
+      "enabled": true
+    },
+    {
+      "id": "agent-performance",
+      "name": "Performance Engineer",
+      "role": "performance",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.6,
+      "enabled": true
+    },
+    {
+      "id": "agent-security",
+      "name": "Security Specialist",
+      "role": "security",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.4,
+      "enabled": true
+    }
+  ],
+  "judge": {
+    "id": "judge-main",
+    "name": "Technical Judge",
+    "role": "generalist",
+    "model": "gpt-4",
+    "provider": "openai",
+    "temperature": 0.3
+  },
+  "debate": {
+    "rounds": 4,
+    "terminationCondition": {
+      "type": "fixed"
+    },
+    "synthesisMethod": "judge",
+    "includeFullHistory": true,
+    "timeoutPerRound": 450000
+  }
+}

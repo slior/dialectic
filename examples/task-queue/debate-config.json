@@ -1,0 +1,76 @@
+{
+  "agents": [
+    {
+      "id": "agent-architect",
+      "name": "System Architect",
+      "role": "architect",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.5,
+      "enabled": true,
+      "summarization": {
+        "enabled": true,
+        "threshold": 4000,
+        "maxLength": 2000,
+        "method": "length-based"
+      }
+    },
+    {
+      "id": "agent-performance",
+      "name": "Performance Engineer",
+      "role": "performance",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.5,
+      "enabled": true,
+      "summarization": {
+        "enabled": true,
+        "threshold": 3500,
+        "maxLength": 1750,
+        "method": "length-based"
+      }
+    },
+    {
+      "id": "agent-security",
+      "name": "Security Specialist",
+      "role": "security",
+      "model": "gpt-4",
+      "provider": "openai",
+      "temperature": 0.4,
+      "enabled": true,
+      "summarization": {
+        "enabled": true,
+        "threshold": 3000,
+        "maxLength": 1500,
+        "method": "length-based"
+      }
+    }
+  ],
+  "judge": {
+    "id": "judge-main",
+    "name": "Technical Judge",
+    "role": "generalist",
+    "model": "gpt-4",
+    "provider": "openai",
+    "temperature": 0.3,
+    "summarization": {
+      "enabled": true,
+      "threshold": 6000,
+      "maxLength": 3000,
+      "method": "length-based"
+    }
+  },
+  "debate": {
+    "rounds": 4,
+    "terminationCondition": { "type": "fixed" },
+    "synthesisMethod": "judge",
+    "includeFullHistory": true,
+    "timeoutPerRound": 600000,
+    "summarization": {
+      "enabled": true,
+      "threshold": 5000,
+      "maxLength": 2500,
+      "method": "length-based"
+    }
+  }
+}
