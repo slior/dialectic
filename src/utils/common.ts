@@ -1,4 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import { round2 } from '../types/eval.types';
+import { EXIT_INVALID_ARGS } from './exit-codes';
+
+const FILE_ENCODING_UTF8 = 'utf-8';
 
 /**
  * Validates that a value is a finite number and returns it, or undefined if invalid.
@@ -20,5 +25,54 @@ export function averageOrNull(values: number[]): number | null {
   if (values.length === 0) return null;
   const sum = values.reduce((a, b) => a + b, 0);
   return round2(sum / values.length);
+}
+
+/**
+ * Creates a validation error with a custom error code.
+ * 
+ * This function is used throughout the CLI to create errors with specific exit codes
+ * for validation failures and invalid arguments.
+ * 
+ * @param message - The error message to associate with the error.
+ * @param code - The numeric error code indicating the exit or validation type.
+ * @returns An Error object with the specified message and an added 'code' property.
+ */
+export function createValidationError(message: string, code: number): Error {
+  const err: any = new Error(message);
+  err.code = code;
+  return err;
+}
+
+/**
+ * Reads a JSON file from the given path, validates its existence and file type, parses its contents,
+ * and returns the parsed object. Throws a validation error with an appropriate exit code if the file 
+ * does not exist, is not a regular file, or does not contain valid JSON.
+ * 
+ * @template T The expected return type for the parsed JSON object.
+ * @param filePath - The path to the JSON file, relative to the current working directory.
+ * @param errorContext - Optional context to include in error messages (e.g., "Debate file", "Config file").
+ *                       Defaults to "File" if not provided.
+ * @returns The parsed JSON object of type T.
+ * @throws {Error} Throws a validation error with a specific exit code if:
+ *   - The file does not exist (EXIT_INVALID_ARGS).
+ *   - The path is not a file (EXIT_INVALID_ARGS).
+ *   - The file contains invalid JSON (EXIT_INVALID_ARGS).
+ */
+export function readJsonFile<T>(filePath: string, errorContext: string = 'File'): T {
+  const abs = path.resolve(process.cwd(), filePath);
+  if (!fs.existsSync(abs)) {
+    throw createValidationError(`${errorContext} not found: ${abs}`, EXIT_INVALID_ARGS);
+  }
+  const stat = fs.statSync(abs);
+  if (!stat.isFile()) {
+    throw createValidationError(`Path is not a file: ${abs}`, EXIT_INVALID_ARGS);
+  }
+  const raw = fs.readFileSync(abs, FILE_ENCODING_UTF8);
+  try {
+    return JSON.parse(raw) as T;
+  } catch (parseError: unknown) {
+    const message = parseError instanceof Error ? parseError.message : 'Unknown parsing error';
+    throw createValidationError(`Invalid JSON format in ${errorContext.toLowerCase()}: ${abs} (${message})`, EXIT_INVALID_ARGS);
+  }
 }
 

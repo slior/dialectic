@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { runCli } from '../src/cli/index';
-import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../src/utils/exit-codes';
+import { EXIT_INVALID_ARGS } from '../src/utils/exit-codes';
 import { DebateState } from '../src/types/debate.types';
 import { DEBATE_STATUS } from '../src/types/debate.types';
 
@@ -178,15 +178,20 @@ describe('CLI report command', () => {
   });
 
   describe('Report generation', () => {
-    it('should generate report and write to stdout when no output path provided', async () => {
+    it('should generate report without config file when --config not provided', async () => {
       const debatePath = path.join(tmpDir, 'debate.json');
       const debateState = createMinimalDebateState();
       fs.writeFileSync(debatePath, JSON.stringify(debateState));
 
-      // Create default config file
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = createMinimalConfig();
-      fs.writeFileSync(configPath, JSON.stringify(config));
+      // Ensure no config file exists
+      const defaultConfigPath = path.join(process.cwd(), 'debate-config.json');
+      const configExists = fs.existsSync(defaultConfigPath);
+      let configBackup: string | undefined;
+      
+      if (configExists) {
+        configBackup = fs.readFileSync(defaultConfigPath, 'utf-8');
+        fs.unlinkSync(defaultConfigPath);
+      }
 
       try {
         await runCli(['report', '--debate', debatePath]);
@@ -203,12 +208,67 @@ describe('CLI report command', () => {
         expect(stdoutContent).toContain('## Agents');
         expect(stdoutContent).toContain('## Judge');
         expect(stdoutContent).toContain('## Rounds');
+        
+        // Should contain minimal configs (agent ID as name, N/A for model/provider)
+        expect(stdoutContent).toContain('agent-architect');
+        expect(stdoutContent).toContain('N/A');
       } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
+        // Restore config file if it existed
+        if (configExists && configBackup) {
+          fs.writeFileSync(defaultConfigPath, configBackup, 'utf-8');
         }
       }
+    });
+
+    it('should generate report with config file when --config provided', async () => {
+      const debatePath = path.join(tmpDir, 'debate.json');
+      const configPath = path.join(tmpDir, 'custom-config.json');
+      const debateState = createMinimalDebateState();
+      fs.writeFileSync(debatePath, JSON.stringify(debateState));
+
+      const config = createMinimalConfig();
+      fs.writeFileSync(configPath, JSON.stringify(config));
+
+      await runCli(['report', '--debate', debatePath, '--config', configPath]);
+      
+      // Should write to stdout
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
+      const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
+      
+      // Should contain report content
+      expect(stdoutContent).toContain('# Debate:');
+      expect(stdoutContent).toContain('Test problem description');
+      expect(stdoutContent).toContain('## Problem Description');
+      expect(stdoutContent).toContain('## Agents');
+      expect(stdoutContent).toContain('## Judge');
+      expect(stdoutContent).toContain('## Rounds');
+      
+      // Should contain config values (not N/A)
+      expect(stdoutContent).toContain('System Architect');
+      expect(stdoutContent).toContain('gpt-4');
+    });
+
+    it('should generate report and write to stdout when no output path provided', async () => {
+      const debatePath = path.join(tmpDir, 'debate.json');
+      const debateState = createMinimalDebateState();
+      fs.writeFileSync(debatePath, JSON.stringify(debateState));
+
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should write to stdout
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
+      const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
+      
+      // Should contain report content
+      expect(stdoutContent).toContain('# Debate:');
+      expect(stdoutContent).toContain('Test problem description');
+      expect(stdoutContent).toContain('## Problem Description');
+      expect(stdoutContent).toContain('## Agents');
+      expect(stdoutContent).toContain('## Judge');
+      expect(stdoutContent).toContain('## Rounds');
     });
 
     it('should generate report and write to file when output path provided', async () => {
@@ -217,31 +277,20 @@ describe('CLI report command', () => {
       const debateState = createMinimalDebateState();
       fs.writeFileSync(debatePath, JSON.stringify(debateState));
 
-      // Create default config file
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = createMinimalConfig();
-      fs.writeFileSync(configPath, JSON.stringify(config));
-
-      try {
-        await runCli(['report', '--debate', debatePath, '--output', outputPath]);
-        
-        // Should create output file
-        expect(fs.existsSync(outputPath)).toBe(true);
-        
-        // Should contain report content
-        const reportContent = fs.readFileSync(outputPath, 'utf-8');
-        expect(reportContent).toContain('# Debate:');
-        expect(reportContent).toContain('Test problem description');
-        expect(reportContent).toContain('## Problem Description');
-        expect(reportContent).toContain('## Agents');
-        expect(reportContent).toContain('## Judge');
-        expect(reportContent).toContain('## Rounds');
-      } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
-        }
-      }
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath, '--output', outputPath]);
+      
+      // Should create output file
+      expect(fs.existsSync(outputPath)).toBe(true);
+      
+      // Should contain report content
+      const reportContent = fs.readFileSync(outputPath, 'utf-8');
+      expect(reportContent).toContain('# Debate:');
+      expect(reportContent).toContain('Test problem description');
+      expect(reportContent).toContain('## Problem Description');
+      expect(reportContent).toContain('## Agents');
+      expect(reportContent).toContain('## Judge');
+      expect(reportContent).toContain('## Rounds');
     });
 
     it('should create parent directories when output path is provided', async () => {
@@ -250,26 +299,15 @@ describe('CLI report command', () => {
       const debateState = createMinimalDebateState();
       fs.writeFileSync(debatePath, JSON.stringify(debateState));
 
-      // Create default config file
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = createMinimalConfig();
-      fs.writeFileSync(configPath, JSON.stringify(config));
-
-      try {
-        await runCli(['report', '--debate', debatePath, '--output', outputPath]);
-        
-        // Should create nested directories and file
-        expect(fs.existsSync(outputPath)).toBe(true);
-        
-        // Should contain report content
-        const reportContent = fs.readFileSync(outputPath, 'utf-8');
-        expect(reportContent).toContain('# Debate:');
-      } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
-        }
-      }
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath, '--output', outputPath]);
+      
+      // Should create nested directories and file
+      expect(fs.existsSync(outputPath)).toBe(true);
+      
+      // Should contain report content
+      const reportContent = fs.readFileSync(outputPath, 'utf-8');
+      expect(reportContent).toContain('# Debate:');
     });
 
     it('should overwrite existing file when output path exists', async () => {
@@ -281,24 +319,13 @@ describe('CLI report command', () => {
       // Create existing output file
       fs.writeFileSync(outputPath, 'old content');
 
-      // Create default config file
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = createMinimalConfig();
-      fs.writeFileSync(configPath, JSON.stringify(config));
-
-      try {
-        await runCli(['report', '--debate', debatePath, '--output', outputPath]);
-        
-        // Should overwrite with new content
-        const reportContent = fs.readFileSync(outputPath, 'utf-8');
-        expect(reportContent).not.toContain('old content');
-        expect(reportContent).toContain('# Debate:');
-      } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
-        }
-      }
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath, '--output', outputPath]);
+      
+      // Should overwrite with new content
+      const reportContent = fs.readFileSync(outputPath, 'utf-8');
+      expect(reportContent).not.toContain('old content');
+      expect(reportContent).toContain('# Debate:');
     });
 
     it('should use custom config file when --config provided', async () => {
@@ -320,52 +347,45 @@ describe('CLI report command', () => {
       const debatePath = path.join(tmpDir, 'debate.json');
       const debateState = createMinimalDebateState();
       // Add metadata to contribution
-      debateState.rounds[0].contributions[0].metadata = {
-        latencyMs: 1234,
-        tokensUsed: 567,
-        model: 'gpt-4'
-      };
+      if (debateState.rounds[0] && debateState.rounds[0].contributions[0]) {
+        debateState.rounds[0].contributions[0].metadata = {
+          latencyMs: 1234,
+          tokensUsed: 567,
+          model: 'gpt-4'
+        };
+      }
       fs.writeFileSync(debatePath, JSON.stringify(debateState));
 
-      // Create default config file
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = createMinimalConfig();
-      fs.writeFileSync(configPath, JSON.stringify(config));
-
-      try {
-        await runCli(['report', '--debate', debatePath, '--verbose']);
-        
-        // Should write to stdout
-        expect(stdoutSpy).toHaveBeenCalled();
-        const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
-        const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
-        
-        // Should contain verbose metadata
-        expect(stdoutContent).toContain('latency=');
-        expect(stdoutContent).toContain('tokens=');
-      } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
-        }
-      }
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath, '--verbose']);
+      
+      // Should write to stdout
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
+      const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
+      
+      // Should contain verbose metadata
+      expect(stdoutContent).toContain('latency=');
+      expect(stdoutContent).toContain('tokens=');
     });
 
-    it('should match agent configs by ID from debate state', async () => {
+    it('should match agent configs by ID from debate state when --config provided', async () => {
       const debatePath = path.join(tmpDir, 'debate.json');
+      const configPath = path.join(tmpDir, 'custom-config.json');
       const debateState = createMinimalDebateState();
       // Add another agent to debate
-      debateState.rounds[0].contributions.push({
-        agentId: 'agent-performance',
-        agentRole: 'performance',
-        type: 'proposal',
-        content: 'Performance proposal',
-        metadata: {}
-      });
+      if (debateState.rounds[0]) {
+        debateState.rounds[0].contributions.push({
+          agentId: 'agent-performance',
+          agentRole: 'performance',
+          type: 'proposal',
+          content: 'Performance proposal',
+          metadata: {}
+        });
+      }
       fs.writeFileSync(debatePath, JSON.stringify(debateState));
 
       // Create config with multiple agents
-      const configPath = path.join(process.cwd(), 'debate-config.json');
       const config = createMinimalConfig();
       config.agents.push({
         id: 'agent-performance',
@@ -377,23 +397,46 @@ describe('CLI report command', () => {
       });
       fs.writeFileSync(configPath, JSON.stringify(config));
 
-      try {
-        await runCli(['report', '--debate', debatePath]);
-        
-        // Should write to stdout
-        expect(stdoutSpy).toHaveBeenCalled();
-        const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
-        const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
-        
-        // Should contain both agents
-        expect(stdoutContent).toContain('System Architect');
-        expect(stdoutContent).toContain('Performance Engineer');
-      } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
-        }
+      await runCli(['report', '--debate', debatePath, '--config', configPath]);
+      
+      // Should write to stdout
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
+      const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
+      
+      // Should contain both agents from config
+      expect(stdoutContent).toContain('System Architect');
+      expect(stdoutContent).toContain('Performance Engineer');
+    });
+
+    it('should create minimal configs from debate state when --config not provided', async () => {
+      const debatePath = path.join(tmpDir, 'debate.json');
+      const debateState = createMinimalDebateState();
+      // Add another agent to debate
+      if (debateState.rounds[0]) {
+        debateState.rounds[0].contributions.push({
+          agentId: 'agent-performance',
+          agentRole: 'performance',
+          type: 'proposal',
+          content: 'Performance proposal',
+          metadata: {}
+        });
       }
+      fs.writeFileSync(debatePath, JSON.stringify(debateState));
+
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should write to stdout
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
+      const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
+      
+      // Should contain both agents (as IDs since no config)
+      expect(stdoutContent).toContain('agent-architect');
+      expect(stdoutContent).toContain('agent-performance');
+      // Should contain N/A values for minimal configs
+      expect(stdoutContent).toContain('N/A');
     });
 
     it('should handle clarifications in debate state', async () => {
@@ -415,29 +458,18 @@ describe('CLI report command', () => {
       ];
       fs.writeFileSync(debatePath, JSON.stringify(debateState));
 
-      // Create default config file
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = createMinimalConfig();
-      fs.writeFileSync(configPath, JSON.stringify(config));
-
-      try {
-        await runCli(['report', '--debate', debatePath]);
-        
-        // Should write to stdout
-        expect(stdoutSpy).toHaveBeenCalled();
-        const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
-        const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
-        
-        // Should contain clarifications section
-        expect(stdoutContent).toContain('## Clarifications');
-        expect(stdoutContent).toContain('What is the expected scale?');
-        expect(stdoutContent).toContain('1000 users');
-      } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
-        }
-      }
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should write to stdout
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
+      const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
+      
+      // Should contain clarifications section
+      expect(stdoutContent).toContain('## Clarifications');
+      expect(stdoutContent).toContain('What is the expected scale?');
+      expect(stdoutContent).toContain('1000 users');
     });
 
     it('should handle Date objects in debate state (revive from strings)', async () => {
@@ -447,46 +479,65 @@ describe('CLI report command', () => {
       const serializedState = JSON.parse(JSON.stringify(debateState));
       fs.writeFileSync(debatePath, JSON.stringify(serializedState));
 
-      // Create default config file
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = createMinimalConfig();
-      fs.writeFileSync(configPath, JSON.stringify(config));
-
-      try {
-        await runCli(['report', '--debate', debatePath]);
-        
-        // Should succeed (dates are revived)
-        expect(stdoutSpy).toHaveBeenCalled();
-      } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
-        }
-      }
+      // Don't create config file - should work without it
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (dates are revived)
+      expect(stdoutSpy).toHaveBeenCalled();
     });
   });
 
   describe('Error handling', () => {
-    it('should exit with invalid args when config is missing judge', async () => {
+    it('should work when --config provided and config is missing judge (uses defaults)', async () => {
+      const debatePath = path.join(tmpDir, 'debate.json');
+      const configPath = path.join(tmpDir, 'config-no-judge.json');
+      const debateState = createMinimalDebateState();
+      fs.writeFileSync(debatePath, JSON.stringify(debateState));
+
+      // Create config without judge (loadConfig will add default judge)
+      const config = {
+        agents: createMinimalConfig().agents
+        // No judge - loadConfig will add default
+      };
+      fs.writeFileSync(configPath, JSON.stringify(config));
+
+      await runCli(['report', '--debate', debatePath, '--config', configPath]);
+      
+      // Should succeed (loadConfig adds default judge)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should work without config file when --config not provided', async () => {
       const debatePath = path.join(tmpDir, 'debate.json');
       const debateState = createMinimalDebateState();
       fs.writeFileSync(debatePath, JSON.stringify(debateState));
 
-      // Create config without judge
-      const configPath = path.join(process.cwd(), 'debate-config.json');
-      const config = {
-        agents: createMinimalConfig().agents
-        // No judge
-      };
-      fs.writeFileSync(configPath, JSON.stringify(config));
+      // Ensure no config file exists
+      const defaultConfigPath = path.join(process.cwd(), 'debate-config.json');
+      const configExists = fs.existsSync(defaultConfigPath);
+      let configBackup: string | undefined;
+      
+      if (configExists) {
+        configBackup = fs.readFileSync(defaultConfigPath, 'utf-8');
+        fs.unlinkSync(defaultConfigPath);
+      }
 
       try {
-        await expect(runCli(['report', '--debate', debatePath]))
-          .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+        await runCli(['report', '--debate', debatePath]);
+        
+        // Should succeed without config (creates minimal configs from debate state)
+        expect(stdoutSpy).toHaveBeenCalled();
+        const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
+        const stdoutContent = stdoutCalls.map((call: any[]) => call[0]).join('');
+        
+        // Should contain report with minimal configs
+        expect(stdoutContent).toContain('# Debate:');
+        expect(stdoutContent).toContain('## Agents');
+        expect(stdoutContent).toContain('agent-architect');
       } finally {
-        // Clean up config file
-        if (fs.existsSync(configPath)) {
-          fs.unlinkSync(configPath);
+        // Restore config file if it existed
+        if (configExists && configBackup) {
+          fs.writeFileSync(defaultConfigPath, configBackup, 'utf-8');
         }
       }
     });

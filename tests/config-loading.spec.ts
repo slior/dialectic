@@ -8,11 +8,28 @@ import os from 'os';
 
 describe('Configuration loading', () => {
   it('uses built-in defaults when ./debate-config.json is missing and emits a stderr notice', async () => {
-    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const cfg = await loadConfig(undefined);
-    expect(cfg).toBeDefined();
-    expect(stderrSpy).toHaveBeenCalled();
-    stderrSpy.mockRestore();
+    const defaultConfigPath = path.resolve(process.cwd(), 'debate-config.json');
+    const configExists = fs.existsSync(defaultConfigPath);
+    let configBackup: string | undefined;
+    
+    // Temporarily remove config file if it exists
+    if (configExists) {
+      configBackup = fs.readFileSync(defaultConfigPath, 'utf-8');
+      fs.unlinkSync(defaultConfigPath);
+    }
+    
+    try {
+      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const cfg = await loadConfig(undefined);
+      expect(cfg).toBeDefined();
+      expect(stderrSpy).toHaveBeenCalled();
+      stderrSpy.mockRestore();
+    } finally {
+      // Restore config file if it existed
+      if (configExists && configBackup) {
+        fs.writeFileSync(defaultConfigPath, configBackup, 'utf-8');
+      }
+    }
   });
 });
 

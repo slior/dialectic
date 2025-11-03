@@ -240,3 +240,84 @@ Options:
 - `-o, --output <path>`: If ends with `.json`, writes JSON; otherwise writes Markdown (or stdout by default)
 
 See detailed docs: [docs/evaluator.md](docs/evaluator.md)
+
+## Report Command
+
+Generate a markdown report from a saved debate state JSON file. This command is useful when you want to create a report from a previously completed debate without re-running it.
+
+**Usage:**
+```bash
+# Generate report and write to stdout
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json
+
+# Write report to a file
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json --output ./reports/debate-report.md
+
+# With verbose metadata (latency, tokens in contribution titles)
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json --verbose --output ./reports/debate-report.md
+
+# Use custom configuration file
+dialectic report --debate ./debates/debate.json --config ./custom-config.json --output report.md
+```
+
+**Options:**
+- `--debate <path>`: **Required**. Path to debate JSON file (DebateState format)
+- `--config <path>`: Optional. Path to configuration file
+  - If provided: loads configuration file and matches agent/judge configs with agent IDs found in debate state
+  - If not provided: creates minimal agent/judge configs from debate state (no validation of IDs)
+- `-o, --output <path>`: Optional. Path to output markdown file (default: stdout)
+  - If not provided, writes report to stdout (allows piping: `report --debate file.json > output.md`)
+  - Creates parent directories automatically if they don't exist
+  - Overwrites existing file if it exists
+- `-v, --verbose`: Optional. Enable verbose mode for report generation
+  - Includes metadata (latency, tokens) in contribution titles
+
+**Report contents:**
+- Problem Description
+- Agents table (from configuration file if provided, or minimal configs from debate state)
+- Judge table (from configuration file if provided, or minimal config from debate state)
+- Clarifications (if any were collected during the debate)
+- Rounds with sections:
+  - Proposals
+  - Critiques
+  - Refinements
+- Final Synthesis
+
+**How it works:**
+1. Loads and validates the debate state JSON file
+2. If `--config` is provided:
+   - Loads configuration file to get agent and judge configurations
+   - Matches agent configs with agent IDs found in the debate state contributions
+3. If `--config` is not provided:
+   - Creates minimal agent/judge configs from debate state (extracts agent IDs and roles from contributions)
+   - No validation of agent/judge IDs is performed
+4. Generates markdown report using the same generator as the `--report` option in the debate command
+5. Writes report to stdout or specified file
+
+**Differences from `--report` option:**
+- `--report` in `debate` command: Generates report during an active debate from in-memory state
+- `report` command: Generates report from a saved debate state JSON file after the debate is complete
+- Both produce the same markdown format and content structure
+
+**Error handling:**
+- Exits with error code 2 (EXIT_INVALID_ARGS) if:
+  - Debate file doesn't exist
+  - Debate file is invalid JSON
+  - Debate file is missing required fields (id, problem, status, rounds)
+  - Path is a directory instead of a file
+- Exits with error code 1 (EXIT_GENERAL_ERROR) for other errors
+
+**Examples:**
+```bash
+# Generate report from a saved debate and view it
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json
+
+# Save report to file
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json --output ./reports/my-debate-report.md
+
+# Generate report with verbose metadata and custom config
+dialectic report --debate ./debates/debate.json --config ./configs/production.json --verbose --output report.md
+
+# Pipe report to another command
+dialectic report --debate ./debates/debate.json | grep "Final Synthesis"
+```

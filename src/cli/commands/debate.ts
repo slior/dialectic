@@ -20,6 +20,7 @@ import { Agent } from '../../core/agent';
 import { DebateProgressUI } from '../../utils/progress-ui';
 import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
+import { createValidationError } from '../../utils/common';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -430,17 +431,6 @@ function agentConfigsFromSysConfig(sysConfig: SystemConfig, options: any): Agent
   return agentConfigs;
 }
 
-/**
- * Creates an error object with the specified message and exit code.
- * @param message - Error message to display.
- * @param code - Exit code for the error.
- * @returns Error object with code property.
- */
-function createValidationError(message: string, code: number): Error {
-  const err: any = new Error(message);
-  err.code = code;
-  return err;
-}
 
 /**
  * Validates the exactly-one constraint for problem sources.

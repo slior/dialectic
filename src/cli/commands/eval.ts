@@ -8,8 +8,8 @@ import { EvaluatorConfig, ParsedEvaluation, AggregatedJsonOutput, AggregatedAver
 import { DebateState } from '../../types/debate.types';
 import { EvaluatorAgent } from '../../eval/evaluator-agent';
 import { resolvePrompt, readBuiltInPrompt } from '../../utils/prompt-loader';
-import { PROMPT_SOURCES } from '../../types/agent.types';
-import { numOrUndefined, averageOrNull } from '../../utils/common';
+import { PROMPT_SOURCES, LLM_PROVIDERS } from '../../types/agent.types';
+import { numOrUndefined, averageOrNull, createValidationError, readJsonFile } from '../../utils/common';
 
 const FILE_ENCODING_UTF8 = 'utf-8';
 const JSON_INDENT_SPACES = 2;
@@ -24,48 +24,7 @@ type LoadedEvaluatorConfig = {
   configDir: string;
 };
 
-/**
- * Creates a validation error with a custom error code.
- *
- * @param {string} message - The error message to associate with the error.
- * @param {number} code - The numeric error code indicating the exit or validation type.
- * @returns {Error} An Error object with the specified message and an added 'code' property.
- */
-function createValidationError(message: string, code: number): Error {
-  const err: any = new Error(message);
-  err.code = code;
-  return err;
-}
 
-/**
- * Reads a JSON file from the given path, validates its existence and file type, parses its contents,
- * and returns the parsed object. Throws a validation error with an appropriate exit code if the file 
- * does not exist, is not a regular file, or does not contain valid JSON.
- *
- * @template T The expected return type for the parsed JSON object.
- * @param {string} p - The path to the JSON file, relative to the current working directory.
- * @returns {T} The parsed JSON object of type T.
- * @throws {Error} Throws a validation error with a specific exit code if:
- *   - The file does not exist (EXIT_INVALID_ARGS).
- *   - The path is not a file (EXIT_INVALID_ARGS).
- *   - The file contains invalid JSON (EXIT_INVALID_ARGS).
- */
-function readJsonFile<T>(p: string): T {
-  const abs = path.resolve(process.cwd(), p);
-  if (!fs.existsSync(abs)) {
-    throw createValidationError(`File not found: ${abs}`, EXIT_INVALID_ARGS);
-  }
-  const stat = fs.statSync(abs);
-  if (!stat.isFile()) {
-    throw createValidationError(`Path is not a file: ${abs}`, EXIT_INVALID_ARGS);
-  }
-  const raw = fs.readFileSync(abs, FILE_ENCODING_UTF8);
-  try {
-    return JSON.parse(raw) as T;
-  } catch (e: any) {
-    throw createValidationError(`Invalid JSON: ${abs}`, EXIT_INVALID_ARGS);
-  }
-}
 
 /**
  * Builds a Markdown-formatted string representing all clarifications exchanged during a debate.
@@ -263,16 +222,33 @@ async function writeEvaluationResults(
  */
 function loadEvaluatorConfig(configPath: string): LoadedEvaluatorConfig {
   const abs = path.resolve(process.cwd(), configPath);
-  const cfg = readJsonFile<any>(configPath);
+  const cfg = readJsonFile<any>(configPath, 'Evaluator config file');
   if (!cfg || !Array.isArray(cfg.agents) || cfg.agents.length === 0) {
     throw createValidationError('Invalid evaluator config: agents array required (length >= 1)', EXIT_INVALID_ARGS);
   }
   const configDir = path.dirname(abs);
-  const agents: EvaluatorConfig[] = cfg.agents.map((a: any) => ({
-    id: String(a.id), name: String(a.name), model: String(a.model),
-    provider: a.provider, systemPromptPath: a.systemPromptPath, userPromptPath: a.userPromptPath,
-    timeout: a.timeout, enabled: a.enabled,
-  }));
+  const agents: EvaluatorConfig[] = cfg.agents.map((a: unknown) => {
+    // Type guard and validation for raw agent config
+    if (!a || typeof a !== 'object') {
+      throw createValidationError('Invalid evaluator config: agent must be an object', EXIT_INVALID_ARGS);
+    }
+    const agent = a as Record<string, unknown>;
+    // Validate provider is a valid LLM provider
+    const provider = typeof agent.provider === 'string' 
+      ? (agent.provider as typeof LLM_PROVIDERS.OPENAI | typeof LLM_PROVIDERS.OPENROUTER)
+      : LLM_PROVIDERS.OPENAI; // Default to openai if invalid
+    
+    return {
+      id: String(agent.id ?? ''),
+      name: String(agent.name ?? ''),
+      model: String(agent.model ?? ''),
+      provider,
+      systemPromptPath: typeof agent.systemPromptPath === 'string' ? agent.systemPromptPath : undefined,
+      userPromptPath: typeof agent.userPromptPath === 'string' ? agent.userPromptPath : undefined,
+      timeout: typeof agent.timeout === 'number' ? agent.timeout : undefined,
+      enabled: typeof agent.enabled === 'boolean' ? agent.enabled : undefined,
+    } as EvaluatorConfig;
+  });
   return { agents, configDir };
 }
 
@@ -309,7 +285,7 @@ function loadAndValidateEnabledAgents(configPath: string): { enabledAgents: Eval
  *   - The finalSolution.description field is missing or empty.
  */
 function loadAndValidateDebateState(debatePath: string): { problem: string, finalSolution: string, clarificationsMarkdown: string } {
-  const debate: DebateState = readJsonFile<DebateState>(debatePath);
+  const debate: DebateState = readJsonFile<DebateState>(debatePath, 'Debate file');
   const problem = (debate.problem || '').trim();
   const finalSolution = (debate.finalSolution && debate.finalSolution.description || '').trim();
   if (!problem) throw createValidationError('Invalid debate JSON: missing non-empty problem', EXIT_INVALID_ARGS);

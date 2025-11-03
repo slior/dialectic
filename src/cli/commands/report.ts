@@ -6,51 +6,40 @@ import { infoUser, writeStderr } from '../index';
 import { loadConfig } from './debate';
 import { SystemConfig } from '../../types/config.types';
 import { DebateState } from '../../types/debate.types';
-import { AgentConfig } from '../../types/agent.types';
+import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../../types/agent.types';
 import { generateDebateReport } from '../../utils/report-generator';
+import { createValidationError, readJsonFile } from '../../utils/common';
 
+// File-level constants
 const FILE_ENCODING_UTF8 = 'utf-8';
 
-/**
- * Creates a validation error with a custom error code.
- * 
- * @param message - The error message to associate with the error.
- * @param code - The numeric error code indicating the exit or validation type.
- * @returns An Error object with the specified message and an added 'code' property.
- */
-function createValidationError(message: string, code: number): Error {
-  const err: any = new Error(message);
-  err.code = code;
-  return err;
-}
+// Error message constants
+const ERROR_INVALID_DEBATE_JSON = 'Invalid debate JSON';
+const ERROR_MISSING_FIELD = 'missing or invalid';
+const ERROR_MISSING_ID_FIELD = `${ERROR_INVALID_DEBATE_JSON}: ${ERROR_MISSING_FIELD} id field`;
+const ERROR_MISSING_PROBLEM_FIELD = `${ERROR_INVALID_DEBATE_JSON}: ${ERROR_MISSING_FIELD} problem field`;
+const ERROR_MISSING_STATUS_FIELD = `${ERROR_INVALID_DEBATE_JSON}: ${ERROR_MISSING_FIELD} status field`;
+const ERROR_MISSING_ROUNDS_FIELD = `${ERROR_INVALID_DEBATE_JSON}: ${ERROR_MISSING_FIELD} rounds array`;
 
 /**
- * Reads a JSON file from the given path, validates its existence and file type, parses its contents,
- * and returns the parsed object. Throws a validation error with an appropriate exit code if the file 
- * does not exist, is not a regular file, or does not contain valid JSON.
+ * Revives Date objects in a debate state that were serialized as strings.
  * 
- * @template T The expected return type for the parsed JSON object.
- * @param p - The path to the JSON file, relative to the current working directory.
- * @returns The parsed JSON object of type T.
- * @throws {Error} Throws a validation error with a specific exit code if:
- *   - The file does not exist (EXIT_INVALID_ARGS).
- *   - The path is not a file (EXIT_INVALID_ARGS).
- *   - The file contains invalid JSON (EXIT_INVALID_ARGS).
+ * @param debateState - The debate state to revive dates in.
  */
-function readJsonFile<T>(p: string): T {
-  const abs = path.resolve(process.cwd(), p);
-  if (!fs.existsSync(abs)) {
-    throw createValidationError(`Debate file not found: ${abs}`, EXIT_INVALID_ARGS);
+function reviveDatesInDebateState(debateState: DebateState): void {
+  // Revive top-level dates
+  if (debateState.createdAt && typeof debateState.createdAt === 'string') {
+    debateState.createdAt = new Date(debateState.createdAt);
   }
-  const stat = fs.statSync(abs);
-  if (!stat.isFile()) {
-    throw createValidationError(`Path is not a file: ${abs}`, EXIT_INVALID_ARGS);
+  if (debateState.updatedAt && typeof debateState.updatedAt === 'string') {
+    debateState.updatedAt = new Date(debateState.updatedAt);
   }
-  const raw = fs.readFileSync(abs, FILE_ENCODING_UTF8);
-  try {
-    return JSON.parse(raw) as T;
-  } catch (e: any) {
-    throw createValidationError(`Invalid JSON format in debate file: ${abs}`, EXIT_INVALID_ARGS);
+  
+  // Revive round timestamps
+  for (const round of debateState.rounds) {
+    if (round.timestamp && typeof round.timestamp === 'string') {
+      round.timestamp = new Date(round.timestamp);
+    }
   }
 }
 
@@ -62,58 +51,100 @@ function readJsonFile<T>(p: string): T {
  * @throws {Error} If the file doesn't exist, is invalid JSON, or lacks required fields.
  */
 function loadAndValidateDebateState(debatePath: string): DebateState {
-  const debate: DebateState = readJsonFile<DebateState>(debatePath);
+  const debate: DebateState = readJsonFile<DebateState>(debatePath, 'Debate file');
   
   // Validate required fields
   if (!debate.id || typeof debate.id !== 'string') {
-    throw createValidationError('Invalid debate JSON: missing or invalid id field', EXIT_INVALID_ARGS);
+    throw createValidationError(ERROR_MISSING_ID_FIELD, EXIT_INVALID_ARGS);
   }
   if (!debate.problem || typeof debate.problem !== 'string') {
-    throw createValidationError('Invalid debate JSON: missing or invalid problem field', EXIT_INVALID_ARGS);
+    throw createValidationError(ERROR_MISSING_PROBLEM_FIELD, EXIT_INVALID_ARGS);
   }
   if (!debate.status || typeof debate.status !== 'string') {
-    throw createValidationError('Invalid debate JSON: missing or invalid status field', EXIT_INVALID_ARGS);
+    throw createValidationError(ERROR_MISSING_STATUS_FIELD, EXIT_INVALID_ARGS);
   }
   if (!Array.isArray(debate.rounds)) {
-    throw createValidationError('Invalid debate JSON: missing or invalid rounds array', EXIT_INVALID_ARGS);
+    throw createValidationError(ERROR_MISSING_ROUNDS_FIELD, EXIT_INVALID_ARGS);
   }
   
-  // Revive Date objects if they are strings
-  if (debate.createdAt && typeof debate.createdAt === 'string') {
-    debate.createdAt = new Date(debate.createdAt);
-  }
-  if (debate.updatedAt && typeof debate.updatedAt === 'string') {
-    debate.updatedAt = new Date(debate.updatedAt);
-  }
-  
-  // Revive round timestamps
-  for (const round of debate.rounds) {
-    if (round.timestamp && typeof round.timestamp === 'string') {
-      round.timestamp = new Date(round.timestamp);
-    }
-  }
+  // Revive Date objects if they were serialized as strings
+  reviveDatesInDebateState(debate);
   
   return debate;
 }
 
 /**
- * Extracts unique agent IDs from the debate state by examining all contributions.
+ * Extracts unique agent IDs and roles from the debate state by examining all contributions.
  * 
  * @param debateState - The debate state to extract agent IDs from.
- * @returns Array of unique agent IDs found in the debate.
+ * @returns Map of agent IDs to their roles.
  */
-function extractAgentIdsFromDebate(debateState: DebateState): string[] {
-  const agentIds = new Set<string>();
+function extractAgentInfoFromDebate(debateState: DebateState): Map<string, string> {
+  const agentInfo = new Map<string, string>();
   
   for (const round of debateState.rounds) {
     for (const contribution of round.contributions) {
-      if (contribution.agentId) {
-        agentIds.add(contribution.agentId);
+      if (contribution.agentId && contribution.agentRole) {
+        // Only set if not already set (first occurrence wins)
+        if (!agentInfo.has(contribution.agentId)) {
+          agentInfo.set(contribution.agentId, contribution.agentRole);
+        }
       }
     }
   }
   
-  return Array.from(agentIds);
+  return agentInfo;
+}
+
+/**
+ * Creates minimal agent configurations from debate state when config file is not provided.
+ * 
+ * @param debateState - The debate state to extract agent information from.
+ * @returns Array of minimal agent configurations.
+ */
+function createMinimalAgentConfigsFromDebate(debateState: DebateState): AgentConfig[] {
+  const agentInfo = extractAgentInfoFromDebate(debateState);
+  const agentConfigs: AgentConfig[] = [];
+  
+  for (const [agentId, role] of agentInfo.entries()) {
+    // Validate role is a valid AgentRole, default to 'architect' if invalid
+    const validRoleValues = Object.values(AGENT_ROLES) as string[];
+    const validRole = validRoleValues.includes(role) 
+      ? (role as typeof AGENT_ROLES[keyof typeof AGENT_ROLES])
+      : AGENT_ROLES.ARCHITECT;
+    
+    // Create minimal config with only required fields
+    agentConfigs.push({
+      id: agentId,
+      name: agentId, // Use ID as name fallback
+      role: validRole,
+      model: 'N/A',
+      provider: LLM_PROVIDERS.OPENAI,
+      temperature: 0.5 // Default temperature
+    });
+  }
+  
+  return agentConfigs;
+}
+
+/**
+ * Creates a minimal judge configuration when config file is not provided.
+ * 
+ * @param debateState - The debate state (may contain judge info in finalSolution).
+ * @returns Minimal judge configuration.
+ */
+function createMinimalJudgeConfigFromDebate(debateState: DebateState): AgentConfig {
+  // Extract judge ID from finalSolution if available
+  const judgeId = debateState.finalSolution?.synthesizedBy || 'judge-main';
+  
+  return {
+    id: judgeId,
+    name: judgeId,
+    role: AGENT_ROLES.GENERALIST,
+    model: 'N/A',
+    provider: LLM_PROVIDERS.OPENAI,
+    temperature: 0.3 // Default judge temperature
+  };
 }
 
 /**
@@ -123,21 +154,18 @@ function extractAgentIdsFromDebate(debateState: DebateState): string[] {
  * @param agentIds - Array of agent IDs found in the debate state.
  * @returns Array of agent configurations that match the agent IDs in the debate.
  */
-function matchAgentConfigs(sysConfig: SystemConfig, agentIds: string[]): AgentConfig[] {
-  const matchedConfigs: AgentConfig[] = [];
-  
-  for (const agentId of agentIds) {
-    const config = sysConfig.agents.find(a => a.id === agentId);
-    if (config) {
-      matchedConfigs.push(config);
-    }
-  }
-  
-  return matchedConfigs;
+function matchAgentConfigsFromSysConfig(sysConfig: SystemConfig, agentIds: string[]): AgentConfig[] {
+  return agentIds
+    .map((agentId) => sysConfig.agents.find((a) => a.id === agentId))
+    .filter((config): config is AgentConfig => config !== undefined);
 }
 
 /**
  * Writes the report content to stdout or a file.
+ * 
+ * If no output path is provided, writes to stdout (for piping/redirection).
+ * If an output path is provided, creates parent directories if needed and writes the file,
+ * overwriting any existing file at that path.
  * 
  * @param reportContent - The markdown report content to write.
  * @param outputPath - Optional path to output file. If not provided, writes to stdout.
@@ -145,7 +173,7 @@ function matchAgentConfigs(sysConfig: SystemConfig, agentIds: string[]): AgentCo
  */
 async function writeReport(reportContent: string, outputPath?: string): Promise<void> {
   if (!outputPath) {
-    // Write to stdout
+    // Write to stdout (allows piping: report --debate file.json > output.md)
     process.stdout.write(reportContent);
     return;
   }
@@ -153,13 +181,13 @@ async function writeReport(reportContent: string, outputPath?: string): Promise<
   // Write to file
   const reportPath = path.resolve(process.cwd(), outputPath);
   
-  // Ensure parent directories exist
+  // Ensure parent directories exist (creates nested directories if needed)
   const reportDir = path.dirname(reportPath);
   if (!fs.existsSync(reportDir)) {
     fs.mkdirSync(reportDir, { recursive: true });
   }
   
-  // Write file (overwrites if exists)
+  // Write file (overwrites if exists, as per requirements)
   await fs.promises.writeFile(reportPath, reportContent, FILE_ENCODING_UTF8);
   infoUser(`Generated report: ${reportPath}`);
 }
@@ -174,14 +202,14 @@ async function writeReport(reportContent: string, outputPath?: string): Promise<
  * 
  * Command-line Options:
  *   --debate <path>      Required: Path to debate JSON file (DebateState format).
- *   --config <path>      Optional: Path to configuration file (default: ./debate-config.json).
+ *   --config <path>      Optional: Path to configuration file. If not provided, creates minimal configs from debate state.
  *   --output <path>      Optional: Path to output markdown file. If not provided, writes to stdout.
  *   -v, --verbose        Optional: Enable verbose mode for report generation.
  * 
  * Behavior:
  *   - Loads and validates the debate state file.
- *   - Loads configuration file (or uses defaults) to get agent and judge configurations.
- *   - Matches agent configs with agent IDs found in the debate state.
+ *   - If --config is provided: loads configuration file and matches agent/judge configs with IDs found in debate state.
+ *   - If --config is not provided: creates minimal agent/judge configs from debate state (no validation of IDs).
  *   - Generates markdown report using generateDebateReport.
  *   - Writes report to file or stdout.
  * 
@@ -202,20 +230,32 @@ export function reportCommand(program: Command) {
         // Load and validate debate state
         const debateState = loadAndValidateDebateState(options.debate);
         
-        // Load configuration to get agent and judge configs
-        const sysConfig = await loadConfig(options.config);
+        let agentConfigs: AgentConfig[];
+        let judgeConfig: AgentConfig;
         
-        // Extract agent IDs from debate state
-        const agentIds = extractAgentIdsFromDebate(debateState);
-        
-        // Match agent configs with agent IDs from debate
-        const agentConfigs = matchAgentConfigs(sysConfig, agentIds);
-        
-        // Get judge config (use default if not found)
-        if (!sysConfig.judge) {
-          throw createValidationError('Configuration missing judge definition', EXIT_INVALID_ARGS);
+        // Only load config if --config is explicitly provided
+        if (options.config) {
+          // Load configuration to get agent and judge configs
+          const sysConfig = await loadConfig(options.config);
+          
+          // Extract agent IDs from debate state
+          const agentInfo = extractAgentInfoFromDebate(debateState);
+          const agentIds = Array.from(agentInfo.keys());
+          
+          // Match agent configs with agent IDs from debate
+          agentConfigs = matchAgentConfigsFromSysConfig(sysConfig, agentIds);
+          
+          // Get judge config (loadConfig ensures judge is always present, either from config or defaults)
+          // This check is defensive but should never fail in practice
+          if (!sysConfig.judge) {
+            throw createValidationError('Configuration missing judge definition', EXIT_INVALID_ARGS);
+          }
+          judgeConfig = sysConfig.judge;
+        } else {
+          // No config provided - create minimal configs from debate state
+          agentConfigs = createMinimalAgentConfigsFromDebate(debateState);
+          judgeConfig = createMinimalJudgeConfigFromDebate(debateState);
         }
-        const judgeConfig = sysConfig.judge;
         
         // Generate report
         const reportContent = generateDebateReport(

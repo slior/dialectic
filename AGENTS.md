@@ -301,6 +301,46 @@ dialectic debate "Design a system" \
   --rounds 3
 ```
 
+### Report Command
+
+**Generate report from saved debate state:**
+```bash
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json
+```
+
+**Generate report without config file (creates minimal configs from debate state):**
+```bash
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json
+# Creates minimal agent/judge configs from debate state, no validation
+```
+
+**Generate report with config file (matches agent/judge configs):**
+```bash
+dialectic report --debate ./debates/deb-20250101-010203-ABC.json --config ./debate-config.json
+```
+
+**Save report to file:**
+```bash
+dialectic report --debate ./debates/debate.json --output ./reports/report.md
+```
+
+**Report with verbose metadata:**
+```bash
+dialectic report --debate ./debates/debate.json --verbose --output report.md
+```
+
+**Report behavior:**
+- If `--config` is provided: loads configuration file and matches agent/judge configs with agent IDs found in debate state
+- If `--config` is not provided: creates minimal agent/judge configs from debate state (extracts agent IDs and roles from contributions), no validation of IDs
+- Generates markdown report identical to `--report` option in debate command
+- Writes to stdout by default, or to specified file if `--output` provided
+
+**Report options:**
+- `--debate <path>`: Path to debate JSON file (DebateState format) (required)
+- `--config <path>`: Optional path to configuration file. If not provided, creates minimal configs from debate state.
+- `-o, --output <path>`: Optional path to output markdown file (default: stdout)
+- `-v, --verbose`: Optional verbose mode for report generation
+
 ### Evaluator Command
 
 **Basic evaluation:**
@@ -370,6 +410,12 @@ dialectic debate "Design a system" || echo "Failed with code: $?"
 - `--env-file <path>` - Optional .env file path
 - `-v, --verbose` - Verbose diagnostic logs to stderr
 - `-o, --output <path>` - Output destination (JSON or Markdown based on extension)
+
+**Report Command Options:**
+- `--debate <path>` - Path to debate JSON file (DebateState format) (required)
+- `--config <path>` - Optional path to configuration file. If not provided, creates minimal configs from debate state.
+- `-o, --output <path>` - Optional path to output markdown file (default: stdout)
+- `-v, --verbose` - Optional verbose mode for report generation
 
 ## Build and Test Commands
 
