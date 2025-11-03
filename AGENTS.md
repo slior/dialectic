@@ -28,6 +28,349 @@ Dialectic is a CLI tool that orchestrates multi-agent debates to solve software 
 - Debate state persistence and report generation
 - Evaluator command for assessing debate outcomes
 
+## Command-Line Usage
+
+Dialectic is invoked from the command line using the `dialectic` command. This section provides comprehensive examples for running debates and evaluations in a bash shell environment.
+
+### Basic Command Structure
+
+**Debate Command:**
+```bash
+dialectic debate [problem] [options]
+```
+
+**Evaluator Command:**
+```bash
+dialectic eval [options]
+```
+
+### Problem Input
+
+You can provide the problem statement in two ways:
+
+**1. Inline string:**
+```bash
+dialectic debate "Design a rate limiting system"
+dialectic debate "Build a secure authentication API with JWT tokens"
+```
+
+**2. Problem description file:**
+```bash
+dialectic debate --problemDescription problem.txt
+dialectic debate --problemDescription ./problems/rate-limiting.md
+dialectic debate --problemDescription ../design-problems/cache-system.md
+```
+
+**Problem File Requirements:**
+- **Encoding**: UTF-8
+- **Format**: Any text format (plain text, markdown, etc.)
+- **Content**: Must be non-empty (whitespace-only files are rejected)
+- **Path**: Relative paths resolved from current working directory
+- **Mutual exclusivity**: Cannot provide both inline problem string and `--problemDescription` file
+
+### Configuration File
+
+**Default configuration:**
+```bash
+dialectic debate "Design a caching system"
+# Uses ./debate-config.json if it exists, otherwise uses built-in defaults
+```
+
+**Custom configuration file:**
+```bash
+dialectic debate "Design a caching system" --config ./configs/production.json
+dialectic debate "Design a caching system" --config /path/to/custom-config.json
+```
+
+**Configuration file location:**
+- Default: `./debate-config.json` (relative to current working directory)
+- Custom: Specify with `--config <path>`
+- If file doesn't exist: System uses built-in defaults with a warning to stderr
+
+### Agent Selection
+
+**Default agents (architect and performance):**
+```bash
+dialectic debate "Design a database system"
+```
+
+**Select specific agent roles:**
+```bash
+dialectic debate "Design a secure API" --agents architect,security
+dialectic debate "Build a high-performance system" --agents architect,performance,security
+dialectic debate "Design a testable system" --agents architect,testing
+```
+
+**Available agent roles:**
+- `architect` - System design and architecture perspective
+- `performance` - Performance optimization and efficiency
+- `security` - Security and threat modeling
+- `testing` - Testing strategy and quality assurance
+- `generalist` - General-purpose role (typically used for judge)
+
+**Note:** The `--agents` option filters agents from your configuration file by role. If no agents match, the system falls back to default agents (architect and performance).
+
+### Debate Rounds
+
+**Default rounds (3):**
+```bash
+dialectic debate "Design a messaging system"
+```
+
+**Custom number of rounds:**
+```bash
+dialectic debate "Design a messaging system" --rounds 1
+dialectic debate "Design a messaging system" --rounds 5
+dialectic debate "Design a messaging system" --rounds 10
+```
+
+**Constraints:**
+- Minimum: 1 round
+- Default: 3 rounds
+- Invalid values (e.g., 0, negative) result in exit code 2
+
+### Output Options
+
+**Default output (stdout):**
+```bash
+dialectic debate "Design a rate limiting system"
+# Final solution text written to stdout
+# Full debate state saved to ./debates/deb-YYYYMMDD-HHMMSS-RAND.json
+```
+
+**Save solution text to file:**
+```bash
+dialectic debate "Design a rate limiting system" --output solution.txt
+dialectic debate "Design a rate limiting system" --output ./results/solution.txt
+```
+
+**Save full debate state (JSON):**
+```bash
+dialectic debate "Design a rate limiting system" --output debate-result.json
+dialectic debate "Design a rate limiting system" --output ./results/debate-result.json
+```
+
+**Output behavior:**
+- If path ends with `.json`: Full debate state (JSON) written to file
+- Otherwise: Only final solution text written to file
+- If omitted: Solution written to stdout, state saved to `./debates/` directory
+
+**Redirecting output:**
+```bash
+# Save solution to file
+dialectic debate "Design a system" --output solution.txt
+
+# Pipe solution to another command
+dialectic debate "Design a system" | grep "recommendation"
+
+# Suppress solution output (save to file instead)
+dialectic debate "Design a system" --output solution.txt > /dev/null
+```
+
+### Verbose Mode
+
+**Enable detailed logging:**
+```bash
+dialectic debate "Design a system" --verbose
+```
+
+**Verbose output includes:**
+- Round-by-round breakdown
+- Individual contributions with metadata (tokens, latency)
+- Total statistics (rounds, duration, token counts)
+- System prompt sources (built-in vs file path)
+- Written to stderr (doesn't interfere with stdout piping)
+
+**Example with verbose:**
+```bash
+dialectic debate "Design a system" --verbose --output solution.txt
+# Solution goes to solution.txt
+# Verbose diagnostics go to stderr
+```
+
+### Markdown Report Generation
+
+**Generate debate report:**
+```bash
+dialectic debate "Design a system" --report debate-report.md
+dialectic debate "Design a system" --report ./reports/debate-report
+```
+
+**Report features:**
+- Extension auto-appended if missing (`.md` added automatically)
+- Parent directories created automatically
+- Non-fatal on failure (debate succeeds even if report generation fails)
+- Includes full debate transcript, metadata, clarifications, and synthesis
+
+**Report with verbose metadata:**
+```bash
+dialectic debate "Design a system" --verbose --report ./reports/debate-report.md
+# Report includes latency and token counts in contribution titles
+```
+
+**Report contents:**
+- Problem Description
+- Agents table and Judge table
+- Clarifications (if `--clarify` was used)
+- Rounds with proposals, critiques, and refinements
+- Final Synthesis
+
+### Interactive Clarifications
+
+**Enable clarifications phase:**
+```bash
+dialectic debate "Design a distributed cache system" --clarify
+```
+
+**Clarifications workflow:**
+1. Each agent generates up to 5 clarifying questions (configurable)
+2. CLI presents questions grouped by agent in interactive session
+3. Answer each question or press Enter to skip (recorded as "NA")
+4. Questions and answers included in debate context and final report
+
+**Example interaction:**
+```bash
+dialectic debate "Design a distributed cache system" --clarify
+# [Architect] Q1: What are the expected read/write ratios?
+# > 80% reads, 20% writes
+# [Performance] Q2: What's the target latency requirement?
+# > < 10ms for 95th percentile
+# [Security] Q3: What data sensitivity level?
+# > (press Enter to skip)
+# Q3: NA
+```
+
+**Clarifications with other options:**
+```bash
+dialectic debate --problemDescription problem.md --clarify --agents architect,security
+dialectic debate "Design a system" --clarify --rounds 5 --verbose
+```
+
+### Environment File
+
+**Default environment file (`.env`):**
+```bash
+dialectic debate "Design a system"
+# Automatically loads .env from current directory if it exists
+```
+
+**Custom environment file:**
+```bash
+dialectic debate "Design a system" --env-file ./config/.env.production
+dialectic debate "Design a system" --env-file /path/to/.env
+```
+
+**Environment variables required:**
+- `OPENAI_API_KEY` - Required for OpenAI provider
+- `OPENROUTER_API_KEY` - Required for OpenRouter provider
+
+### Complete Examples
+
+**Simple debate:**
+```bash
+dialectic debate "Design a rate limiting system"
+```
+
+**Complex debate with all options:**
+```bash
+dialectic debate \
+  --problemDescription ./problems/rate-limiting.md \
+  --config ./configs/production.json \
+  --agents architect,performance,security \
+  --rounds 5 \
+  --output ./results/rate-limiting-solution.json \
+  --report ./reports/rate-limiting-report.md \
+  --verbose \
+  --clarify \
+  --env-file .env.production
+```
+
+**Quick security-focused debate:**
+```bash
+dialectic debate "Design a secure authentication system" \
+  --agents architect,security \
+  --rounds 3 \
+  --output auth-solution.txt \
+  --verbose
+```
+
+**Save debate state for later evaluation:**
+```bash
+dialectic debate "Design a system" \
+  --output ./debates/my-debate.json \
+  --rounds 3
+```
+
+### Evaluator Command
+
+**Basic evaluation:**
+```bash
+dialectic eval --config ./eval-config.json --debate ./debates/deb-20250101-010203-ABC.json
+```
+
+**Evaluator with JSON output:**
+```bash
+dialectic eval \
+  --config ./eval-config.json \
+  --debate ./debates/deb-20250101-010203-ABC.json \
+  --output ./results/evaluation.json
+```
+
+**Evaluator with verbose logs:**
+```bash
+dialectic eval \
+  --config ./eval-config.json \
+  --debate ./debates/deb-20250101-010203-ABC.json \
+  --verbose \
+  --env-file .env
+```
+
+**Evaluator options:**
+- `-c, --config <path>`: Evaluator configuration JSON (required)
+- `-d, --debate <path>`: Debate state JSON to evaluate (required)
+- `--env-file <path>`: Optional .env file path
+- `-v, --verbose`: Verbose diagnostic logs to stderr
+- `-o, --output <path>`: Output destination
+  - If ends with `.json`: writes aggregated JSON output
+  - Otherwise: writes Markdown table (or stdout by default)
+
+### Exit Codes
+
+| Code | Description |
+|------|-------------|
+| `0` | Success |
+| `1` | General error |
+| `2` | Invalid CLI arguments (e.g., missing problem, invalid rounds) |
+| `3` | Provider error (reserved for future use) |
+| `4` | Configuration error (e.g., missing `OPENAI_API_KEY`) |
+
+**Checking exit codes:**
+```bash
+dialectic debate "Design a system" && echo "Success!"
+dialectic debate "Design a system" || echo "Failed with code: $?"
+```
+
+### Command-Line Option Summary
+
+**Debate Command Options:**
+- `[problem]` - Problem statement as inline string (mutually exclusive with `--problemDescription`)
+- `--problemDescription <path>` - Path to problem description file
+- `--agents <list>` - Comma-separated agent roles (default: `architect,performance`)
+- `--rounds <n>` - Number of debate rounds (default: `3`, minimum: `1`)
+- `--config <path>` - Path to configuration file (default: `./debate-config.json`)
+- `--env-file <path>` - Path to environment file (default: `.env`)
+- `--output <path>` - Output file path (JSON or text based on extension)
+- `--verbose` - Enable detailed logging to stderr
+- `--report <path>` - Generate Markdown report (extension auto-appended)
+- `--clarify` - Enable interactive clarifications phase
+
+**Evaluator Command Options:**
+- `-c, --config <path>` - Evaluator configuration JSON (required)
+- `-d, --debate <path>` - Debate state JSON to evaluate (required)
+- `--env-file <path>` - Optional .env file path
+- `-v, --verbose` - Verbose diagnostic logs to stderr
+- `-o, --output <path>` - Output destination (JSON or Markdown based on extension)
+
 ## Build and Test Commands
 
 ### Setup Commands
