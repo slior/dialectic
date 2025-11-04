@@ -1,0 +1,175 @@
+---
+description: Generate a complete test setup for dialectic debate testing with debate config, evaluation config, and test scripts
+---
+
+# Setup Test Infrastructure
+
+Generate a complete test setup for dialectic debate testing. This command creates all necessary configuration files and scripts to run debates with different parameters and evaluate the results.
+
+## Input Parameters
+
+The command accepts the following parameters (all optional with sensible defaults):
+
+- **output_directory** (default: `/mnt/c/tmp/dialectic/{example_dir}/{test_case_name}`)
+  - The directory where debate outputs and evaluation results will be saved
+  - Should be a WSL-compatible path (e.g., `/mnt/c/...` for Windows drives)
+  - The directory will be created automatically if it doesn't exist
+
+- **example_directory** (default: `./examples/example3`)
+  - The base directory containing the example (must contain `problem.md`)
+  - Relative to the project root
+  - This directory will contain the generated config files
+
+- **test_case_name** (default: `rounds_test`)
+  - Name of the test case (e.g., `rounds_test`, `agents_test`, `summary_test`)
+  - Used to create a subdirectory under `example_directory` for test scripts
+
+- **model** (default: `google/gemini-2.5-flash-lite`)
+  - The LLM model identifier to use for all agents and evaluators
+  - Format depends on provider (e.g., `google/gemini-2.5-flash-lite` for OpenRouter, `gpt-4` for OpenAI)
+
+- **provider** (default: `openrouter`)
+  - The LLM provider to use (`openai` or `openrouter`)
+  - All agents and evaluators will use this provider
+
+## Generated Files
+
+The command will create the following files:
+
+### 1. `{example_directory}/debate-config.json`
+Debate configuration file with:
+- Three agents: architect, performance, and security (all enabled)
+- Judge agent with generalist role
+- All agents configured with the specified model and provider
+- Summarization enabled with threshold 10000 and maxLength 5000
+- Default debate settings (3 rounds, fixed termination, judge synthesis)
+
+### 2. `{example_directory}/eval_config2.json`
+Evaluation configuration file with:
+- Two evaluator agents (eval-1 and eval-2)
+- Both configured with the specified model and provider
+- Custom prompt paths (relative to example directory parent)
+- Timeout set to 30000ms
+
+### 3. `{example_directory}/{test_case_name}/run_test.sh`
+Test execution script that:
+- Uses variables for BASE_DIR and OUTPUT_DIR
+- Creates the output directory if it doesn't exist
+- Runs 5 debate commands with rounds 1-5
+- Outputs results to the specified output directory
+- Uses WSL-compatible paths (converts Windows paths to `/mnt/c/...` format)
+- Includes shebang (`#!/bin/bash`) and is executable
+
+### 4. `{example_directory}/{test_case_name}/eval_run.sh`
+Evaluation script that:
+- Uses the same path variables as run_test.sh
+- Evaluates all 5 debate outputs from the test run
+- Writes evaluation results to the output directory
+- Includes shebang and is executable
+
+## Implementation Instructions
+
+When executing this command, follow these steps precisely:
+
+1. **Validate Inputs**
+   - If `example_directory` doesn't exist, create it
+   - Verify `{example_directory}/problem.md` exists (create placeholder if needed)
+   - Convert Windows-style output paths (`C:/...`) to WSL format (`/mnt/c/...`)
+
+2. **Create Debate Config**
+   - Create `{example_directory}/debate-config.json`
+   - Configure three agents: architect, performance, security (all enabled, temperature 0.5)
+   - Configure judge: generalist role, temperature 0.5
+   - Set all agents and judge to use the specified model and provider
+   - Enable summarization: threshold 10000, maxLength 5000, method "length-based"
+   - Set default debate settings: rounds 3, fixed termination, judge synthesis, includeFullHistory true, timeoutPerRound 300000
+
+3. **Create Evaluation Config**
+   - Create `{example_directory}/eval_config.json`
+   - Configure two evaluator agents (eval-1 and eval-2)
+   - Set both to use the specified model and provider
+   - Set timeout to 30000ms
+   - Set systemPromptPath to `../eval_system.md` and userPromptPath to `../eval_user.md`
+   - Both agents enabled by default
+
+4. **Create Test Directory**
+   - Create directory `{example_directory}/{test_case_name}/`
+   - Ensure parent directories exist
+
+5. **Create run_test.sh Script**
+   - Set BASE_DIR variable to `{example_directory}` (relative path)
+   - Set OUTPUT_DIR variable to the output directory (WSL-compatible path)
+   - Add `mkdir -p "$OUTPUT_DIR"` to ensure directory exists
+   - Generate 5 dialectic debate commands for rounds 1-5:
+     - Format: `dialectic debate -r {round} -c "$BASE_DIR/debate-config.json" -o "$OUTPUT_DIR/all_agents_{round}R_no_clarify.json" -p "$BASE_DIR/problem.md" -v`
+   - Add executable permissions (shebang and chmod notation in comments)
+
+6. **Create eval_run.sh Script**
+   - Use the same BASE_DIR and OUTPUT_DIR variables
+   - Generate 5 dialectic eval commands:
+     - Format: `dialectic eval -c ./$BASE_DIR/eval_config2.json -d $OUTPUT_DIR/all_agents_{round}R_no_clarify.json -v -o $OUTPUT_DIR/eval2_all_agents_{round}R_no_clarify.json`
+   - Add executable permissions
+
+7. **Path Handling**
+   - All paths in scripts should use forward slashes
+   - Convert Windows paths to WSL format (C:/ → /mnt/c/)
+   - Use variables consistently throughout scripts
+   - Ensure paths are properly quoted in bash scripts
+
+8. **File Permissions**
+   - Add `#!/bin/bash` shebang to both scripts
+   - Note in comments that scripts should be made executable with `chmod +x`
+   - Scripts should work in both WSL and Git Bash environments
+
+## Default Values
+
+If parameters are not provided, use these defaults:
+- `output_directory`: `~/tmp/dialectic/{example_directory}/{test_case_name}`
+- `example_directory`: `./examples/example3`
+- `test_case_name`: `rounds_test`
+- `model`: `google/gemini-2.5-flash-lite`
+- `provider`: `openrouter`
+
+## Path Conversion Rules
+
+- If output_directory starts with `C:/`, convert to `/mnt/c/`
+- If output_directory starts with `D:/`, convert to `/mnt/d/`
+- Apply similar conversion for other Windows drive letters
+- Preserve forward slashes in all paths
+- Ensure output directory path uses forward slashes throughout
+
+## Verification
+
+After generation:
+- All files should be created in the correct locations
+- JSON files should be valid JSON (verify with a JSON parser)
+- Scripts should have proper shebang and variable usage
+- Paths should be WSL-compatible
+- The user should be able to run `./{test_case_name}/run_test.sh` immediately
+
+## Example Usage
+
+Default usage (all defaults):
+```
+Generate test setup for example3 with rounds_test
+```
+
+Custom parameters:
+```
+Generate test setup with:
+- example_directory: ./examples/my_example
+- test_case_name: agents_test
+- output_directory: /mnt/c/data/tests/my_example
+- model: gpt-4
+- provider: openai
+```
+
+## Output
+
+After successful execution, the user should be able to:
+1. Navigate to `{example_directory}/{test_case_name}/`
+2. Run `./run_test.sh` to execute all test debates
+3. Run `./eval_run.sh` to evaluate all debate outputs
+4. Find all outputs in the specified output directory
+
+All scripts should be ready to execute without modification.
