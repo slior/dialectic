@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { Command } from 'commander';
 import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
 import { infoUser, writeStderr } from '../index';
@@ -8,10 +6,7 @@ import { SystemConfig } from '../../types/config.types';
 import { DebateState } from '../../types/debate.types';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../../types/agent.types';
 import { generateDebateReport } from '../../utils/report-generator';
-import { createValidationError, readJsonFile } from '../../utils/common';
-
-// File-level constants
-const FILE_ENCODING_UTF8 = 'utf-8';
+import { createValidationError, readJsonFile, writeFileWithDirectories } from '../../utils/common';
 
 // Error message constants
 const ERROR_INVALID_DEBATE_JSON = 'Invalid debate JSON';
@@ -178,18 +173,9 @@ async function writeReport(reportContent: string, outputPath?: string): Promise<
     return;
   }
   
-  // Write to file
-  const reportPath = path.resolve(process.cwd(), outputPath);
-  
-  // Ensure parent directories exist (creates nested directories if needed)
-  const reportDir = path.dirname(reportPath);
-  if (!fs.existsSync(reportDir)) {
-    fs.mkdirSync(reportDir, { recursive: true });
-  }
-  
-  // Write file (overwrites if exists, as per requirements)
-  await fs.promises.writeFile(reportPath, reportContent, FILE_ENCODING_UTF8);
-  infoUser(`Generated report: ${reportPath}`);
+  // Write to file (handles path normalization and directory creation)
+  const writtenPath = await writeFileWithDirectories(outputPath, reportContent);
+  infoUser(`Generated report: ${writtenPath}`);
 }
 
 /**

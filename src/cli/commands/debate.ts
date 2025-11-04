@@ -20,7 +20,7 @@ import { Agent } from '../../core/agent';
 import { DebateProgressUI } from '../../utils/progress-ui';
 import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
-import { createValidationError } from '../../utils/common';
+import { createValidationError, writeFileWithDirectories } from '../../utils/common';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -29,6 +29,7 @@ const DEFAULT_CLARIFICATIONS_MAX_PER_AGENT = 5;
 // File handling constants
 const FILE_ENCODING_UTF8 = 'utf-8';
 const JSON_FILE_EXTENSION = '.json';
+const MARKDOWN_FILE_EXTENSION = '.md';
 const JSON_INDENT_SPACES = 2;
 
 // Problem resolution error messages
@@ -593,10 +594,15 @@ async function outputResults(result: DebateResult, stateManager: StateManager, o
 
 /**
  * Generates and writes a markdown report file for the debate.
- * @param result - The debate result.
- * @param stateManager - The state manager to retrieve full debate state.
- * @param agentConfigs - Array of agent configurations.
- * @param judgeConfig - Judge configuration.
+ * 
+ * This function retrieves the full debate state, generates a markdown report using
+ * generateDebateReport, enforces the .md file extension, and writes the report to a file.
+ * Report generation failures are caught and logged but do not fail the debate.
+ * 
+ * @param result - The debate result containing the debate ID and metadata.
+ * @param stateManager - The state manager to retrieve the full debate state.
+ * @param agentConfigs - Array of agent configurations for the report.
+ * @param judgeConfig - Judge configuration for the report.
  * @param problemDescription - The full problem description text.
  * @param options - CLI options including report path and verbose flag.
  */
@@ -613,9 +619,9 @@ async function generateReport(
     let reportPath = path.resolve(process.cwd(), options.report);
     
     // Enforce .md extension
-    if (!reportPath.toLowerCase().endsWith('.md')) {
-      reportPath += '.md';
-      warnUser(`Report path does not end with .md, appending .md extension: ${path.basename(reportPath)}`);
+    if (!reportPath.toLowerCase().endsWith(MARKDOWN_FILE_EXTENSION)) {
+      reportPath += MARKDOWN_FILE_EXTENSION;
+      warnUser(`Report path does not end with ${MARKDOWN_FILE_EXTENSION}, appending ${MARKDOWN_FILE_EXTENSION} extension: ${path.basename(reportPath)}`);
     }
 
     // Get full debate state
@@ -633,17 +639,11 @@ async function generateReport(
       { verbose: options.verbose }
     );
 
-    // Ensure parent directories exist
-    const reportDir = path.dirname(reportPath);
-    if (!fs.existsSync(reportDir)) {
-      fs.mkdirSync(reportDir, { recursive: true });
-    }
-
-    // Write report file
-    await fs.promises.writeFile(reportPath, reportContent, FILE_ENCODING_UTF8);
+    // Write report file (handles path normalization and directory creation)
+    const writtenPath = await writeFileWithDirectories(reportPath, reportContent);
     
     // Notify user
-    infoUser(`Generated report: ${reportPath}`);
+    infoUser(`Generated report: ${writtenPath}`);
   } catch (error: any) {
     warnUser(`Failed to generate report: ${error.message}`);
     // Don't throw - report generation failure shouldn't fail the debate

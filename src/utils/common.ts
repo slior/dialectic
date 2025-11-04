@@ -8,8 +8,8 @@ const FILE_ENCODING_UTF8 = 'utf-8';
 /**
  * Validates that a value is a finite number and returns it, or undefined if invalid.
  * 
- * @param {unknown} x - The value to validate as a number.
- * @returns {number | undefined} The number if valid and finite, otherwise undefined.
+ * @param x - The value to validate as a number.
+ * @returns The number if valid and finite, otherwise undefined.
  */
 export function numOrUndefined(x: unknown): number | undefined {
   return typeof x === 'number' && Number.isFinite(x) ? x : undefined;
@@ -74,5 +74,31 @@ export function readJsonFile<T>(filePath: string, errorContext: string = 'File')
     const message = parseError instanceof Error ? parseError.message : 'Unknown parsing error';
     throw createValidationError(`Invalid JSON format in ${errorContext.toLowerCase()}: ${abs} (${message})`, EXIT_INVALID_ARGS);
   }
+}
+
+/**
+ * Writes content to a file, creating parent directories if needed.
+ * Normalizes the path relative to the current working directory and ensures
+ * all parent directories exist before writing the file.
+ * 
+ * @param relativePath - The file path relative to the current working directory.
+ * @param content - The content to write to the file.
+ * @returns Promise resolving to the absolute path of the file that was written.
+ * @throws {Error} Propagates any errors from file system operations (directory creation or file writing).
+ */
+export async function writeFileWithDirectories(relativePath: string, content: string): Promise<string> {
+  // Normalize path relative to current working directory
+  const absolutePath = path.resolve(process.cwd(), relativePath);
+  
+  // Ensure parent directories exist
+  const parentDir = path.dirname(absolutePath);
+  if (!fs.existsSync(parentDir)) {
+    fs.mkdirSync(parentDir, { recursive: true });
+  }
+  
+  // Write file with UTF-8 encoding
+  await fs.promises.writeFile(absolutePath, content, FILE_ENCODING_UTF8);
+  
+  return absolutePath;
 }
 
