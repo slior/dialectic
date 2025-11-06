@@ -1,21 +1,29 @@
 {
   "name": "dialectic",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/cli/index.js",
+  "files": [
+      "dist",
+      "README.md",
+      "LICENSE"
+    ],
+
   "bin": {
-    "dialectic": "./dialectic.js"
+    "dialectic": "./dist/cli/index.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/cli/index.ts",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "prepare": "npm run build"
   },
+  
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "engines": {
     "node": ">=18"
   },
