@@ -1,14 +1,13 @@
 {
   "name": "dialectic",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "",
   "main": "dist/cli/index.js",
   "files": [
-      "dist",
-      "README.md",
-      "LICENSE"
-    ],
-
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "dialectic": "./dist/cli/index.js"
   },
@@ -20,7 +19,6 @@
     "test:coverage": "jest --coverage",
     "prepare": "npm run build"
   },
-  
   "keywords": [],
   "author": "",
   "license": "MIT",
