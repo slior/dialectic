@@ -1,6 +1,6 @@
 {
   "name": "dialectic",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "",
   "main": "dist/cli/index.js",
   "files": [
@@ -27,7 +27,7 @@
   "bugs": {
     "url": "https://github.com/slior/dialectic/issues"
   },
-  "homepage": "https://github.com/slior/dialectic#readme", 
+  "homepage": "https://github.com/slior/dialectic#readme",
   "author": "Lior Schejter (https://github.com/slior)",
   "license": "MIT",
   "engines": {
