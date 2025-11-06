@@ -45,6 +45,8 @@ const DEFAULT_ARCHITECT_ID = 'agent-architect';
 const DEFAULT_ARCHITECT_NAME = 'System Architect';
 const DEFAULT_PERFORMANCE_ID = 'agent-performance';
 const DEFAULT_PERFORMANCE_NAME = 'Performance Engineer';
+const DEFAULT_KISS_ID = 'agent-kiss';
+const DEFAULT_KISS_NAME = 'Simplicity Advocate';
 const DEFAULT_JUDGE_ID = 'judge-main';
 const DEFAULT_JUDGE_NAME = 'Technical Judge';
 
@@ -208,6 +210,8 @@ function builtInDefaults(): SystemConfig {
     { id: DEFAULT_ARCHITECT_ID, name: DEFAULT_ARCHITECT_NAME, role: AGENT_ROLES.ARCHITECT, 
       model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
     { id: DEFAULT_PERFORMANCE_ID, name: DEFAULT_PERFORMANCE_NAME, role: AGENT_ROLES.PERFORMANCE, 
+      model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
+    { id: DEFAULT_KISS_ID, name: DEFAULT_KISS_NAME, role: AGENT_ROLES.KISS, 
       model: DEFAULT_LLM_MODEL, provider: LLM_PROVIDERS.OPENAI, temperature: DEFAULT_AGENT_TEMPERATURE, enabled: true },
   ];
   const judge: AgentConfig = {  id: DEFAULT_JUDGE_ID, name: DEFAULT_JUDGE_NAME, role: AGENT_ROLES.GENERALIST, 

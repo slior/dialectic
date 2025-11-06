@@ -3,6 +3,7 @@ import { performancePrompts } from './performance-prompts';
 import { securityPrompts } from './security-prompts';
 import { testingPrompts } from './testing-prompts';
 import { generalistPrompts } from './generalist-prompts';
+import { kissPrompts } from './kiss-prompts';
 import { RolePrompts } from './prompt-types';
 import { AGENT_ROLES, AgentRole } from '../../types/agent.types';
 
@@ -19,6 +20,7 @@ const ROLE_PROMPTS_REGISTRY: Partial<Record<AgentRole, RolePrompts>> = {
   [AGENT_ROLES.SECURITY]: securityPrompts,
   [AGENT_ROLES.TESTING]: testingPrompts,
   [AGENT_ROLES.GENERALIST]: generalistPrompts,
+  [AGENT_ROLES.KISS]: kissPrompts,
 };
 
 /**

@@ -209,6 +209,7 @@ For detailed configuration documentation, including all fields, validation rules
 - `performance`: Performance optimization and efficiency perspective
 - `security`: Security and threat modeling perspective
 - `testing`: Testing strategy and quality assurance perspective (future use)
+- `kiss`: Simplicity-focused perspective, challenges complexity
 - `generalist`: General-purpose role (typically used for judge)
 
 **Context Summarization:**

@@ -26,6 +26,15 @@
       "provider": "openrouter",
       "temperature": 0.5,
       "enabled": true
+    },
+    {
+      "id": "agent-kiss",
+      "name": "KISS Advocate",
+      "role": "kiss",
+      "model": "google/gemini-2.5-flash-lite",
+      "provider": "openrouter",
+      "temperature": 0.5,
+      "enabled": true
     }
   ],
   "judge": {

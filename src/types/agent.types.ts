@@ -9,6 +9,7 @@ export const AGENT_ROLES = {
   PERFORMANCE: "performance",
   TESTING: "testing",
   GENERALIST: "generalist",
+  KISS: "kiss",
 } as const;
 
 export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES];

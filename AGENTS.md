@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Dialectic is a CLI tool that orchestrates multi-agent debates to solve software design problems. The system uses multiple AI agents with different perspectives (architecture, performance, security, testing) to debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
+Dialectic is a CLI tool that orchestrates multi-agent debates to solve software design problems. The system uses multiple AI agents with different perspectives (architecture, performance, security, testing, simplicity) to debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
 
 **Key Technologies:**
 - **Language**: TypeScript (ES2022)
@@ -14,7 +14,7 @@ Dialectic is a CLI tool that orchestrates multi-agent debates to solve software 
 
 **Main Components:**
 - **Core Orchestrator**: Manages debate rounds and phases (proposal, critique, refinement)
-- **Agents**: Role-based agents (architect, performance, security, testing, generalist)
+- **Agents**: Role-based agents (architect, performance, security, testing, kiss, generalist)
 - **Judge Agent**: Synthesizes final solutions from debate history
 - **State Manager**: Persists debate state to JSON files
 - **LLM Providers**: Abstracted provider interface supporting OpenAI and OpenRouter
@@ -89,7 +89,7 @@ dialectic debate "Design a caching system" --config /path/to/custom-config.json
 
 ### Agent Selection
 
-**Default agents (architect and performance):**
+**Default agents (architect, performance, and kiss):**
 ```bash
 dialectic debate "Design a database system"
 ```
@@ -99,6 +99,7 @@ dialectic debate "Design a database system"
 dialectic debate "Design a secure API" --agents architect,security
 dialectic debate "Build a high-performance system" --agents architect,performance,security
 dialectic debate "Design a testable system" --agents architect,testing
+dialectic debate "Design a simple API" --agents architect,kiss
 ```
 
 **Available agent roles:**
@@ -106,9 +107,10 @@ dialectic debate "Design a testable system" --agents architect,testing
 - `performance` - Performance optimization and efficiency
 - `security` - Security and threat modeling
 - `testing` - Testing strategy and quality assurance
+- `kiss` - Simplicity-focused perspective, challenges complexity
 - `generalist` - General-purpose role (typically used for judge)
 
-**Note:** The `--agents` option filters agents from your configuration file by role. If no agents match, the system falls back to default agents (architect and performance).
+**Note:** The `--agents` option filters agents from your configuration file by role. If no agents match, the system falls back to default agents (architect, performance, and kiss).
 
 ### Debate Rounds
 
@@ -395,7 +397,7 @@ dialectic debate "Design a system" || echo "Failed with code: $?"
 **Debate Command Options:**
 - `[problem]` - Problem statement as inline string (mutually exclusive with `--problemDescription`)
 - `--problemDescription <path>` - Path to problem description file
-- `--agents <list>` - Comma-separated agent roles (default: `architect,performance`)
+- `--agents <list>` - Comma-separated agent roles (default: `architect,performance,kiss`)
 - `--rounds <n>` - Number of debate rounds (default: `3`, minimum: `1`)
 - `--config <path>` - Path to configuration file (default: `./debate-config.json`)
 - `--env-file <path>` - Path to environment file (default: `.env`)

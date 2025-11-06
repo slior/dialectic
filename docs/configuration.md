@@ -78,6 +78,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
   - `"security"` - Security and privacy concerns
   - `"performance"` - Performance optimization and efficiency
   - `"testing"` - Testing strategy and quality assurance
+  - `"kiss"` - Simplicity-focused perspective, challenges complexity
   - `"generalist"` - General-purpose role (typically used for judge)
 - **Semantics**: Defines the agent's functional perspective in the debate. Agents with unknown roles default to architect behavior with a warning.
 - **Example**: `"architect"`
@@ -176,6 +177,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 
 - System Architect (role: `architect`, model: `gpt-4`, temperature: `0.5`)
 - Performance Engineer (role: `performance`, model: `gpt-4`, temperature: `0.5`)
+- Simplicity Advocate (role: `kiss`, model: `gpt-4`, temperature: `0.5`)
 
 ## Judge Configuration
 
@@ -702,11 +704,11 @@ The CLI accepts the following options that can override configuration file setti
 
 ### `-a, --agents <roles>`
 - **Type**: String (comma-separated list)
-- **Accepted Values**: Comma-separated list of role names: `architect`, `security`, `performance`, `testing`, `generalist`
+- **Accepted Values**: Comma-separated list of role names: `architect`, `security`, `performance`, `testing`, `kiss`, `generalist`
 - **Description**: Filter which agents participate in the debate. Only agents with matching roles will be included.
 - **Default**: All enabled agents from configuration
 - **Example**: `--agents architect,performance`
-- **Behavior**: If no agents match the filter, the system falls back to default agents (architect and performance).
+- **Behavior**: If no agents match the filter, the system falls back to default agents (architect, performance, and kiss).
 - **Important**: This option **filters** agents from the configuration file; it does not replace or override agent configurations. The configuration file defines the agent pool (including models, temperatures, custom prompts), while this option selects which configured agents participate in the debate. For example, if your config defines a security agent with a custom prompt and `gpt-4` model, using `--agents security` will use that configured security agent, not a default one.
 
 ### `-r, --rounds <number>`
@@ -764,6 +766,15 @@ If the configuration file is missing or incomplete, the system uses these built-
     "id": "agent-performance",
     "name": "Performance Engineer",
     "role": "performance",
+    "model": "gpt-4",
+    "provider": "openai",
+    "temperature": 0.5,
+    "enabled": true
+  },
+  {
+    "id": "agent-kiss",
+    "name": "Simplicity Advocate",
+    "role": "kiss",
     "model": "gpt-4",
     "provider": "openai",
     "temperature": 0.5,
