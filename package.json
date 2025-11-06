@@ -20,7 +20,15 @@
     "prepare": "npm run build"
   },
   "keywords": [],
-  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slior/dialectic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/slior/dialectic/issues"
+  },
+  "homepage": "https://github.com/slior/dialectic#readme", 
+  "author": "Lior Schejter (https://github.com/slior)",
   "license": "MIT",
   "engines": {
     "node": ">=18"
