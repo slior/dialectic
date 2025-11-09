@@ -26,6 +26,12 @@ dialectic debate --problemDescription problem.txt
 dialectic debate --problemDescription ./problems/rate-limiting.md
 ```
 
+**With additional context:**
+```bash
+dialectic debate "Design a rate limiting system" --context ./context/requirements.md
+dialectic debate --problemDescription problem.txt --context ./context/background.md
+```
+
 ### Command Options
 
 - `[problem]` - Problem statement as inline string (mutually exclusive with `--problemDescription`)
@@ -35,6 +41,14 @@ dialectic debate --problemDescription ./problems/rate-limiting.md
   - **Content**: Must be non-empty (whitespace-only files are rejected)
   - **Path resolution**: Relative paths resolved from current working directory
   - **Mutual exclusivity**: Cannot provide both string problem and `--problemDescription` file
+- `--context <path>` - Path to a text file containing additional context
+  - **Encoding**: UTF-8
+  - **Format**: Any text format (plain text, markdown, etc.)
+  - **Content**: Optional; if file is missing, empty, or invalid, a warning is issued and the debate continues without context
+  - **Character limit**: Maximum 5000 characters; content exceeding this limit is truncated with a warning
+  - **Path resolution**: Relative paths resolved from current working directory
+  - **Storage**: Context is stored separately in `DebateState.context` and combined with the problem when building prompts
+  - **Combination**: Context is appended to the problem statement under a markdown heading `# Extra Context` when passed to agents and judge
 - `--agents <list>` - Comma-separated agent roles to participate (default: `architect,performance,kiss`)
   - Available roles: `architect`, `performance`, `security`, `testing`, `kiss`, `generalist`
   - Filters agents from configuration file by role; uses defaults if no matches found
@@ -103,6 +117,7 @@ dialectic debate --problemDescription problems/rate-limiting.md --verbose --repo
 ```bash
 dialectic debate \
   --problemDescription ./problems/rate-limiting.md \
+  --context ./context/requirements.md \
   --config ./configs/production.json \
   --agents architect,performance,security \
   --rounds 5 \
@@ -189,6 +204,15 @@ dialectic debate "Design a distributed cache system" --clarify
 - Debate states are saved to `./debates/` directory
 - Filename format: `deb-YYYYMMDD-HHMMSS-RAND.json`
 - Files are saved incrementally during execution and upon completion
+- Context (if provided) is stored in `DebateState.context` separately from the problem
+
+**Shared Context:**
+- The `--context` option allows you to provide additional context that supplements the problem statement
+- Context is stored separately in `DebateState.context` and combined with the problem when building prompts
+- Context is appended to the problem under a markdown heading `# Extra Context` when passed to agents and judge
+- If the context file is missing, empty, or invalid, a warning is issued and the debate continues without context
+- Context content is limited to 5000 characters; exceeding content is truncated with a warning
+- This feature is useful for providing background information, constraints, or requirements that complement the main problem statement
 
 **Agent Roles:**
 - `architect`: System design and architecture perspective

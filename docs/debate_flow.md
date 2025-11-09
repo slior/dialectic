@@ -33,6 +33,17 @@ sequenceDiagram
         Cmd->>FS: read file content (UTF-8)
         Cmd->>Cmd: validate content non-empty
     end
+    opt context file provided (--context)
+        Cmd->>Cmd: readContextFile(contextPath)
+        Cmd->>FS: validate file exists
+        alt file valid
+            Cmd->>FS: read file content (UTF-8)
+            Cmd->>Cmd: trim and truncate if > 5000 chars
+            Cmd->>Cmd: return context string
+        else file invalid
+            Cmd->>CLI: warn and return undefined
+        end
+    end
     Cmd->>Cmd: validate API key
     Cmd->>Config: loadConfig(configPath)
     Config->>FS: read config file
@@ -64,9 +75,9 @@ sequenceDiagram
         Cmd->>Cmd: build AgentClarifications[] with answers
     end
     
-    Cmd->>Orch: runDebate(problem, context?, clarifications?)
+    Cmd->>Orch: runDebate(problem, contextString?, clarifications?)
     
-    Orch->>SM: createDebate(problem, context)
+    Orch->>SM: createDebate(problem, contextString)
     SM->>FS: save initial state JSON
     SM-->>Orch: DebateState
     
@@ -99,7 +110,8 @@ sequenceDiagram
         Orch->>Orch: proposalPhase(state, preparedContexts)
         alt Round 1
             loop For each agent
-                Orch->>Agents: agent.propose(problem, preparedContext)
+                Orch->>Orch: enhanceProblemWithContext(problem, context)
+                Orch->>Agents: agent.propose(enhancedProblem, preparedContext)
                 Agents->>Agents: prepare prompts
                 Agents->>Provider: complete(systemPrompt, userPrompt)
                 Provider->>Provider: try Responses API
@@ -168,7 +180,8 @@ sequenceDiagram
     else No judge summarization
         Judge-->>Orch: {context}
     end
-    Orch->>Judge: synthesize(problem, rounds, context)
+    Orch->>Orch: enhanceProblemWithContext(problem, context)
+    Orch->>Judge: synthesize(enhancedProblem, rounds, context)
     Judge->>Judge: buildSynthesisPrompt()
     Judge->>Provider: complete(systemPrompt, userPrompt)
     Provider-->>Judge: {text, usage, latency}
@@ -218,7 +231,7 @@ The entry point for the debate system. This function:
 
 Registers the debate command and its action handler with Commander. Defines:
 - Command name and argument: `debate [problem]` (optional problem string)
-- Options: `--problemDescription`, `--agents`, `--rounds`, `--config`, `--output`, `--verbose`, `--report`, `--clarify`
+- Options: `--problemDescription`, `--context`, `--agents`, `--rounds`, `--config`, `--output`, `--verbose`, `--report`, `--clarify`
 - Action handler that executes when the command is invoked
 
 **Parameters**:
@@ -254,14 +267,41 @@ Resolves the problem description from either command line string or file path.
   - File empty: EXIT_INVALID_ARGS
   - Read error: EXIT_GENERAL_ERROR
 
-### 4. Additional Validation
+### 4. Context File Reading (Optional)
+
+**Function**: `readContextFile(contextPath: string)`  
+**Location**: `src/cli/commands/debate.ts`
+
+Reads and validates an optional context file that provides additional context for the problem statement. The context is stored separately in `DebateState.context` and combined with the problem when building prompts.
+
+**Parameters**:
+- `contextPath`: Path to the context file (relative to current working directory)
+
+**Returns**: Promise resolving to context content string (trimmed and truncated if needed), or `undefined` if the file cannot be read
+
+**Behavior**:
+- **Non-fatal validation**: All validation errors result in warnings, not fatal errors
+- **File validation**: 
+  - If file does not exist: warns and returns `undefined`
+  - If path is a directory: warns and returns `undefined`
+  - If file is empty or whitespace-only: warns and returns `undefined`
+- **Content processing**:
+  - Reads file content as UTF-8
+  - Trims whitespace from content
+  - If content exceeds 5000 characters: warns and truncates to exactly 5000 characters
+  - Returns trimmed/truncated content string
+- **Error handling**: If file read fails (permissions, etc.), warns and returns `undefined`
+
+**Storage**: The context string is stored in `DebateState.context` separately from the problem statement. The context is combined with the problem when building prompts for agents and judge using `enhanceProblemWithContext()`.
+
+### 5. Additional Validation
 
 After problem resolution, additional validation occurs:
 - **OPENAI_API_KEY**: Must be set in environment variables
 
 If validation fails, throws an error with appropriate exit code (EXIT_CONFIG_ERROR).
 
-### 4. Configuration Loading
+### 6. Configuration Loading
 
 **Function**: `loadConfig(configPath?: string)`  
 **Location**: `src/cli/commands/debate.ts`
@@ -717,8 +757,9 @@ All agents produce proposals in parallel for this round.
 **For each agent (parallel execution)**:
 1. **Hook Invoked**: `onAgentStart(agentName, 'proposing')` - Notifies progress UI that agent is starting
 2. Behavior by round:
-   - Round 1: Calls `agent.propose(problem, context)`
-     - Agent prepares role-specific prompts
+   - Round 1: Combines problem with context (if provided) using `enhanceProblemWithContext()`, then calls `agent.propose(enhancedProblem, context)`
+     - If `DebateState.context` exists, it is appended to the problem under a markdown heading `# Extra Context`
+     - Agent prepares role-specific prompts using the enhanced problem
      - Calls `proposeImpl()` which invokes `callLLM()`
      - `callLLM()` measures latency and calls `provider.complete()`
      - Returns `Proposal` with content and metadata (tokens, latency, model)
@@ -808,21 +849,23 @@ Judge synthesizes the final solution from all debate rounds, with optional summa
    - If summary created: stores it in `DebateState.judgeSummary` via `stateManager.addJudgeSummary()`
    - Falls back to final round's proposals and refinements if summarization fails
 3. Builds `DebateContext` with full history
-4. Calls `judge.synthesize(problem, rounds, context)`
-5. Judge builds comprehensive synthesis prompt:
-   - Includes problem statement
+4. Combines problem with context (if provided) using `enhanceProblemWithContext()`:
+   - If `DebateState.context` exists, it is appended to the problem under a markdown heading `# Extra Context`
+5. Calls `judge.synthesize(enhancedProblem, rounds, context)`
+6. Judge builds comprehensive synthesis prompt:
+   - Includes enhanced problem statement (with context appended if provided)
    - If summarization was used: includes only final round's key contributions
    - If no summarization: includes all rounds with each contribution labeled by role and type
    - Adds synthesis instructions
-6. Calls `provider.complete()` with judge's system prompt and synthesis prompt
-7. Provider returns generated text
-8. Judge wraps text in `Solution` object with:
+7. Calls `provider.complete()` with judge's system prompt and synthesis prompt
+8. Provider returns generated text
+9. Judge wraps text in `Solution` object with:
    - `description`: LLM-generated solution text
    - `tradeoffs`: Empty array (future enhancement)
    - `recommendations`: Empty array (future enhancement)
    - `confidence`: Default score of 75 (future enhancement)
    - `synthesizedBy`: Judge agent ID
-9. **Hook Invoked**: `onSynthesisComplete()` - Notifies progress UI that synthesis is complete
+10. **Hook Invoked**: `onSynthesisComplete()` - Notifies progress UI that synthesis is complete
 
 **Returns**: `Solution` object
 
@@ -911,7 +954,10 @@ The system uses structured error handling with exit codes:
 Represents the complete state of a debate:
 - `id`: Unique identifier
 - `problem`: Problem statement
-- `context`: Optional additional context
+- `context`: Optional additional context string (from `--context` option)
+  - Stored separately from the problem statement
+  - Combined with the problem when building prompts using `enhanceProblemWithContext()`
+  - Appended under markdown heading `# Extra Context` when passed to agents and judge
 - `status`: "pending" | "running" | "completed" | "failed"
 - `currentRound`: Current round number (0 when no rounds started, 1-indexed after beginRound())
 - `rounds`: Array of `DebateRound` objects

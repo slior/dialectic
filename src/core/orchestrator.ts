@@ -4,6 +4,7 @@ import { StateManager } from './state-manager';
 import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType, AgentClarifications } from '../types/debate.types';
 import { writeStderr } from '../cli/index';
 import { AgentRole, Critique } from '../types/agent.types';
+import { enhanceProblemWithContext } from '../utils/context-enhancer';
 
 // Constants for agent activity descriptions used in progress tracking
 const ACTIVITY_PROPOSING = 'proposing';
@@ -285,7 +286,8 @@ export class DebateOrchestrator {
   private async buildProposalContributionFromLLM( agent: Agent, state: DebateState, preparedContexts: Map<string, DebateContext>, startedAtMs: number ): Promise<Contribution>
   {
     const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
-    const proposal = await agent.propose(state.problem, ctx);
+    const enhancedProblem = enhanceProblemWithContext(state.problem, state.context);
+    const proposal = await agent.propose(enhancedProblem, ctx);
     return this.buildContribution( agent, CONTRIBUTION_TYPES.PROPOSAL, proposal.content, proposal.metadata, startedAtMs );
   }
 
@@ -426,7 +428,8 @@ export class DebateOrchestrator {
     }
     
     const ctx = this.buildContext(state);
-    const solution = await this.judge.synthesize(state.problem, state.rounds, ctx);
+    const enhancedProblem = enhanceProblemWithContext(state.problem, state.context);
+    const solution = await this.judge.synthesize(enhancedProblem, state.rounds, ctx);
     return solution;
   }
 }

@@ -31,6 +31,7 @@ const FILE_ENCODING_UTF8 = 'utf-8';
 const JSON_FILE_EXTENSION = '.json';
 const MARKDOWN_FILE_EXTENSION = '.md';
 const JSON_INDENT_SPACES = 2;
+const MAX_CONTEXT_LENGTH = 5000;
 
 // Problem resolution error messages
 const ERROR_BOTH_PROBLEM_SOURCES = 'Invalid arguments: provide exactly one of <problem> or --problemDescription';
@@ -495,6 +496,51 @@ async function readAndValidateFileContent(filePath: string): Promise<string> {
 }
 
 /**
+ * Reads and validates a context file, with non-fatal error handling.
+ * If the file is missing, invalid, or empty, a warning is issued and undefined is returned.
+ * If the file content exceeds the maximum length, it is truncated with a warning.
+ *
+ * @param contextPath - Path to the context file (relative to current working directory).
+ * @returns The context content string (trimmed and truncated if needed), or undefined if the file cannot be read.
+ */
+async function readContextFile(contextPath: string): Promise<string | undefined> {
+  const filePath = path.resolve(process.cwd(), contextPath);
+
+  if (!fs.existsSync(filePath)) {
+    warnUser(`Context file not found: ${filePath}. Continuing without context.`);
+    return undefined;
+  }
+
+  
+  const stats = fs.statSync(filePath);
+  if (stats.isDirectory()) { // Validate it's not a directory
+    warnUser(`Context path is a directory: ${filePath}. Continuing without context.`);
+    return undefined;
+  }
+
+  try {
+    const content = await fs.promises.readFile(filePath, FILE_ENCODING_UTF8);
+    
+    const trimmedContent = content.trim();
+    
+    if (trimmedContent.length === 0) {
+      warnUser(`Context file is empty: ${filePath}. Continuing without context.`);
+      return undefined;
+    }
+
+    if (trimmedContent.length > MAX_CONTEXT_LENGTH) {
+      warnUser(`Context file exceeds ${MAX_CONTEXT_LENGTH} characters (${trimmedContent.length}). Truncating to ${MAX_CONTEXT_LENGTH} characters.`);
+      return trimmedContent.substring(0, MAX_CONTEXT_LENGTH);
+    }
+
+    return trimmedContent;
+  } catch (error: any) {
+    warnUser(`Failed to read context file: ${filePath}. Error: ${error.message}. Continuing without context.`);
+    return undefined;
+  }
+}
+
+/**
  * Resolves the problem description from either command line string or file.
  * Enforces exactly-one constraint and validates file content.
  *
@@ -673,6 +719,9 @@ export function debateCommand(program: Command) {
         loadEnvironmentFile(options.envFile, options.verbose);
         
         const resolvedProblem = await resolveProblemDescription(problem, options);
+        
+        // Read context file if provided
+        const contextString = options.context ? await readContextFile(options.context) : undefined;
 
         const sysConfig = await loadConfig(options.config);
         const debateCfg = debateConfigFromSysConfig(sysConfig, options);
@@ -736,7 +785,7 @@ export function debateCommand(program: Command) {
         
         // Start progress UI and run debate
         await progressUI.start();
-        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, undefined, finalClarifications);
+        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, contextString, finalClarifications);
         await progressUI.complete();
 
         // Persist prompt sources once per debate
