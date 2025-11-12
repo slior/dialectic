@@ -13,6 +13,9 @@ import { numOrUndefined, averageOrNull, createValidationError, readJsonFile } fr
 
 const FILE_ENCODING_UTF8 = 'utf-8';
 const JSON_INDENT_SPACES = 2;
+const CSV_HEADER = 'debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score';
+const JSON_EXTENSION = '.json';
+const CSV_EXTENSION = '.csv';
 
 /**
  * Result of loading an evaluator configuration file.
@@ -145,47 +148,153 @@ function renderMarkdownTable(agg: AggregatedAverages): string {
 }
 
 /**
- * Writes evaluation results to a file or stdout in JSON or Markdown format.
+ * Escapes a CSV field value according to RFC 4180.
+ * Fields containing commas, double quotes, or newlines must be quoted, and quotes must be escaped.
+ *
+ * @param {string} value - The field value to escape.
+ * @returns {string} The escaped CSV field value.
+ */
+function escapeCsvField(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+/**
+ * Formats aggregated averages and debate filename into a CSV row string.
+ *
+ * @param {string} debateFilename - The debate filename (without .json extension).
+ * @param {AggregatedAverages} agg - An object containing aggregated (averaged) scores for each metric.
+ * @returns {string} The CSV row as a string with all fields properly escaped.
+ */
+function formatCsvRow(debateFilename: string, agg: AggregatedAverages): string {
+  const formatScore = (v: number | null): string => {
+    return v == null ? '' : v.toFixed(2);
+  };
+
+  const fields = [
+    debateFilename,
+    formatScore(agg.functional_completeness),
+    formatScore(agg.performance_scalability),
+    formatScore(agg.security),
+    formatScore(agg.maintainability_evolvability),
+    formatScore(agg.regulatory_compliance),
+    formatScore(agg.testability),
+    formatScore(agg.overall_score),
+  ];
+
+  return fields.map(escapeCsvField).join(',');
+}
+
+/**
+ * Builds an AggregatedJsonOutput object from aggregated averages and per-agent results.
+ *
+ * @param {AggregatedAverages} aggregatedAverages - The aggregated average scores across all metrics.
+ * @param {Record<string, ParsedEvaluation>} perAgentResults - Per-agent parsed evaluation results, keyed by agent ID.
+ * @returns {AggregatedJsonOutput} The formatted JSON output object.
+ */
+function buildAggregatedJsonOutput(
+  aggregatedAverages: AggregatedAverages,
+  perAgentResults: Record<string, ParsedEvaluation>
+): AggregatedJsonOutput {
+  return {
+    evaluation: {
+      functional_completeness: { average_score: aggregatedAverages.functional_completeness },
+      non_functional: {
+        performance_scalability: { average_score: aggregatedAverages.performance_scalability },
+        security: { average_score: aggregatedAverages.security },
+        maintainability_evolvability: { average_score: aggregatedAverages.maintainability_evolvability },
+        regulatory_compliance: { average_score: aggregatedAverages.regulatory_compliance },
+        testability: { average_score: aggregatedAverages.testability },
+      },
+    },
+    overall_score: aggregatedAverages.overall_score,
+    agents: perAgentResults,
+  };
+}
+
+/**
+ * Writes evaluation results to a CSV file, appending a data row or creating a new file with header.
+ *
+ * Extracts the debate filename from the debate path, removes the .json extension if present,
+ * formats the aggregated averages as a CSV row, and either appends to an existing file or
+ * creates a new file with header and data row.
+ *
+ * @param {string} resolvedPath - The absolute path to the CSV output file.
+ * @param {string} debatePath - The path to the debate file (used to extract filename).
+ * @param {AggregatedAverages} aggregatedAverages - The aggregated average scores across all metrics.
+ * @returns {Promise<void>} A promise that resolves when the CSV file has been written.
+ */
+async function writeCsvOutput(
+  resolvedPath: string,
+  debatePath: string,
+  aggregatedAverages: AggregatedAverages
+): Promise<void> {
+  let debateFilename = path.basename(debatePath);
+  if (debateFilename.toLowerCase().endsWith(JSON_EXTENSION)) {
+    debateFilename = debateFilename.slice(0, -JSON_EXTENSION.length);
+  }
+  const csvRow = formatCsvRow(debateFilename, aggregatedAverages);
+  
+  if (fs.existsSync(resolvedPath)) {
+    await fs.promises.appendFile(resolvedPath, csvRow + '\n', FILE_ENCODING_UTF8);
+  } else {
+    await fs.promises.writeFile(resolvedPath, CSV_HEADER + '\n' + csvRow + '\n', FILE_ENCODING_UTF8);
+  }
+}
+
+/**
+ * Writes evaluation results as a Markdown table to a file or stdout.
+ *
+ * Formats aggregated averages as a Markdown table and writes to the specified file path,
+ * or to stdout if no path is provided.
+ *
+ * @param {string | undefined} resolvedPath - The absolute path to the output file, or undefined for stdout.
+ * @param {AggregatedAverages} aggregatedAverages - The aggregated average scores across all metrics.
+ * @returns {Promise<void>} A promise that resolves when the Markdown output has been written.
+ */
+async function writeMarkdownOutput(
+  resolvedPath: string | undefined,
+  aggregatedAverages: AggregatedAverages
+): Promise<void> {
+  const md = renderMarkdownTable(aggregatedAverages);
+  if (resolvedPath) {
+    await fs.promises.writeFile(resolvedPath, md, FILE_ENCODING_UTF8);
+  } else {
+    process.stdout.write(md + '\n');
+  }
+}
+
+/**
+ * Writes evaluation results to a file or stdout in JSON, CSV, or Markdown format.
  *
  * This function handles the output of evaluation results based on the output path:
  * - If outputPath ends with '.json', writes a detailed JSON file containing aggregated averages and per-agent results.
+ * - If outputPath ends with '.csv', writes CSV format with header (if file doesn't exist) and appends data row.
  * - Otherwise, writes a Markdown table with aggregated scores to the file or stdout (if no path provided).
  *
  * @param {AggregatedAverages} aggregatedAverages - The aggregated average scores across all metrics.
  * @param {Record<string, ParsedEvaluation>} perAgentResults - Per-agent parsed evaluation results, keyed by agent ID.
  * @param {string | undefined} outputPath - Optional output file path. If undefined, writes Markdown to stdout.
+ * @param {string} debatePath - The path to the debate file (used to extract filename for CSV).
  * @returns {Promise<void>} A promise that resolves when the output has been written.
  */
 async function writeEvaluationResults(
   aggregatedAverages: AggregatedAverages,
   perAgentResults: Record<string, ParsedEvaluation>,
-  outputPath: string | undefined
+  outputPath: string | undefined,
+  debatePath: string
 ): Promise<void> {
   const resolvedPath = outputPath ? path.resolve(process.cwd(), outputPath) : undefined;
   
-  if (resolvedPath && resolvedPath.toLowerCase().endsWith('.json')) {
-    const jsonOut: AggregatedJsonOutput = {
-      evaluation: {
-        functional_completeness: { average_score: aggregatedAverages.functional_completeness },
-        non_functional: {
-          performance_scalability: { average_score: aggregatedAverages.performance_scalability },
-          security: { average_score: aggregatedAverages.security },
-          maintainability_evolvability: { average_score: aggregatedAverages.maintainability_evolvability },
-          regulatory_compliance: { average_score: aggregatedAverages.regulatory_compliance },
-          testability: { average_score: aggregatedAverages.testability },
-        },
-      },
-      overall_score: aggregatedAverages.overall_score,
-      agents: perAgentResults,
-    };
+  if (resolvedPath && resolvedPath.toLowerCase().endsWith(JSON_EXTENSION)) {
+    const jsonOut = buildAggregatedJsonOutput(aggregatedAverages, perAgentResults);
     await fs.promises.writeFile(resolvedPath, JSON.stringify(jsonOut, null, JSON_INDENT_SPACES), FILE_ENCODING_UTF8);
+  } else if (resolvedPath && resolvedPath.toLowerCase().endsWith(CSV_EXTENSION)) {
+    await writeCsvOutput(resolvedPath, debatePath, aggregatedAverages);
   } else {
-    const md = renderMarkdownTable(aggregatedAverages);
-    if (resolvedPath) {
-      await fs.promises.writeFile(resolvedPath, md, FILE_ENCODING_UTF8);
-    } else {
-      process.stdout.write(md + '\n');
-    }
+    await writeMarkdownOutput(resolvedPath, aggregatedAverages);
   }
 }
 
@@ -462,7 +571,7 @@ export function evalCommand(program: Command) {
           overall_score: averageOrNull(arrOverall),
         };
 
-        await writeEvaluationResults(agg, perAgentParsed, options.output);
+        await writeEvaluationResults(agg, perAgentParsed, options.output, options.debate);
       } catch (err: any) {
         const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
         writeStderr((err?.message || 'Unknown error') + '\n');

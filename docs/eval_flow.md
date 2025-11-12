@@ -122,14 +122,24 @@ sequenceDiagram
     Cmd->>Agg: calculate averages (averageOrNull) for each metric
     Agg-->>Cmd: AggregatedAverages
     
-    Cmd->>Output: writeEvaluationResults(aggregatedAverages, perAgentResults, outputPath)
+    Cmd->>Output: writeEvaluationResults(aggregatedAverages, perAgentResults, outputPath, debatePath)
     alt outputPath ends with .json
-        Output->>Output: build AggregatedJsonOutput object
+        Output->>Output: buildAggregatedJsonOutput(aggregatedAverages, perAgentResults)
         Output->>FS: write JSON file (UTF-8, 2-space indent)
-    else outputPath exists but not .json
+    else outputPath ends with .csv
+        Output->>Output: writeCsvOutput(resolvedPath, debatePath, aggregatedAverages)
+        Output->>Output: extract debate filename, format CSV row
+        alt CSV file exists
+            Output->>FS: appendFile(data row + newline)
+        else CSV file doesn't exist
+            Output->>FS: writeFile(header + newline + data row + newline)
+        end
+    else outputPath exists but not .json/.csv
+        Output->>Output: writeMarkdownOutput(resolvedPath, aggregatedAverages)
         Output->>Output: renderMarkdownTable(aggregatedAverages)
         Output->>FS: write Markdown file (UTF-8)
     else no outputPath
+        Output->>Output: writeMarkdownOutput(undefined, aggregatedAverages)
         Output->>Output: renderMarkdownTable(aggregatedAverages)
         Output->>CLI: write to stdout
     end
@@ -517,15 +527,16 @@ For each parsed evaluation result:
 
 ### 11. Result Output
 
-**Function**: `writeEvaluationResults(aggregatedAverages, perAgentResults, outputPath)`  
+**Function**: `writeEvaluationResults(aggregatedAverages, perAgentResults, outputPath, debatePath)`  
 **Location**: `src/cli/commands/eval.ts`
 
-Writes evaluation results to a file or stdout in JSON or Markdown format.
+Writes evaluation results to a file or stdout in JSON, CSV, or Markdown format.
 
 **Parameters**:
 - `aggregatedAverages`: Aggregated average scores for all metrics
 - `perAgentResults`: Per-agent parsed evaluation results, keyed by agent ID
 - `outputPath`: Optional output file path
+- `debatePath`: Path to the debate file (used to extract filename for CSV)
 
 **Execution Flow**:
 
@@ -536,43 +547,71 @@ Writes evaluation results to a file or stdout in JSON or Markdown format.
 #### 11.2 JSON Output Format
 If resolved path ends with `.json`:
 
-1. Builds `AggregatedJsonOutput` object:
-   ```typescript
-   {
-     evaluation: {
-       functional_completeness: { average_score: number | null },
-       non_functional: {
-         performance_scalability: { average_score: number | null },
-         security: { average_score: number | null },
-         maintainability_evolvability: { average_score: number | null },
-         regulatory_compliance: { average_score: number | null },
-         testability: { average_score: number | null }
-       }
-     },
-     overall_score: number | null,
-     agents: Record<string, ParsedEvaluation>
-   }
-   ```
+1. Calls `buildAggregatedJsonOutput(aggregatedAverages, perAgentResults)`:
+   - Builds `AggregatedJsonOutput` object:
+     ```typescript
+     {
+       evaluation: {
+         functional_completeness: { average_score: number | null },
+         non_functional: {
+           performance_scalability: { average_score: number | null },
+           security: { average_score: number | null },
+           maintainability_evolvability: { average_score: number | null },
+           regulatory_compliance: { average_score: number | null },
+           testability: { average_score: number | null }
+         }
+       },
+       overall_score: number | null,
+       agents: Record<string, ParsedEvaluation>
+     }
+     ```
 
 2. Writes JSON file:
    - Formats with 2-space indent
    - Encodes as UTF-8
    - Writes to resolved path
 
-#### 11.3 Markdown Output Format
-Otherwise (path doesn't end with `.json` or no path):
+#### 11.3 CSV Output Format
+If resolved path ends with `.csv`:
 
-1. Calls `renderMarkdownTable(aggregatedAverages)`:
-   - Formats each score to 2 decimal places (or "N/A" if null)
-   - Builds Markdown table:
-     ```markdown
-     | Functional Completeness | Performance & Scalability | Security | Maintainability & Evolvability | Regulatory Compliance | Testability | Overall Score |
-     |------------------------|---------------------------|----------|-------------------------------|------------------------|------------|---------------|
-     | 8.50 | 7.25 | 9.00 | 8.00 | N/A | 7.75 | 8.10 |
-     ```
+1. Calls `writeCsvOutput(resolvedPath, debatePath, aggregatedAverages)`:
+   - Extracts debate filename using `path.basename(debatePath)`
+   - Removes `.json` extension if present
+   - Formats CSV row using `formatCsvRow(debateFilename, aggregatedAverages)`:
+     - Formats each score: null → empty string, number → `toFixed(2)`
+     - Escapes CSV fields using `escapeCsvField()` (RFC 4180):
+       - Values with commas, quotes, or newlines are quoted
+       - Internal quotes are escaped by doubling (`"` → `""`)
+     - Joins fields with commas
+
+2. Checks if CSV file exists:
+   - **If file exists**: Appends data row + newline using `fs.promises.appendFile()`
+   - **If file doesn't exist**: Writes header row + newline + data row + newline using `fs.promises.writeFile()`
+
+3. CSV header format:
+   ```
+   debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score
+   ```
+
+4. CSV data row format:
+   - First column: Debate filename (without `.json` extension)
+   - Remaining 7 columns: Formatted scores (2 decimal places) or empty string for null values
+
+#### 11.4 Markdown Output Format
+Otherwise (path doesn't end with `.json` or `.csv`, or no path):
+
+1. Calls `writeMarkdownOutput(resolvedPath, aggregatedAverages)`:
+   - Calls `renderMarkdownTable(aggregatedAverages)`:
+     - Formats each score to 2 decimal places (or "N/A" if null)
+     - Builds Markdown table:
+       ```markdown
+       | Functional Completeness | Performance & Scalability | Security | Maintainability & Evolvability | Regulatory Compliance | Testability | Overall Score |
+       |------------------------|---------------------------|----------|-------------------------------|------------------------|------------|---------------|
+       | 8.50 | 7.25 | 9.00 | 8.00 | N/A | 7.75 | 8.10 |
+       ```
 
 2. Writes output:
-   - If `outputPath` provided: writes Markdown file (UTF-8)
+   - If `resolvedPath` provided: writes Markdown file (UTF-8)
    - Otherwise: writes to stdout
 
 ### 12. Error Handling
@@ -727,14 +766,28 @@ Complete JSON output format:
 - Format: Pretty-printed JSON with 2-space indent
 - Encoding: UTF-8
 - Content: Complete `AggregatedJsonOutput` object
+- Detection: Path ends with `.json` (case-insensitive)
+
+**CSV Output**:
+- Format: CSV format per RFC 4180
+- Encoding: UTF-8
+- Content: Header row (on new file) + data row with aggregated scores
+- Detection: Path ends with `.csv` (case-insensitive)
+- Behavior:
+  - New file: Writes header row + data row
+  - Existing file: Appends data row only (preserves header)
+- Columns: debate filename, 7 score columns (functional completeness, performance & scalability, security, maintainability & evolvability, regulatory compliance, testability, overall score)
+- Score formatting: Numbers to 2 decimal places, null values as empty strings
+- CSV escaping: Values with commas, quotes, or newlines are properly quoted and escaped
 
 **Markdown Output**:
 - Format: Markdown table with aggregated scores
 - Encoding: UTF-8
 - Content: Single table row with formatted scores
+- Detection: Path doesn't end with `.json` or `.csv`, or no path provided
 
 **Output Location**:
-- If `--output` specified: writes to file at resolved path
+- If `--output` specified: writes to file at resolved path (format determined by extension)
 - Otherwise: writes Markdown table to stdout
 
 ## Concurrency Model
@@ -788,7 +841,7 @@ The architecture supports extension through:
 1. **New Providers**: Implement `LLMProvider` interface for other LLM services
 2. **Custom Prompts**: Specify custom system and user prompts via configuration file
 3. **Additional Metrics**: Extend `ParsedEvaluation` interface and aggregation logic
-4. **Alternative Output Formats**: Extend `writeEvaluationResults()` to support additional formats
+4. **Alternative Output Formats**: Currently supports JSON, CSV, and Markdown. Extend `writeEvaluationResults()` to support additional formats
 5. **Custom Score Ranges**: Modify `clampScoreToRange()` to support different score ranges
 6. **Enhanced Validation**: Add custom validation logic in `validateAndParseEvaluatorResult()`
 7. **Progress Tracking**: Add progress hooks similar to debate orchestrator for real-time feedback

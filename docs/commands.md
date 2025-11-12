@@ -266,6 +266,7 @@ dialectic eval \
 - `-v, --verbose` - Verbose diagnostic logs to stderr
 - `-o, --output <path>` - Output destination
   - If ends with `.json`: writes aggregated JSON output
+  - If ends with `.csv`: writes CSV format with aggregated scores (appends to existing file or creates new file with header)
   - Otherwise: writes Markdown table (or stdout by default)
 
 ### Examples
@@ -283,6 +284,14 @@ dialectic eval \
   --output ./results/evaluation.json
 ```
 
+**Evaluator with CSV output:**
+```bash
+dialectic eval \
+  --config ./eval-config.json \
+  --debate ./debates/deb-20250101-010203-ABC.json \
+  --output ./results/evaluations.csv
+```
+
 **Evaluator with verbose logs:**
 ```bash
 dialectic eval \
@@ -290,6 +299,39 @@ dialectic eval \
   --debate ./debates/deb-20250101-010203-ABC.json \
   --verbose \
   --env-file .env
+```
+
+### CSV Output Format
+
+When the output path ends with `.csv`, the evaluator writes results in CSV format:
+
+**CSV File Structure:**
+- **Header row**: Contains column names (written only when creating a new file)
+- **Data rows**: Each evaluation adds one row with aggregated scores
+
+**CSV Columns:**
+1. `debate` - Debate filename (without `.json` extension)
+2. `Functional Completeness` - Average score for functional completeness
+3. `Performance & Scalability` - Average score for performance and scalability
+4. `Security` - Average score for security
+5. `Maintainability & Evolvability` - Average score for maintainability
+6. `Regulatory Compliance` - Average score for regulatory compliance
+7. `Testability` - Average score for testability
+8. `Overall Score` - Overall average score
+
+**CSV Behavior:**
+- **New file**: Writes header row followed by data row
+- **Existing file**: Appends data row only (header is preserved)
+- **Score formatting**: Numbers formatted to 2 decimal places, null values appear as empty strings
+- **CSV escaping**: Values containing commas, quotes, or newlines are properly escaped per RFC 4180
+
+**Use case**: CSV output is useful for aggregating multiple evaluation results in a spreadsheet or for programmatic analysis across multiple debates.
+
+**Example CSV output:**
+```csv
+debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score
+deb-20250101-010203-ABC,8.50,7.33,9.00,8.00,6.00,7.00,8.12
+deb-20250101-020304-DEF,7.00,8.00,8.50,7.50,5.00,6.50,7.25
 ```
 
 For detailed evaluator documentation, see [docs/evaluator.md](evaluator.md).

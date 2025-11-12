@@ -977,6 +977,401 @@ describe('CLI eval command', () => {
     });
   });
 
+  describe('CSV output format', () => {
+    let configPath: string;
+    let debatePath: string;
+
+    beforeEach(() => {
+      configPath = path.join(tmpDir, 'config.json');
+      debatePath = path.join(tmpDir, 'debate.json');
+      
+      fs.writeFileSync(configPath, JSON.stringify({
+        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+      }));
+      fs.writeFileSync(debatePath, JSON.stringify({
+        problem: 'Test',
+        finalSolution: { description: 'Solution' }
+      }));
+
+      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+    });
+
+    it('should write CSV file with header when file does not exist', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: {
+            functional_completeness: { score: 8 },
+            non_functional: {
+              performance_scalability: { score: 7 },
+              security: { score: 9 },
+              maintainability_evolvability: { score: 8 },
+              regulatory_compliance: { score: 6 },
+              testability: { score: 7 }
+            }
+          },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      expect(fs.existsSync(outputPath)).toBe(true);
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      
+      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      expect(lines[1]).toContain('debate');
+      expect(lines[1]).toContain('8.00');
+      expect(lines[1]).toContain('7.00');
+      expect(lines[1]).toContain('9.00');
+      expect(lines[1]).toContain('8.00');
+      expect(lines[1]).toContain('6.00');
+      expect(lines[1]).toContain('7.00');
+      expect(lines[1]).toContain('8.00');
+    });
+
+    it('should append data row when CSV file exists', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      
+      // Create existing CSV file with header
+      fs.writeFileSync(outputPath, 'debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score\n');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      
+      expect(lines.length).toBe(2); // Header + 1 data row
+      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      expect(lines[1]).toContain('debate');
+    });
+
+    it('should extract debate filename without .json extension', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      const debatePathWithJson = path.join(tmpDir, 'my-debate.json');
+      
+      fs.writeFileSync(debatePathWithJson, JSON.stringify({
+        problem: 'Test',
+        finalSolution: { description: 'Solution' }
+      }));
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePathWithJson, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      expect(lines[1]).toBeDefined();
+      const dataRow = lines[1]!.split(',');
+      
+      expect(dataRow[0]).toBe('my-debate'); // Should not include .json
+    });
+
+    it('should handle debate path without .json extension', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      const debatePathNoExt = path.join(tmpDir, 'my-debate');
+      
+      fs.writeFileSync(debatePathNoExt, JSON.stringify({
+        problem: 'Test',
+        finalSolution: { description: 'Solution' }
+      }));
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePathNoExt, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      expect(lines[1]).toBeDefined();
+      const dataRow = lines[1]!.split(',');
+      
+      expect(dataRow[0]).toBe('my-debate');
+    });
+
+    it('should format scores to 2 decimal places in CSV', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: {
+            functional_completeness: { score: 8.5 },
+            non_functional: {
+              performance_scalability: { score: 7.333 },
+              security: { score: 9.99 }
+            }
+          },
+          overall_summary: { overall_score: 8.123 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      
+      expect(content).toContain('8.50');
+      expect(content).toContain('7.33');
+      expect(content).toContain('9.99');
+      expect(content).toContain('8.12');
+    });
+
+    it('should use empty string for null scores in CSV', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+          // Missing all non_functional scores
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      expect(lines[1]).toBeDefined();
+      const dataRow = lines[1]!.split(',');
+      
+      // Check that null scores are empty strings (not "N/A")
+      expect(dataRow[2]).toBe(''); // performance_scalability
+      expect(dataRow[3]).toBe(''); // security
+      expect(dataRow[4]).toBe(''); // maintainability_evolvability
+      expect(dataRow[5]).toBe(''); // regulatory_compliance
+      expect(dataRow[6]).toBe(''); // testability
+      expect(content).not.toContain('N/A');
+    });
+
+    it('should escape CSV values containing commas', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      const debatePathWithComma = path.join(tmpDir, 'debate,with,commas.json');
+      
+      fs.writeFileSync(debatePathWithComma, JSON.stringify({
+        problem: 'Test',
+        finalSolution: { description: 'Solution' }
+      }));
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePathWithComma, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      const dataRow = lines[1];
+      
+      // Value with commas should be quoted
+      expect(dataRow).toMatch(/^"debate,with,commas",/);
+    });
+
+    it('should not quote normal CSV values', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: {
+            functional_completeness: { score: 8 },
+            non_functional: {
+              performance_scalability: { score: 7 }
+            }
+          },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      const dataRow = lines[1];
+      
+      // Normal values should not be quoted
+      expect(dataRow).toMatch(/^debate,/);
+      expect(dataRow).toContain(',8.00,');
+      expect(dataRow).toContain(',7.00,');
+    });
+
+    it('should include all 7 score columns in correct order', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: {
+            functional_completeness: { score: 1 },
+            non_functional: {
+              performance_scalability: { score: 2 },
+              security: { score: 3 },
+              maintainability_evolvability: { score: 4 },
+              regulatory_compliance: { score: 5 },
+              testability: { score: 6 }
+            }
+          },
+          overall_summary: { overall_score: 7 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      expect(lines[0]).toBeDefined();
+      expect(lines[1]).toBeDefined();
+      const header = lines[0]!;
+      const dataRow = lines[1]!.split(',');
+      
+      // Verify header order
+      expect(header).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      
+      // Verify data order matches header (skip first field which is debate filename)
+      expect(dataRow[1]).toBe('1.00'); // functional_completeness
+      expect(dataRow[2]).toBe('2.00'); // performance_scalability
+      expect(dataRow[3]).toBe('3.00'); // security
+      expect(dataRow[4]).toBe('4.00'); // maintainability_evolvability
+      expect(dataRow[5]).toBe('5.00'); // regulatory_compliance
+      expect(dataRow[6]).toBe('6.00'); // testability
+      expect(dataRow[7]).toBe('7.00'); // overall_score
+    });
+
+    it('should detect CSV extension case-insensitively (.CSV)', async () => {
+      const outputPath = path.join(tmpDir, 'results.CSV');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      expect(fs.existsSync(outputPath)).toBe(true);
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      
+      // Should be CSV format, not JSON or Markdown
+      expect(content).toContain('debate,Functional Completeness');
+      expect(content).not.toContain('{');
+      expect(content).not.toContain('|');
+    });
+
+    it('should write JSON when output ends with .json (not CSV)', async () => {
+      const outputPath = path.join(tmpDir, 'results.json');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      
+      expect(parsed).toHaveProperty('evaluation');
+      expect(parsed).toHaveProperty('overall_score');
+      expect(content).not.toContain('debate,Functional Completeness');
+    });
+
+    it('should write Markdown when output has no extension (not CSV)', async () => {
+      const outputPath = path.join(tmpDir, 'results');
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      
+      expect(content).toContain('| Functional Completeness');
+      expect(content).toContain('|');
+      expect(content).not.toContain('debate,Functional Completeness');
+    });
+
+    it('should append multiple rows to same CSV file', async () => {
+      const outputPath = path.join(tmpDir, 'results.csv');
+      const debatePath2 = path.join(tmpDir, 'debate2.json');
+      
+      fs.writeFileSync(debatePath2, JSON.stringify({
+        problem: 'Test 2',
+        finalSolution: { description: 'Solution 2' }
+      }));
+      
+      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
+        id: 'e1',
+        rawText: JSON.stringify({
+          evaluation: { functional_completeness: { score: 8 } },
+          overall_summary: { overall_score: 8 }
+        }),
+        latencyMs: 100
+      });
+
+      // First evaluation
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--output', outputPath]);
+      
+      // Second evaluation
+      await runCli(['eval', '--config', configPath, '--debate', debatePath2, '--output', outputPath]);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const lines = content.trim().split('\n');
+      
+      expect(lines.length).toBe(3); // Header + 2 data rows
+      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      expect(lines[1]).toContain('debate');
+      expect(lines[2]).toContain('debate2');
+    });
+  });
+
   describe('Verbose mode', () => {
     let configPath: string;
     let debatePath: string;
