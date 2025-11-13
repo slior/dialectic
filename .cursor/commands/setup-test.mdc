@@ -4,31 +4,34 @@ description: Generate a complete test setup for dialectic debate testing with de
 
 # Setup Test Infrastructure
 
-Generate a complete test setup for dialectic debate testing. This command creates all necessary configuration files and scripts to run debates with different parameters and evaluate the results.
+Generate a complete test setup for dialectic debate testing. This command creates a new example directory structure similar to `example3` that works with the `meta-test.ts` script. It creates all necessary configuration files and scripts to run debates with different parameters and evaluate the results.
 
 ## Input Parameters
 
-The command accepts the following parameters (all optional with sensible defaults):
+The command accepts the following parameters:
 
-- **output_directory** (default: `/mnt/c/tmp/dialectic/{example_dir}/{test_case_name}`)
-  - The directory where debate outputs and evaluation results will be saved
-  - Should be a WSL-compatible path (e.g., `/mnt/c/...` for Windows drives)
-  - The directory will be created automatically if it doesn't exist
+- **example_name** (required)
+  - The name of the example directory to create (e.g., `my_example`, `rate_limiting`, `auth_system`)
+  - Will be created as `examples/{example_name}/`
+  - Must not start with underscore (underscore-prefixed directories are skipped by meta-test.ts)
+  - Must be a valid directory name (no special characters that would cause filesystem issues)
 
-- **example_directory** (default: `./examples/example3`)
-  - The base directory containing the example (must contain `problem.md`)
-  - Relative to the project root
-  - This directory will contain the generated config files
+- **problem_description** (required, provided in fenced code block)
+  - The problem description text to use for the debate
+  - Should be provided in a markdown fenced code block (```...```)
+  - Will be written to `examples/{example_name}/problem.md`
+  - Must be non-empty after trimming
 
-- **test_case_name** (default: `rounds_test`)
-  - Name of the test case (e.g., `rounds_test`, `agents_test`, `summary_test`)
+- **test_case_name** (optional, default: `rounds_test`)
+  - Name of the test case subdirectory (e.g., `rounds_test`, `agents_test`, `summary_test`)
   - Used to create a subdirectory under `example_directory` for test scripts
+  - If not provided, defaults to `rounds_test`
 
-- **model** (default: `google/gemini-2.5-flash-lite`)
+- **model** (optional, default: `google/gemini-2.5-flash-lite`)
   - The LLM model identifier to use for all agents and evaluators
   - Format depends on provider (e.g., `google/gemini-2.5-flash-lite` for OpenRouter, `gpt-4` for OpenAI)
 
-- **provider** (default: `openrouter`)
+- **provider** (optional, default: `openrouter`)
   - The LLM provider to use (`openai` or `openrouter`)
   - All agents and evaluators will use this provider
 
@@ -36,107 +39,142 @@ The command accepts the following parameters (all optional with sensible default
 
 The command will create the following files:
 
-### 1. `{example_directory}/debate-config.json`
+### 1. `examples/{example_name}/problem.md`
+Problem description file containing the provided problem description text.
+
+### 2. `examples/{example_name}/debate-config.json`
 Debate configuration file with:
-- Three agents: architect, performance, and security (all enabled)
+- Four agents: architect, performance, security, and kiss (all enabled)
 - Judge agent with generalist role
 - All agents configured with the specified model and provider
 - Summarization enabled with threshold 10000 and maxLength 5000
 - Default debate settings (3 rounds, fixed termination, judge synthesis)
 
-### 2. `{example_directory}/eval_config2.json`
+### 3. `examples/{example_name}/eval_config.json`
 Evaluation configuration file with:
 - Two evaluator agents (eval-1 and eval-2)
 - Both configured with the specified model and provider
-- Custom prompt paths (relative to example directory parent)
+- Custom prompt paths: `../eval_system.md` and `../eval_user.md` (relative to example directory)
 - Timeout set to 30000ms
+- Both agents enabled by default
 
-### 3. `{example_directory}/{test_case_name}/run_test.sh`
+### 4. `examples/eval_system.md` (if not exists)
+Evaluation system prompt file (copied from `src/eval/prompts/system.md`).
+Created in the `examples/` directory so all examples can reference it via `../eval_system.md`.
+
+### 5. `examples/eval_user.md` (if not exists)
+Evaluation user prompt file (copied from `src/eval/prompts/user.md`).
+Created in the `examples/` directory so all examples can reference it via `../eval_user.md`.
+
+### 6. `examples/{example_name}/{test_case_name}/run_test.sh`
 Test execution script that:
 - Uses variables for BASE_DIR and OUTPUT_DIR
 - Creates the output directory if it doesn't exist
-- Runs 5 debate commands with rounds 1-5
+- Runs 3 debate commands with rounds 1-3 (matching example3 pattern)
 - Outputs results to the specified output directory
-- Uses WSL-compatible paths (converts Windows paths to `/mnt/c/...` format)
-- Includes shebang (`#!/bin/bash`) and is executable
+- Uses relative paths from project root
+- Includes shebang (`#!/bin/bash`) and executable permissions
 
-### 4. `{example_directory}/{test_case_name}/eval_run.sh`
+### 7. `examples/{example_name}/{test_case_name}/eval_run.sh`
 Evaluation script that:
 - Uses the same path variables as run_test.sh
-- Evaluates all 5 debate outputs from the test run
+- Evaluates all debate outputs from the test run
 - Writes evaluation results to the output directory
-- Includes shebang and is executable
+- Includes shebang and executable permissions
 
 ## Implementation Instructions
 
 When executing this command, follow these steps precisely:
 
-1. **Validate Inputs**
-   - If `example_directory` doesn't exist, create it
-   - Verify `{example_directory}/problem.md` exists (create placeholder if needed)
-   - Convert Windows-style output paths (`C:/...`) to WSL format (`/mnt/c/...`)
+1. **Extract Problem Description**
+   - Extract the problem description from the fenced code block provided by the user
+   - Trim whitespace from the beginning and end
+   - Validate that the problem description is non-empty after trimming
+   - If empty, exit with an error message
 
-2. **Create Debate Config**
-   - Create `{example_directory}/debate-config.json`
-   - Configure three agents: architect, performance, security (all enabled, temperature 0.5)
+2. **Validate Example Name**
+   - Check that `example_name` is provided and non-empty
+   - Validate that `example_name` doesn't start with underscore (meta-test.ts skips these)
+   - Check that `examples/{example_name}` doesn't already exist (warn if it does, but proceed)
+   - Ensure `example_name` is a valid directory name
+
+3. **Create Example Directory Structure**
+   - Create directory `examples/{example_name}/` if it doesn't exist
+   - Create directory `examples/{example_name}/{test_case_name}/` for test scripts
+   - Ensure parent directories exist
+
+4. **Create Problem Description File**
+   - Create `examples/{example_name}/problem.md`
+   - Write the extracted problem description text to this file (UTF-8 encoding)
+   - Ensure file ends with a newline
+
+5. **Create Eval Prompt Files (if not exist)**
+   - Check if `examples/eval_system.md` exists
+   - If not, copy `src/eval/prompts/system.md` to `examples/eval_system.md`
+   - Check if `examples/eval_user.md` exists
+   - If not, copy `src/eval/prompts/user.md` to `examples/eval_user.md`
+   - These files are shared across all examples and referenced via `../eval_system.md` and `../eval_user.md`
+
+6. **Create Debate Config**
+   - Create `examples/{example_name}/debate-config.json`
+   - Configure four agents: architect, performance, security, and kiss (all enabled, temperature 0.5)
    - Configure judge: generalist role, temperature 0.5
    - Set all agents and judge to use the specified model and provider
    - Enable summarization: threshold 10000, maxLength 5000, method "length-based"
    - Set default debate settings: rounds 3, fixed termination, judge synthesis, includeFullHistory true, timeoutPerRound 300000
+   - Use agent IDs: `agent-architect`, `agent-performance`, `agent-security`, `agent-kiss`
+   - Use judge ID: `judge-main`
 
-3. **Create Evaluation Config**
-   - Create `{example_directory}/eval_config.json`
+7. **Create Evaluation Config**
+   - Create `examples/{example_name}/eval_config.json`
    - Configure two evaluator agents (eval-1 and eval-2)
    - Set both to use the specified model and provider
    - Set timeout to 30000ms
    - Set systemPromptPath to `../eval_system.md` and userPromptPath to `../eval_user.md`
    - Both agents enabled by default
+   - Use agent IDs: `eval-1`, `eval-2`
 
-4. **Create Test Directory**
-   - Create directory `{example_directory}/{test_case_name}/`
-   - Ensure parent directories exist
-
-5. **Create run_test.sh Script**
-   - Set BASE_DIR variable to `{example_directory}` (relative path)
-   - Set OUTPUT_DIR variable to the output directory (WSL-compatible path)
+8. **Create run_test.sh Script**
+   - Create `examples/{example_name}/{test_case_name}/run_test.sh`
+   - Set BASE_DIR variable to `examples/{example_name}` (relative path from project root)
+   - Set OUTPUT_DIR variable to `$1` (first script argument, passed by meta-test.ts)
    - Add `mkdir -p "$OUTPUT_DIR"` to ensure directory exists
-   - Generate 5 dialectic debate commands for rounds 1-5:
+   - Generate 3 dialectic debate commands for rounds 1-3 (matching example3 pattern):
      - Format: `dialectic debate -r {round} -c "$BASE_DIR/debate-config.json" -o "$OUTPUT_DIR/all_agents_{round}R_no_clarify.json" -p "$BASE_DIR/problem.md" -v`
-   - Add executable permissions (shebang and chmod notation in comments)
+   - Add shebang: `#!/bin/bash`
+   - Add error checking: exit if OUTPUT_DIR argument is missing
+   - Make script executable (set file permissions)
 
-6. **Create eval_run.sh Script**
-   - Use the same BASE_DIR and OUTPUT_DIR variables
-   - Generate 5 dialectic eval commands:
-     - Format: `dialectic eval -c ./$BASE_DIR/eval_config2.json -d $OUTPUT_DIR/all_agents_{round}R_no_clarify.json -v -o $OUTPUT_DIR/eval2_all_agents_{round}R_no_clarify.json`
-   - Add executable permissions
+9. **Create eval_run.sh Script**
+   - Create `examples/{example_name}/{test_case_name}/eval_run.sh`
+   - Use the same BASE_DIR and OUTPUT_DIR variables as run_test.sh
+   - Generate 3 dialectic eval commands for rounds 1-3:
+     - Format: `dialectic eval -c ./$BASE_DIR/eval_config.json -d "$OUTPUT_DIR/all_agents_{round}R_no_clarify.json" -v -o "$OUTPUT_DIR/eval2_all_agents_{round}R_no_clarify.eval.json"`
+   - Add shebang: `#!/bin/bash`
+   - Add error checking: exit if OUTPUT_DIR argument is missing
+   - Make script executable (set file permissions)
 
-7. **Path Handling**
-   - All paths in scripts should use forward slashes
-   - Convert Windows paths to WSL format (C:/ → /mnt/c/)
-   - Use variables consistently throughout scripts
-   - Ensure paths are properly quoted in bash scripts
+10. **Path Handling**
+    - All paths in scripts should use forward slashes
+    - Use relative paths from project root (scripts run from project root by meta-test.ts)
+    - Use variables consistently throughout scripts
+    - Ensure paths are properly quoted in bash scripts
 
-8. **File Permissions**
-   - Add `#!/bin/bash` shebang to both scripts
-   - Note in comments that scripts should be made executable with `chmod +x`
-   - Scripts should work in both WSL and Git Bash environments
+11. **File Permissions**
+    - Add `#!/bin/bash` shebang to both scripts
+    - Set executable permissions on both shell scripts (chmod +x equivalent)
+    - Scripts should work in both WSL and Git Bash environments
 
 ## Default Values
 
-If parameters are not provided, use these defaults:
-- `output_directory`: `~/tmp/dialectic/{example_directory}/{test_case_name}`
-- `example_directory`: `./examples/example3`
+If optional parameters are not provided, use these defaults:
 - `test_case_name`: `rounds_test`
 - `model`: `google/gemini-2.5-flash-lite`
 - `provider`: `openrouter`
 
-## Path Conversion Rules
-
-- If output_directory starts with `C:/`, convert to `/mnt/c/`
-- If output_directory starts with `D:/`, convert to `/mnt/d/`
-- Apply similar conversion for other Windows drive letters
-- Preserve forward slashes in all paths
-- Ensure output directory path uses forward slashes throughout
+**Required parameters** (must be provided):
+- `example_name`: The name of the example directory to create
+- `problem_description`: The problem description text (in fenced code block)
 
 ## Verification
 
@@ -144,32 +182,67 @@ After generation:
 - All files should be created in the correct locations
 - JSON files should be valid JSON (verify with a JSON parser)
 - Scripts should have proper shebang and variable usage
-- Paths should be WSL-compatible
-- The user should be able to run `./{test_case_name}/run_test.sh` immediately
+- Scripts should be executable
+- The example directory structure should match the pattern used by `example3`
+- The example should be discoverable by `meta-test.ts` script
+
+## Compatibility with meta-test.ts
+
+The generated example will work with `meta-test.ts` because:
+- Example directory is created in `examples/{example_name}/` (not starting with underscore)
+- Required files are present: `problem.md`, `debate-config.json`, `eval_config.json`
+- Test subdirectory `{test_case_name}/` contains both `run_test.sh` and `eval_run.sh`
+- Scripts accept output directory as first argument (as expected by meta-test.ts)
+- Scripts use relative paths from project root (scripts run from project root by meta-test.ts)
 
 ## Example Usage
 
-Default usage (all defaults):
+Basic usage with required parameters:
 ```
-Generate test setup for example3 with rounds_test
+Create test example named "rate_limiting" with problem description:
+
+```
+Design a rate limiting system that can handle 1000 requests per second per user.
+The system should support multiple rate limiting strategies and be horizontally scalable.
 ```
 
-Custom parameters:
 ```
-Generate test setup with:
-- example_directory: ./examples/my_example
-- test_case_name: agents_test
-- output_directory: /mnt/c/data/tests/my_example
+
+With optional parameters:
+```
+Create test example named "auth_system" with:
+- test_case_name: security_test
 - model: gpt-4
 - provider: openai
+
+Problem description:
+
+```
+Design a secure authentication API with JWT tokens.
+The system should support refresh tokens and handle token revocation.
+```
 ```
 
 ## Output
 
-After successful execution, the user should be able to:
-1. Navigate to `{example_directory}/{test_case_name}/`
-2. Run `./run_test.sh` to execute all test debates
-3. Run `./eval_run.sh` to evaluate all debate outputs
-4. Find all outputs in the specified output directory
+After successful execution:
+1. A new example directory is created at `examples/{example_name}/`
+2. The example contains all required files for meta-test.ts:
+   - `problem.md` - Problem description
+   - `debate-config.json` - Debate configuration
+   - `eval_config.json` - Evaluation configuration
+   - `{test_case_name}/run_test.sh` - Test execution script
+   - `{test_case_name}/eval_run.sh` - Evaluation script
+3. Eval prompt files are created in `examples/` directory (if not already present)
+4. The example can be run with `meta-test.ts`:
+   ```bash
+   npx ts-node examples/meta-test.ts <base_output_dir>
+   ```
+5. The example can also be run manually:
+   ```bash
+   cd examples/{example_name}/{test_case_name}
+   ./run_test.sh <output_dir>
+   ./eval_run.sh <output_dir>
+   ```
 
-All scripts should be ready to execute without modification.
+All scripts are ready to execute without modification.
