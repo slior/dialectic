@@ -72,6 +72,15 @@ function writeWarning(message: string): void {
 }
 
 /**
+ * Writes a message to stdout.
+ * 
+ * @param message - The message to write.
+ */
+function say(message: string): void {
+  process.stdout.write(message);
+}
+
+/**
  * Validates and converts base output directory to absolute path.
  * 
  * @param baseOutputDir - The base output directory path (may be undefined).
@@ -389,7 +398,7 @@ function generateCsvFromEvaluationResults(
   const csvPath = path.join(outputDir, csvFileName);
   
   fs.writeFileSync(csvPath, csvContent, 'utf-8');
-  process.stdout.write(`Generated CSV: ${csvPath}\n`);
+  say(`Generated CSV: ${csvPath}\n`);
 }
 
 /**
@@ -436,6 +445,7 @@ function main(): void {
       }
       
       // Execute run_test.sh
+      say(`Running test: ${exampleName}/${testSubDir}\n`);
       const runTestPath = path.join(testSubDirPath, RUN_TEST_SCRIPT_NAME);
       const runTestSuccess = executeScript(runTestPath, outputDir, `${RUN_TEST_SCRIPT_NAME} for ${exampleName}/${testSubDir}`);
       
@@ -444,6 +454,7 @@ function main(): void {
       }
       
       // Execute eval_run.sh
+      say(`Evaluating: ${exampleName}/${testSubDir}\n`);
       const evalRunPath = path.join(testSubDirPath, EVAL_RUN_SCRIPT_NAME);
       const evalRunSuccess = executeScript(evalRunPath, outputDir, `${EVAL_RUN_SCRIPT_NAME} for ${exampleName}/${testSubDir}`);
       
@@ -461,10 +472,10 @@ function main(): void {
   }
   
   // Summary
-  process.stdout.write(`\nSummary:\n`);
-  process.stdout.write(`  Examples processed: ${totalExamplesProcessed}\n`);
-  process.stdout.write(`  Tests executed: ${totalTestsExecuted}\n`);
-  process.stdout.write(`  CSVs generated: ${totalCsvsGenerated}\n`);
+  say(`\nSummary:\n`);
+  say(`  Examples processed: ${totalExamplesProcessed}\n`);
+  say(`  Tests executed: ${totalTestsExecuted}\n`);
+  say(`  CSVs generated: ${totalCsvsGenerated}\n`);
 }
 
 // Run main function
