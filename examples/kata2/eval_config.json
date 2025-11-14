@@ -1,0 +1,25 @@
+{
+  "agents": [
+    {
+      "id": "eval-1",
+      "name": "Sonnet 4 Evaluator 1",
+      "model": "google/gemini-2.5-flash-lite",
+      "provider": "openrouter",
+      "timeout": 30000,
+      "enabled": true,
+      "systemPromptPath": "../eval_system.md",
+      "userPromptPath": "../eval_user.md"
+    },
+    {
+      "id": "eval-2",
+      "name": "Sonnet 4 Evaluator 2",
+      "model": "google/gemini-2.5-flash-lite",
+      "provider": "openrouter",
+      "timeout": 30000,
+      "enabled": true,
+      "systemPromptPath": "../eval_system.md",
+      "userPromptPath": "../eval_user.md"
+    }
+  ]
+}
+

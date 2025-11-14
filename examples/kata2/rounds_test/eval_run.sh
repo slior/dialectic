@@ -12,7 +12,7 @@ OUTPUT_DIR="$1"
 mkdir -p "$OUTPUT_DIR"
 
 # Base paths
-BASE_DIR="examples/kata3"
+BASE_DIR="examples/kata2"
 
 # Run evaluations for all debate outputs
 dialectic eval -c ./$BASE_DIR/eval_config.json -d "$OUTPUT_DIR/all_agents_1R_no_clarify.json" -v -o "$OUTPUT_DIR/eval2_all_agents_1R_no_clarify.eval.json"
