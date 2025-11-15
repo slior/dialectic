@@ -23,7 +23,7 @@ const EXIT_GENERAL_ERROR = 1;
 
 // Error message constants
 const ERROR_BASE_OUTPUT_DIR_REQUIRED = 'Error: Base output directory argument is required\n';
-const ERROR_USAGE = 'Usage: npx ts-node examples/meta-test.ts <base_output_dir>\n';
+const ERROR_USAGE = 'Usage: npx ts-node examples/meta-test.ts <base_output_dir> [test_name]\n';
 const WARNING_SKIPPING_UNDERSCORE_DIR = 'Warning: Skipping directory starting with underscore:';
 const WARNING_SKIPPING_UNDERSCORE_SUBDIR = 'Warning: Skipping test subdirectory starting with underscore:';
 const WARNING_MISSING_PROBLEM_FILE = 'Warning: Example \'%s\' is missing required file: problem.md. Skipping.\n';
@@ -33,6 +33,7 @@ const WARNING_NO_EVAL_FILES = 'Warning: No evaluation JSON files found in %s. Sk
 const WARNING_NO_VALID_EVAL_FILES = 'Warning: No valid evaluation JSON files found in %s. Skipping CSV generation.\n';
 const WARNING_INVALID_JSON_STRUCTURE = 'Warning: Invalid evaluation JSON structure in %s. Skipping.\n';
 const WARNING_PARSE_ERROR = 'Warning: Failed to parse evaluation JSON %s: %s. Skipping.\n';
+const WARNING_TEST_NOT_FOUND = 'Warning: Example \'%s\' does not have test \'%s\'. Skipping.\n';
 const ERROR_SCRIPT_FAILED = 'Error: %s failed with exit code %d\n';
 
 interface EvaluationJsonOutput {
@@ -210,6 +211,17 @@ function discoverTestSubdirectories(examplesDir: string, exampleName: string): s
   
   searchRecursive(exampleDir, '');
   return testSubdirs;
+}
+
+/**
+ * Filters test subdirectories to only include those matching the specified test name (by basename).
+ * 
+ * @param testSubdirs - Array of relative paths to test subdirectories.
+ * @param testName - The test name to filter by (matched against basename).
+ * @returns An array of test subdirectories whose basename matches testName.
+ */
+function filterTestsByName(testSubdirs: string[], testName: string): string[] {
+  return testSubdirs.filter(testSubDir => path.basename(testSubDir) === testName);
 }
 
 /**
@@ -415,6 +427,7 @@ function main(): void {
   }
   
   const baseOutputDir = validateAndResolveBaseOutputDir(args[0]);
+  const testName = args.length > 1 ? args[1] : undefined;
   const examplesDir = getExamplesDirectory();
   
   // Ensure base output directory exists
@@ -432,10 +445,23 @@ function main(): void {
       continue;
     }
     
-    totalExamplesProcessed++;
     const testSubdirs = discoverTestSubdirectories(examplesDir, exampleName);
     
-    for (const testSubDir of testSubdirs) {
+    // Filter by test name if provided
+    let filteredTestSubdirs: string[];
+    if (testName !== undefined) {
+      filteredTestSubdirs = filterTestsByName(testSubdirs, testName);
+      if (filteredTestSubdirs.length === 0) {
+        writeWarning(WARNING_TEST_NOT_FOUND.replace('%s', exampleName).replace('%s', testName));
+        continue;
+      }
+    } else {
+      filteredTestSubdirs = testSubdirs;
+    }
+    
+    totalExamplesProcessed++;
+    
+    for (const testSubDir of filteredTestSubdirs) {
       const testSubDirPath = path.join(examplesDir, exampleName, testSubDir);
       const outputDir = constructOutputDir(baseOutputDir, exampleName, testSubDir);
       
