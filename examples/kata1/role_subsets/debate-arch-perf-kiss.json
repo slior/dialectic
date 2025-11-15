@@ -1,8 +1,8 @@
 {
   "agents": [
     {
-      "id": "agent-architect",
-      "name": "System Architect",
+      "id": "agent-architect1",
+      "name": "System Architect 1",
       "role": "architect",
       "model": "google/gemini-2.5-flash-lite",
       "provider": "openrouter",
@@ -13,15 +13,6 @@
       "id": "agent-performance",
       "name": "Performance Engineer",
       "role": "performance",
-      "model": "google/gemini-2.5-flash-lite",
-      "provider": "openrouter",
-      "temperature": 0.5,
-      "enabled": true
-    },
-    {
-      "id": "agent-security",
-      "name": "Security Specialist",
-      "role": "security",
       "model": "google/gemini-2.5-flash-lite",
       "provider": "openrouter",
       "temperature": 0.5,
@@ -46,7 +37,7 @@
     "temperature": 0.5
   },
   "debate": {
-    "rounds": 3,
+    "rounds": 2,
     "terminationCondition": {
       "type": "fixed"
     },

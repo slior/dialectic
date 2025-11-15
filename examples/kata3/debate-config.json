@@ -54,7 +54,7 @@
     "includeFullHistory": true,
     "timeoutPerRound": 300000,
     "summarization": {
-      "enabled": true,
+      "enabled": false,
       "threshold": 10000,
       "maxLength": 5000,
       "method": "length-based"
