@@ -133,7 +133,7 @@ sequenceDiagram
                     Orch->>SM: addContribution(debateId, proposal)
                     SM->>FS: save updated state JSON
                 else Refinement missing
-                    Orch-->>CLI: writeStderr("Warning: Missing previous refinement; falling back to LLM proposal")
+                    Orch-->>CLI: writeStderr("Warning: Missing previous refinement falling back to LLM proposal")
                     Orch->>Agents: agent.propose(problem, preparedContext)
                     Agents->>Provider: complete(systemPrompt, userPrompt)
                     Provider-->>Agents: {text, usage, latency}
