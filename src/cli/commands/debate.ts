@@ -709,6 +709,7 @@ export function debateCommand(program: Command) {
     .option('-c, --config <path>', 'Path to configuration file (default ./debate-config.json)')
     .option('-o, --output <path>', 'Output file; .json writes full state, others write final solution text')
     .option('-p, --problemDescription <path>', 'Path to a text file containing the problem description')
+    .option('--context <path>', 'Path to a context file providing additional context for the problem')
     .option('-e, --env-file <path>', 'Path to environment file (default: .env)')
     .option('-v, --verbose', 'Verbose output')
     .option('--report <path>', 'Generate markdown report file')
