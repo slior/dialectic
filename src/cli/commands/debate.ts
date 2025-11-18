@@ -550,8 +550,17 @@ async function readContextFile(contextPath: string): Promise<string | undefined>
  * @throws {Error} If validation fails or file operations fail.
  */
 async function resolveProblemDescription(problem: string | undefined, options: any): Promise<string> {
-  const hasProblem = !!(problem && problem.trim().length > 0);
+
+ 
   const hasFile = !!options.problemDescription;
+  if (hasFile) {
+    // Handle Commander.js quirk: when --problemDescription (-p) is used as 1st option, Commander.js may also
+    // assign the path to the optional positional [problem] argument. If the option is set,
+    // we should ignore the positional argument entirely, as the user clearly intends to use the file option.
+    problem = undefined;
+  }
+
+  const hasProblem = !!(problem && problem.trim().length > 0);
 
   // Validate exactly-one constraint
   validateExactlyOneProblemSource(hasProblem, hasFile);
