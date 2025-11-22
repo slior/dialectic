@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
-import { writeStderr } from '../index';
+import { writeStderr } from '../../utils/console';
 import { loadEnvironmentFile } from '../../utils/env-loader';
 import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
 import { EvaluatorConfig, ParsedEvaluation, AggregatedJsonOutput, AggregatedAverages, clampScoreToRange, isEnabledEvaluator } from '../../types/eval.types';

@@ -27,6 +27,7 @@ Dialectic is a CLI tool that orchestrates multi-agent debates to solve software 
 - Interactive clarifications phase for problem refinement
 - Debate state persistence and report generation
 - Evaluator command for assessing debate outcomes
+- Tool calling support allowing agents to interact with external tools during debates
 
 ## Command-Line Usage
 
@@ -247,6 +248,71 @@ dialectic debate "Design a distributed cache system" --clarify
 dialectic debate --problemDescription problem.md --clarify --agents architect,security
 dialectic debate "Design a system" --clarify --rounds 5 --verbose
 ```
+
+### Tool Calling
+
+Agents can call tools during proposal, critique, and refinement phases. Tools allow agents to interact with external functionality, such as searching debate history.
+
+**Base Tools Available to All Agents:**
+
+- **Context Search** (`context_search`): Search for terms in the debate history
+  - Parameters: `term` (string, required) - The search term to find
+  - Returns: Array of matching contributions with metadata (round number, agent ID, role, type, content snippet)
+
+**Tool Configuration:**
+
+Tools are configured per agent in the `AgentConfig` using the `tools` field. Each tool must follow the OpenAI function calling schema format:
+
+```json
+{
+  "id": "agent-architect",
+  "name": "System Architect",
+  "role": "architect",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.5,
+  "tools": [
+    {
+      "name": "custom_tool",
+      "description": "A custom tool description",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "paramName": {
+            "type": "string",
+            "description": "Parameter description"
+          }
+        },
+        "required": ["paramName"]
+      }
+    }
+  ],
+  "toolCallLimit": 10
+}
+```
+
+**Tool Call Limits:**
+
+The `toolCallLimit` field controls the maximum number of tool call iterations per phase (proposal, critique, or refinement). Each iteration counts toward the limit, including failed tool invocations. The default limit is `10` iterations per phase per agent.
+
+**Tool Execution Behavior:**
+
+- Tools are executed synchronously
+- User feedback messages are displayed when tools are executed (e.g., `[Agent Name] Executing tool: context_search`)
+- Failed tool invocations are logged as warnings but do not stop the debate
+- Tool calls and results are stored in contribution metadata for persistence
+- Tool call metadata includes: `toolCalls`, `toolResults`, and `toolCallIterations`
+
+**Example with Tool Calling:**
+
+When an agent uses tools, you'll see messages like:
+```
+[System Architect] Executing tool: context_search
+```
+
+Tool calls and results are automatically included in the debate state and can be viewed in generated reports.
+
+**Note**: Currently, only base registry tools (like Context Search) are available. Agent-specific tools from configuration require tool implementation factories (future enhancement). See `docs/configuration.md` for more details on tool configuration.
 
 ### Environment File
 

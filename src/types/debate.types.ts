@@ -1,4 +1,5 @@
 import { AgentRole, AgentPromptMetadata, JudgePromptMetadata, LLM_PROVIDERS } from './agent.types';
+import { ToolCallMetadata } from './tool.types';
 
 /** String literal constants for termination types */
 export const TERMINATION_TYPES = {
@@ -160,7 +161,7 @@ export interface Contribution {
     tokensUsed?: number; /** Optional number of tokens used. */
     latencyMs?: number; /** Optional latency in milliseconds. */
     model?: string; /** Optional model used for the contribution. */
-  };
+  } & ToolCallMetadata; /** Tool calling metadata (tool calls, results, iterations). */
 }
 
 /**

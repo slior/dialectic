@@ -379,14 +379,26 @@ Creates LLM provider instances based on configuration.
 Both providers make LLM completion requests with fallback strategy:
 1. **Primary**: Attempts to use Responses API
    - Builds payload with input array format
+   - Adds `tools` field if `request.tools` is provided (converted to OpenAI function calling format)
    - Calls `client.responses.create()`
+   - Extracts `tool_calls` from response (checks top-level and nested structures)
 2. **Fallback**: Uses Chat Completions API
    - Builds payload with messages array format
+   - Adds `tools` field if `request.tools` is provided (converted to OpenAI function calling format)
    - Calls `client.chat.completions.create()`
+   - Extracts `tool_calls` from `message.tool_calls` array
+
+**Tool Calling Support**:
+- Providers accept `tools` array in `CompletionRequest` (array of `ToolSchema` objects)
+- Tools are converted to OpenAI function calling format: `{type: 'function', function: {name, description, parameters}}`
+- Providers extract `toolCalls` from API responses and return in `CompletionResponse`
+- Tool calls are extracted from both Responses API and Chat Completions API formats
+- If `request.messages` is provided (for tool calling loops), it takes precedence over `systemPrompt`/`userPrompt`
 
 **Returns**: `CompletionResponse` containing:
 - `text`: Generated text from the model
 - `usage`: Token usage statistics (input, output, total)
+- `toolCalls`: Array of tool calls if present (optional)
 
 ### 8. Agent Instantiation
 
@@ -428,6 +440,82 @@ Each agent instance is initialized with:
 - Configuration (id, name, role, model, temperature, systemPrompt)
 - Provider reference for making LLM calls
 - Role-specific prompts loaded from the prompt registry
+- Tool registry (base or extended) for tool calling functionality
+- Tool call limit (default: 10 iterations per phase)
+
+**Tool Registry System**:
+- A base tool registry is created once per debate via `createBaseRegistry()` and shared across all agents
+- The base registry includes common tools available to all agents (currently: Context Search tool)
+- Each agent gets an agent-specific tool registry via `buildToolRegistry(agentConfig, baseToolRegistry)`:
+  - If the agent has no tools configured in `AgentConfig.tools`, returns the base registry
+  - If the agent has tools configured, creates an extended registry that inherits from the base registry
+  - Currently, only base registry tools are supported; agent-specific tools require implementation factories (future enhancement)
+- Tool registries are passed to agents during instantiation and stored in the agent's `toolRegistry` field
+
+**Tool Configuration**:
+- Tools are configured in `AgentConfig` using the `tools` field (optional array of `ToolSchema` objects)
+- Each tool schema follows OpenAI function calling format:
+  - `name`: Unique tool identifier
+  - `description`: Human-readable description
+  - `parameters`: JSON Schema definition of tool parameters
+- Tool call limits are configured via `AgentConfig.toolCallLimit` (optional, default: 10 iterations per phase)
+- Tool call limits apply per phase (proposal, critique, or refinement) per agent
+
+### 8.1 Tool Calling Architecture
+
+**Overview**: Agents can call tools during proposal, critique, and refinement phases. Tools allow agents to interact with external functionality, such as searching debate history, to enhance their contributions.
+
+**Tool Types**:
+- **ToolSchema**: Defines a tool's interface (name, description, parameters) matching OpenAI function calling format
+- **ToolCall**: Represents a tool call request from an LLM (id, name, arguments JSON string)
+- **ToolResult**: Represents the result of executing a tool (tool_call_id, role, content JSON string)
+- **ToolCallMetadata**: Metadata stored in contributions (toolCalls, toolResults, toolCallIterations)
+
+**Tool Registry**:
+- **Base Registry**: Created once per debate, contains common tools (e.g., Context Search)
+- **Extended Registry**: Agent-specific registries that inherit from base registry
+- **Tool Implementation**: Tools implement the `ToolImplementation` interface with `execute()` method
+- Tools receive optional `DebateContext` parameter for accessing debate history
+
+**Tool Calling Loop**:
+When an agent has tools available, `callLLM()` implements a tool calling loop:
+
+1. **Initial LLM Call**: Makes first call with system prompt, user prompt, and tool schemas
+2. **Tool Call Detection**: Checks if response contains `toolCalls` array
+3. **Tool Execution**: For each tool call:
+   - Retrieves tool from registry by name
+   - Parses tool call arguments (JSON string)
+   - Executes tool synchronously with context
+   - Creates `ToolResult` in OpenAI format
+   - Writes user feedback message to stderr: `[Agent Name] Executing tool: {toolName}`
+4. **Message Building**: Builds messages array for next LLM call:
+   - Adds assistant message with tool calls
+   - Adds tool result messages (one per tool call)
+5. **Iteration**: Makes next LLM call with accumulated messages
+6. **Termination**: Continues until:
+   - No tool calls returned (uses final response text)
+   - Tool call limit reached (uses last response text)
+   - Failed tool invocations count toward iteration limit
+
+**Error Handling**:
+- Tool not found: Warning logged, error result created, continues to next tool call
+- Invalid arguments JSON: Warning logged, error result created, continues to next tool call
+- Tool execution error: Warning logged, error result created, continues to next tool call
+- All errors are non-fatal and result in error tool results (status: "error")
+- Failed tool invocations count toward iteration limit
+
+**Tool Metadata Persistence**:
+- Tool calls, tool results, and iteration count are stored in `ContributionMetadata`
+- Metadata is persisted in debate state JSON files
+- Tool metadata is included in generated reports
+
+**Base Tools Available**:
+
+- **Context Search** (`context_search`): Searches debate history for terms
+  - Parameters: `term` (string, required) - The search term to find
+  - Returns: Array of matching contributions with metadata (round number, agent ID, role, type, content snippet)
+  - Search is case-insensitive substring matching
+  - Returns matches from all rounds and contribution types
 
 ### 9. Judge Instantiation
 
@@ -761,8 +849,13 @@ All agents produce proposals in parallel for this round.
      - If `DebateState.context` exists, it is appended to the problem under a markdown heading `# Extra Context`
      - Agent prepares role-specific prompts using the enhanced problem
      - Calls `proposeImpl()` which invokes `callLLM()`
-     - `callLLM()` measures latency and calls `provider.complete()`
-     - Returns `Proposal` with content and metadata (tokens, latency, model)
+     - `callLLM()` implements tool calling loop if tools are available:
+       - Detects tool calls from LLM response
+       - Executes tools synchronously with debate context
+       - Builds messages array for subsequent LLM calls
+       - Continues until no tool calls or limit reached
+     - Measures latency and calls `provider.complete()` (with tools if available)
+     - Returns `Proposal` with content and metadata (tokens, latency, model, toolCalls, toolResults, toolCallIterations)
    - Rounds ≥ 2: Uses the agent's refinement from the previous round as the proposal (no LLM call)
      - Finds previous round refinement for the same agent
      - Creates a new `proposal` contribution whose content equals that refinement
@@ -795,8 +888,13 @@ Each agent critiques proposals from other agents within the current round.
    - Calls `agent.critique(proposal, context)`
    - Agent builds critique-specific prompts
    - Calls `critiqueImpl()` which invokes `callLLM()`
-   - `callLLM()` measures latency and calls `provider.complete()`
-   - Returns `Critique` with content and metadata
+   - `callLLM()` implements tool calling loop if tools are available:
+     - Detects tool calls from LLM response
+     - Executes tools synchronously with debate context
+     - Builds messages array for subsequent LLM calls
+     - Continues until no tool calls or limit reached
+   - Measures latency and calls `provider.complete()` (with tools if available)
+   - Returns `Critique` with content and metadata (tokens, latency, model, toolCalls, toolResults, toolCallIterations)
    - Builds `Contribution` with type "critique" and target agent ID
    - Calls `stateManager.addContribution()` to persist to current round
    - State manager saves updated JSON to disk
@@ -824,8 +922,13 @@ Each agent refines their proposal based on critiques received within the current
 5. Calls `agent.refine(original, critiques, context)`
    - Agent builds refinement prompts including original and all critiques
    - Calls `refineImpl()` which invokes `callLLM()`
-   - `callLLM()` measures latency and calls `provider.complete()`
-   - Returns refined content with updated metadata
+   - `callLLM()` implements tool calling loop if tools are available:
+     - Detects tool calls from LLM response
+     - Executes tools synchronously with debate context
+     - Builds messages array for subsequent LLM calls
+     - Continues until no tool calls or limit reached
+   - Measures latency and calls `provider.complete()` (with tools if available)
+   - Returns refined content with updated metadata (tokens, latency, model, toolCalls, toolResults, toolCallIterations)
 6. Builds `Contribution` with type "refinement"
 7. Calls `stateManager.addContribution()` to persist to current round
 8. State manager saves updated JSON to disk
@@ -908,9 +1011,11 @@ Handles output of debate results based on options.
     - Round-by-round breakdown
     - Each contribution with first line preview
     - Metadata (latency, tokens) per contribution
+    - Tool calling metadata (tool calls, tool results, iterations) if present
     - Total statistics (rounds, duration, tokens)
   - Prints which system prompt is used per agent and judge: either "built-in default" or the resolved absolute file path.
   - Progress UI remains visible during execution, verbose summary appears after completion
+  - Tool execution messages are displayed in real-time during debate execution (e.g., `[Agent Name] Executing tool: context_search`)
 
 **Always**: Writes save path notice to stderr: `Saved debate to ./debates/<debate-id>.json`
 
@@ -986,6 +1091,9 @@ Represents a single agent contribution:
   - `tokensUsed`: Token count (optional)
   - `latencyMs`: Latency in milliseconds (optional)
   - `model`: Model used (optional)
+  - `toolCalls`: Array of tool calls made during this contribution (optional)
+  - `toolResults`: Array of tool results received during this contribution (optional)
+  - `toolCallIterations`: Number of tool call iterations performed (optional)
 
 ### Solution
 Represents the final synthesized solution:
@@ -1053,13 +1161,17 @@ The `OpenAIProvider` implements a two-tier fallback strategy for maximum compati
 - Newer API with improved interface
 - Uses `input` array format for messages
 - Maps `max_output_tokens` for token limits
-- Returns structured response with output text
+- Supports `tools` parameter for function calling
+- Extracts `tool_calls` from response (checks top-level and nested structures)
+- Returns structured response with output text and tool calls
 
 **Fallback Strategy**: Chat Completions API
 - Standard OpenAI API
 - Uses `messages` array format
 - Maps `max_tokens` for token limits
-- Returns choice-based response format
+- Supports `tools` parameter for function calling
+- Extracts `tool_calls` from `message.tool_calls` array
+- Returns choice-based response format with tool calls
 
 **Error Handling**: If Responses API fails (not available, error, unexpected format), automatically falls back to Chat Completions API.
 
@@ -1170,4 +1282,5 @@ The architecture supports extension through:
 5. **Additional Phases**: Extend `DebateOrchestrator` to add new debate phases
 6. **Custom Progress UI**: Replace or extend `DebateProgressUI` to implement alternative progress displays (e.g., web-based, GUI, different terminal formats)
 7. **Hook-Based Extensions**: Add custom hooks to `OrchestratorHooks` interface for additional monitoring, logging, or integration needs
+8. **Custom Tools**: Implement new tools by creating a class implementing `ToolImplementation` interface and registering it in the base registry or agent-specific registries. Tools can access debate context and interact with external systems.
 

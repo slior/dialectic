@@ -34,13 +34,6 @@ export function infoUser(message: string): void {
   process.stderr.write(color(INFO_COLOR, message) + '\n');
 }
 
-/**
- * Outputs a diagnostic/verbose message to stderr without coloring.
- * Used for structured diagnostic output that should not interfere with stdout piping.
- */
-export function writeStderr(message: string): void {
-  process.stderr.write(message);
-}
 
 /**
  * Runs the CLI for the multi-agent debate system.

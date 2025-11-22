@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
-import { infoUser, writeStderr } from '../index';
+import { infoUser } from '../index';
+import { writeStderr } from '../../utils/console';
 import { loadConfig } from './debate';
 import { SystemConfig } from '../../types/config.types';
 import { DebateState } from '../../types/debate.types';

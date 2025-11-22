@@ -1,5 +1,5 @@
 import { ContributionType, CONTRIBUTION_TYPES } from '../types/debate.types';
-import { writeStderr } from '../cli/index';
+import { writeStderr } from './console';
 
 // Lazy load chalk for optional color support
 let chalk: any;

@@ -130,19 +130,16 @@ describe('RoleBasedAgent (Security Role)', () => {
       const result = await agent.critique(mockProposal, mockContext);
       
       expect(critiqueImplSpy).toHaveBeenCalledWith(
-        mockProposal,
         mockContext,
         'Test security prompt',
         expect.stringContaining('security engineering perspective')
       );
       expect(critiqueImplSpy).toHaveBeenCalledWith(
-        mockProposal,
         mockContext,
         'Test security prompt',
         expect.stringContaining('vulnerabilities')
       );
       expect(critiqueImplSpy).toHaveBeenCalledWith(
-        mockProposal,
         mockContext,
         'Test security prompt',
         expect.stringContaining('missing controls')
@@ -168,22 +165,16 @@ describe('RoleBasedAgent (Security Role)', () => {
       const result = await agent.refine(mockProposal, mockCritiques, mockContext);
       
       expect(refineImplSpy).toHaveBeenCalledWith(
-        mockProposal,
-        mockCritiques,
         mockContext,
         'Test security prompt',
         expect.stringContaining('security concerns')
       );
       expect(refineImplSpy).toHaveBeenCalledWith(
-        mockProposal,
-        mockCritiques,
         mockContext,
         'Test security prompt',
         expect.stringContaining('strengthen the protection')
       );
       expect(refineImplSpy).toHaveBeenCalledWith(
-        mockProposal,
-        mockCritiques,
         mockContext,
         'Test security prompt',
         expect.stringContaining('Revised Security Architecture')

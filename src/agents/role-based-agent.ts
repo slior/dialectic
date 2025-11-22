@@ -4,8 +4,9 @@ import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TY
 import { LLMProvider } from '../providers/llm-provider';
 import { getPromptsForRole, RolePrompts } from './prompts';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
-import { writeStderr } from '../cli/index';
+import { writeStderr } from '../utils/console';
 import type { SummarizationConfig } from '../types/config.types';
+import { ToolRegistry } from '../tools/tool-registry';
 
 
 /**
@@ -50,12 +51,14 @@ export class RoleBasedAgent extends Agent {
    * @param summaryConfig - Summarization configuration for this agent.
    * @param summaryPromptSource - Optional provenance metadata for summary prompt.
    * @param resolvedClarificationPromptText - Optional resolved clarification prompt text.
+   * @param toolRegistry - Optional tool registry for tool calling functionality.
    */
   private constructor(  config: AgentConfig, provider: LLMProvider, resolvedSystemPrompt: string,
                         promptSource: PromptSource | undefined, summaryConfig: SummarizationConfig,
-                        summaryPromptSource?: PromptSource, resolvedClarificationPromptText?: string )
+                        summaryPromptSource?: PromptSource, resolvedClarificationPromptText?: string,
+                        toolRegistry?: ToolRegistry )
   {
-    super(config, provider);
+    super(config, provider, toolRegistry, config.toolCallLimit);
     this.resolvedSystemPrompt = resolvedSystemPrompt;
     this.rolePrompts = getPromptsForRole(config.role);
     this.summaryConfig = summaryConfig;
@@ -91,16 +94,18 @@ export class RoleBasedAgent extends Agent {
    * @param summaryConfig - Summarization configuration for this agent.
    * @param summaryPromptSource - Optional provenance metadata for summary prompt.
    * @param resolvedClarificationPromptText - Optional resolved clarification prompt text.
+   * @param toolRegistry - Optional tool registry for tool calling functionality.
    * @returns A new RoleBasedAgent instance configured for the specified role.
    */
   static create(  config: AgentConfig, provider: LLMProvider, resolvedSystemPrompt: string,
                   promptSource: PromptSource | undefined, summaryConfig: SummarizationConfig,
                   summaryPromptSource?: PromptSource,
-                  resolvedClarificationPromptText?: string ): RoleBasedAgent
+                  resolvedClarificationPromptText?: string,
+                  toolRegistry?: ToolRegistry ): RoleBasedAgent
   {
     return new RoleBasedAgent(  config, provider, resolvedSystemPrompt,
                                 promptSource, summaryConfig, summaryPromptSource,
-                                resolvedClarificationPromptText );
+                                resolvedClarificationPromptText, toolRegistry );
   }
 
   /**
@@ -164,7 +169,7 @@ export class RoleBasedAgent extends Agent {
   async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
     const system = this.resolvedSystemPrompt;
     const user = this.rolePrompts.critiquePrompt(proposal.content, context, this.config.id, context.includeFullHistory);
-    return this.critiqueImpl(proposal, context, system, user);
+    return this.critiqueImpl(context, system, user);
   }
 
   /**
@@ -182,7 +187,7 @@ export class RoleBasedAgent extends Agent {
     const system = this.resolvedSystemPrompt;
     const critiquesText = critiques.map((c, i) => `Critique ${i + 1}:\n${c.content}`).join('\n\n');
     const user = this.rolePrompts.refinePrompt(original.content, critiquesText, context, this.config.id, context.includeFullHistory);
-    return this.refineImpl(original, critiques, context, system, user);
+    return this.refineImpl(context, system, user);
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { SummarizationConfig } from './config.types';
+import type { ToolSchema, ToolCallMetadata } from './tool.types';
 
 /**
  * The role of the agent.
@@ -27,6 +28,11 @@ export const PROMPT_SOURCES = {
 export type PromptSourceType = (typeof PROMPT_SOURCES)[keyof typeof PROMPT_SOURCES];
 
 /**
+ * Default tool call limit per phase per agent.
+ */
+export const DEFAULT_TOOL_CALL_LIMIT = 10;
+
+/**
  * Configuration for an AI agent.
  *
  * @property id - Unique identifier for the agent.
@@ -39,6 +45,8 @@ export type PromptSourceType = (typeof PROMPT_SOURCES)[keyof typeof PROMPT_SOURC
  * @property summaryPromptPath - (Optional) Filesystem path to a markdown/text file containing the summary prompt. Resolved relative to the configuration file directory.
  * @property summarization - (Optional) Per-agent summarization configuration that overrides system-wide settings.
  * @property enabled - (Optional) Whether the agent is enabled; defaults to true if omitted.
+ * @property tools - (Optional) Array of tool schemas available to this agent. Uses OpenAI function calling schema format.
+ * @property toolCallLimit - (Optional) Maximum number of tool call iterations per phase. Defaults to DEFAULT_TOOL_CALL_LIMIT (10).
  */
 export interface AgentConfig {
   /** Unique identifier for the agent. */
@@ -63,6 +71,10 @@ export interface AgentConfig {
   summarization?: SummarizationConfig;
   /** (Optional) Whether the agent is enabled; defaults to true if omitted. */
   enabled?: boolean;
+  /** (Optional) Array of tool schemas available to this agent. Uses OpenAI function calling schema format. */
+  tools?: ToolSchema[];
+  /** (Optional) Maximum number of tool call iterations per phase. Defaults to DEFAULT_TOOL_CALL_LIMIT (10). */
+  toolCallLimit?: number;
 }
 
 /**
@@ -72,7 +84,7 @@ export interface AgentConfig {
  * @property latencyMs - (Optional) Latency in milliseconds for the contribution.
  * @property model - (Optional) The LLM model used for the contribution.
  */
-export interface ContributionMetadata {
+export interface ContributionMetadata extends ToolCallMetadata {
   tokensUsed?: number;
   latencyMs?: number;
   model?: string;
@@ -132,6 +144,13 @@ export interface JudgePromptMetadata {
   path?: string;
   summarySource?: PromptSourceType;
   summaryPath?: string;
+}
+
+/**
+ * Collection of agent prompt metadata used for tracking prompt sources during agent creation.
+ */
+export interface AgentPromptMetadataCollection {
+  agents: AgentPromptMetadata[];
 }
 
 //the next two are just for convenience (readability) and potential future use if we need to distinguish between different types of responses

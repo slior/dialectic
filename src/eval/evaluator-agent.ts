@@ -1,6 +1,6 @@
 import { LLMProvider, CompletionResponse } from '../providers/llm-provider';
 import { createProvider } from '../providers/provider-factory';
-import { writeStderr } from '../cli/index';
+import { writeStderr } from '../utils/console';
 import { EvaluatorConfig, EvaluatorInputs } from '../types/eval.types';
 
 export interface EvaluatorResult {

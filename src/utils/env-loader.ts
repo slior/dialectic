@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { writeStderr } from '../cli/index';
+import { writeStderr } from './console';
 import dotenv from 'dotenv';
 
 // Constants for environment file loading

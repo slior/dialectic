@@ -56,6 +56,8 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 | `systemPromptPath` | `string` | No | Path to a markdown/text file containing the system prompt. If omitted, a built-in prompt for the role is used. |
 | `enabled` | `boolean` | No | Whether the agent is enabled. Defaults to `true` if omitted. |
 | `clarificationPromptPath` | `string` | No | Path to a markdown/text file containing the clarifications prompt for this agent. If omitted, a built-in role-specific prompt is used. |
+| `tools` | `ToolSchema[]` | No | Array of tool schemas available to this agent. Uses OpenAI function calling schema format. Currently, only base registry tools are supported; agent-specific tools require implementation factories (future enhancement). See [Tool Calling](#tool-calling) section for details. |
+| `toolCallLimit` | `number` | No | Maximum number of tool call iterations per phase (proposal, critique, or refinement). Defaults to `10`. Each iteration counts toward this limit, including failed tool invocations. The limit applies independently to each phase. |
 
 ### Field Details
 
@@ -121,6 +123,30 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 - **Semantics**: Whether the agent participates in debates. Disabled agents are filtered out before debate execution. Useful for temporarily removing agents without deleting their configuration.
 - **Example**: `true`
 
+#### `tools`
+- **Type**: Array of `ToolSchema` objects (optional)
+- **Accepted Values**: Array of tool schema objects following OpenAI function calling format
+- **Default**: Empty array (agent receives base registry tools only)
+- **Semantics**: Defines custom tool schemas available to this agent. Tools allow agents to interact with external functionality during proposal, critique, and refinement phases. Each tool schema must include `name`, `description`, and `parameters` fields matching OpenAI's function calling format.
+- **Current Limitation**: Only base registry tools (e.g., Context Search) are currently supported. Agent-specific tools from this configuration require tool implementation factories (future enhancement). When tool schemas are provided but implementations are not available, the agent will use base registry tools only.
+- **Tool Registry**: If tools are configured, an extended registry is created that inherits from the base registry. If no tools are configured, the agent uses the base registry directly.
+- **Example**: See [Tool Calling](#tool-calling) section for detailed examples
+
+#### `toolCallLimit`
+- **Type**: Number (optional)
+- **Accepted Values**: Positive integers >= 1
+- **Default**: `10`
+- **Semantics**: Maximum number of tool call iterations allowed per phase (proposal, critique, or refinement). Each iteration represents one complete cycle of: (1) LLM call with tool schemas, (2) tool execution if tool calls are present, (3) next LLM call with tool results. The limit applies independently to each phase, so an agent can use up to `toolCallLimit` iterations in proposal, `toolCallLimit` in critique, and `toolCallLimit` in refinement.
+- **Counting**: Each iteration counts toward the limit, including:
+  - Successful tool executions
+  - Failed tool invocations (tool not found, invalid arguments, execution errors)
+- **Termination**: When the limit is reached, the tool calling loop stops and uses the last LLM response text as the contribution content.
+- **Recommendations**: 
+  - Lower limits (5-10) for faster execution and lower token usage
+  - Higher limits (15-20) for complex problems requiring extensive tool usage
+  - Consider model context window capacity when setting limits
+- **Example**: `5` (allows up to 5 tool call iterations per phase)
+
 ### Example Agent Configuration
 
 #### Single Provider (OpenAI)
@@ -173,11 +199,287 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 }
 ```
 
+#### Agent with Tool Configuration
+```json
+{
+  "id": "agent-architect",
+  "name": "System Architect",
+  "role": "architect",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.5,
+  "enabled": true,
+  "toolCallLimit": 5
+}
+```
+
+This agent has access to base registry tools (Context Search) with a custom tool call limit. See [Tool Calling](#tool-calling) section for more examples with custom tool schemas.
+
 ### Default agents values:
 
 - System Architect (role: `architect`, model: `gpt-4`, temperature: `0.5`)
 - Performance Engineer (role: `performance`, model: `gpt-4`, temperature: `0.5`)
 - Simplicity Advocate (role: `kiss`, model: `gpt-4`, temperature: `0.5`)
+
+### Tool Calling
+
+Agents can call tools during proposal, critique, and refinement phases. Tools allow agents to interact with external functionality, such as searching debate history or accessing external APIs. The tool calling system uses OpenAI's function calling format, allowing agents to request tool execution and receive results within the same LLM interaction.
+
+#### Overview
+
+When an agent has tools configured, the system implements a tool calling loop:
+1. **Initial LLM Call**: Agent makes a request with tool schemas available
+2. **Tool Call Detection**: LLM response may include tool call requests
+3. **Tool Execution**: Each requested tool is executed synchronously
+4. **Result Integration**: Tool results are sent back to the LLM
+5. **Iteration**: Process continues until no tool calls or limit reached
+
+Tool calls, results, and iteration counts are stored in contribution metadata for persistence and analysis.
+
+#### Tool Configuration
+
+Tools are configured per agent in the `AgentConfig` using the `tools` field. Each tool must follow the OpenAI function calling schema format:
+
+```json
+{
+  "tools": [
+    {
+      "name": "tool_name",
+      "description": "Description of what the tool does",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "paramName": {
+            "type": "string",
+            "description": "Parameter description"
+          }
+        },
+        "required": ["paramName"]
+      }
+    }
+  ],
+  "toolCallLimit": 10
+}
+```
+
+**Schema Requirements**:
+- `name`: Unique tool identifier (string, required)
+- `description`: Human-readable description explaining what the tool does (string, required)
+- `parameters`: JSON Schema object defining tool parameters (object, required)
+  - `type`: Must be `"object"`
+  - `properties`: Object mapping parameter names to their schemas
+  - `required`: Array of required parameter names (optional)
+
+**Parameter Types**: Supported JSON Schema types include `string`, `number`, `boolean`, `array`, and `object`. Each parameter can include a `description` field to help the LLM understand its purpose.
+
+#### Tool Registry System
+
+The system uses a hierarchical tool registry:
+
+- **Base Registry**: Created once per debate, contains common tools available to all agents
+- **Extended Registry**: Agent-specific registries that inherit from the base registry
+- **Registry Building**: If an agent has `tools` configured, an extended registry is created; otherwise, the base registry is used
+
+**Current Limitation**: Only base registry tools are currently supported. Agent-specific tools defined in `AgentConfig.tools` require tool implementation factories (future enhancement). For now, agents with custom tool schemas will receive the base registry tools only.
+
+#### Base Tools
+
+All agents have access to a base set of tools registered in the base registry:
+
+##### Context Search (`context_search`)
+
+Searches the debate history for contributions containing a specific term.
+
+**Parameters**:
+- `term` (string, required): The search term to find in debate history
+
+**Returns**: JSON object with status and matches array:
+```json
+{
+  "status": "success",
+  "result": {
+    "matches": [
+      {
+        "roundNumber": 1,
+        "agentId": "agent-architect",
+        "agentRole": "architect",
+        "type": "proposal",
+        "contentSnippet": "First 200 characters of matching content..."
+      }
+    ]
+  }
+}
+```
+
+**Behavior**:
+- Case-insensitive substring matching
+- Searches across all rounds and contribution types
+- Returns matches with metadata (round number, agent ID, role, type, content snippet)
+- Content snippets are truncated to 200 characters
+
+**Example Usage**: An agent can search for previous mentions of "caching" or "authentication" to reference earlier discussions in their proposal or critique.
+
+#### Tool Call Limits
+
+The `toolCallLimit` field controls the maximum number of tool call iterations per phase (proposal, critique, or refinement).
+
+**Behavior**:
+- **Default**: `10` iterations per phase per agent
+- **Scope**: Limit applies independently to each phase (proposal, critique, refinement)
+- **Counting**: Each iteration counts toward the limit, including:
+  - Successful tool executions
+  - Failed tool invocations (tool not found, invalid arguments, execution errors)
+- **Termination**: When the limit is reached, the loop stops and uses the last LLM response text
+
+**Recommendations**:
+- Lower limits (5-10) for faster execution and lower token usage
+- Higher limits (15-20) for complex problems requiring extensive tool usage
+- Consider your model's context window when setting limits, as each iteration adds messages to the conversation
+
+#### Tool Execution Flow
+
+When an agent makes an LLM call with tools available:
+
+1. **Initial Request**: System sends system prompt, user prompt, and tool schemas to the LLM
+2. **Response Processing**: LLM may return:
+   - Text response only (no tool calls) → process completes
+   - Text response with tool calls → proceed to execution
+3. **Tool Execution Loop**:
+   - For each tool call in the response:
+     - Parse tool call arguments (JSON string)
+     - Retrieve tool from registry by name
+     - Execute tool synchronously with debate context
+     - Create tool result in OpenAI format
+     - Display user feedback: `[Agent Name] Executing tool: {toolName}`
+   - Build messages array for next LLM call:
+     - Add assistant message with tool calls
+     - Add tool result messages (one per tool call)
+   - Make next LLM call with accumulated conversation history
+   - Repeat until no tool calls or limit reached
+4. **Final Response**: Use text from the last LLM call as the contribution content
+
+#### Error Handling
+
+The system handles tool execution errors gracefully:
+
+- **Tool Not Found**: Warning logged, error result created, continues to next tool call
+- **Invalid Arguments**: JSON parse errors result in warnings and error results
+- **Execution Errors**: Tool execution exceptions are caught, logged, and result in error results
+- **Non-Fatal**: All errors are non-fatal; the debate continues normally
+- **Error Results**: Failed tool invocations produce error results with status `"error"` and error message
+- **Limit Counting**: Failed invocations count toward the iteration limit
+
+Error results follow this format:
+```json
+{
+  "status": "error",
+  "error": "Error message describing what went wrong"
+}
+```
+
+#### Tool Metadata Persistence
+
+Tool calling metadata is stored in contribution metadata:
+
+- **`toolCalls`**: Array of tool calls made during this contribution
+  - Each tool call includes: `id`, `name`, `arguments` (JSON string)
+- **`toolResults`**: Array of tool results received during this contribution
+  - Each result includes: `tool_call_id`, `role` ("tool"), `content` (JSON string)
+- **`toolCallIterations`**: Number of tool call iterations performed
+
+This metadata is:
+- Persisted in debate state JSON files
+- Included in generated reports
+- Available for analysis and debugging
+
+#### User Feedback
+
+When tools are executed, user feedback messages are displayed in real-time:
+
+```
+[System Architect] Executing tool: context_search with arguments: {"term":"caching"}
+[System Architect] Tool "context_search" execution result: {"status":"success","result":{"matches":[...]}}
+```
+
+These messages are written to stderr, ensuring they don't interfere with stdout output (solution text).
+
+#### Example Configurations
+
+##### Agent with Base Tools Only (Default)
+
+```json
+{
+  "id": "agent-architect",
+  "name": "System Architect",
+  "role": "architect",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.5
+}
+```
+
+This agent will have access to base registry tools (Context Search) with default tool call limit of 10.
+
+##### Agent with Custom Tool Call Limit
+
+```json
+{
+  "id": "agent-architect",
+  "name": "System Architect",
+  "role": "architect",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.5,
+  "toolCallLimit": 5
+}
+```
+
+This agent uses base tools but with a lower iteration limit for faster execution.
+
+##### Agent with Tool Schemas (Future Enhancement)
+
+```json
+{
+  "id": "agent-architect",
+  "name": "System Architect",
+  "role": "architect",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.5,
+  "tools": [
+    {
+      "name": "custom_tool",
+      "description": "A custom tool for the architect",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Input parameter"
+          },
+          "options": {
+            "type": "object",
+            "description": "Optional configuration"
+          }
+        },
+        "required": ["input"]
+      }
+    }
+  ],
+  "toolCallLimit": 15
+}
+```
+
+**Note**: Currently, only base registry tools (like Context Search) are available. Agent-specific tools from configuration require tool implementation factories (future enhancement). When tool implementation factories are available, agents with custom tool schemas will have access to both base tools and their custom tools.
+
+#### Best Practices
+
+1. **Start with Defaults**: Use base tools with default limits initially, then adjust based on needs
+2. **Monitor Tool Usage**: Use verbose mode (`--verbose`) to see tool execution in real-time
+3. **Set Appropriate Limits**: Balance between allowing sufficient tool usage and preventing excessive iterations
+4. **Review Tool Metadata**: Check contribution metadata in debate state files to understand tool usage patterns
+5. **Error Handling**: Be aware that failed tool invocations count toward limits; ensure tools are properly configured
+6. **Context Search**: Leverage Context Search tool to help agents reference earlier contributions and maintain consistency
 
 ## Judge Configuration
 

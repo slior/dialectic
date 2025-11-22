@@ -3,9 +3,10 @@ import path from 'path';
 import readline from 'readline';
 import { Command } from 'commander';
 import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
-import { warnUser, infoUser, writeStderr } from '../index';
+import { warnUser, infoUser } from '../index';
+import { writeStderr } from '../../utils/console';
 import { SystemConfig } from '../../types/config.types';
-import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource } from '../../types/agent.types';
+import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource, AgentPromptMetadataCollection } from '../../types/agent.types';
 import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES, SummarizationConfig, AgentClarifications } from '../../types/debate.types';
 import { DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD } from '../../types/config.types';
 import { LLMProvider } from '../../providers/llm-provider';
@@ -21,6 +22,8 @@ import { DebateProgressUI } from '../../utils/progress-ui';
 import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
 import { createValidationError, writeFileWithDirectories } from '../../utils/common';
+import { createBaseRegistry, ToolRegistry } from '../../tools/tool-registry';
+import { buildToolRegistry } from '../../utils/tool-registry-builder';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -299,16 +302,13 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  * @param configDir - Directory path where the configuration file is located.
  * @param systemSummaryConfig - System-wide summarization configuration.
  * @param collect - Collection object to record prompt source metadata.
+ * @param baseToolRegistry - Base tool registry with common tools.
  * @returns A configured RoleBasedAgent instance.
  */
 function createAgentWithPromptResolution(
-  cfg: AgentConfig, 
-  provider: LLMProvider, 
-  configDir: string,
-  systemSummaryConfig: SummarizationConfig,
-  collect: { agents: AgentPromptMetadata[] }
+  cfg: AgentConfig,  provider: LLMProvider,  configDir: string,
+  systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, baseToolRegistry: ToolRegistry
 ): Agent {
-  // Resolve system prompt
   const defaultText = RoleBasedAgent.defaultSystemPrompt(cfg.role);
   const res = resolvePrompt({
     label: cfg.name,
@@ -321,8 +321,7 @@ function createAgentWithPromptResolution(
     ? { source: PROMPT_SOURCES.FILE, ...(res.absPath !== undefined && { absPath: res.absPath }) }
     : { source: PROMPT_SOURCES.BUILT_IN };
   
-  // Merge summarization config (agent-level overrides system-level)
-  const mergedSummaryConfig: SummarizationConfig = {
+  const mergedSummaryConfig: SummarizationConfig = { // Agent-level summarization overrides system-level
     ...systemSummaryConfig,
     ...cfg.summarization,
   };
@@ -348,10 +347,11 @@ function createAgentWithPromptResolution(
     defaultText: ''
   });
 
-  // Create agent with all resolved parameters
+  const agentToolRegistry = buildToolRegistry(cfg, baseToolRegistry);
+
   const agent = RoleBasedAgent.create(  cfg, provider, res.text, promptSource,
                                         mergedSummaryConfig, summaryPromptSource,
-                                        clarificationRes.text );
+                                        clarificationRes.text, agentToolRegistry );
   
   collect.agents.push({
     agentId: cfg.id,
@@ -378,14 +378,12 @@ function createAgentWithPromptResolution(
  * @returns Array of Agent instances.
  */
 function buildAgents(
-  agentConfigs: AgentConfig[], 
-  configDir: string,
-  systemSummaryConfig: SummarizationConfig,
-  collect: { agents: AgentPromptMetadata[] }
+  agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection
 ): Agent[] {
+  const baseToolRegistry = createBaseRegistry(); // Shared across all agents
   return agentConfigs.map((cfg) => {
     const provider = createProvider(cfg.provider);
-    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect);
+    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect, baseToolRegistry);
   });
 }
 

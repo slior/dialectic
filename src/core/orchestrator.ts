@@ -2,7 +2,7 @@ import { Agent } from './agent';
 import { JudgeAgent } from './judge';
 import { StateManager } from './state-manager';
 import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType, AgentClarifications } from '../types/debate.types';
-import { writeStderr } from '../cli/index';
+import { writeStderr } from '../utils/console';
 import { AgentRole, Critique } from '../types/agent.types';
 import { enhanceProblemWithContext } from '../utils/context-enhancer';
 

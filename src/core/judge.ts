@@ -3,7 +3,7 @@ import { DebateContext, DebateRound, Solution, DebateSummary, ContextPreparation
 import { LLMProvider } from '../providers/llm-provider';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
 import { DEFAULT_JUDGE_SUMMARY_PROMPT } from '../agents/prompts/judge-prompts';
-import { writeStderr } from '../cli/index';
+import { writeStderr } from '../utils/console';
 
 /**
  * Default system instructions for the judge when synthesizing a final solution.
