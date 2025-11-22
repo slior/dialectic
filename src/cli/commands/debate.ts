@@ -19,6 +19,7 @@ import { resolvePrompt } from '../../utils/prompt-loader';
 import { loadEnvironmentFile } from '../../utils/env-loader';
 import { Agent } from '../../core/agent';
 import { DebateProgressUI } from '../../utils/progress-ui';
+import { AgentLogger } from '../../core/agent';
 import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
 import { createValidationError, writeFileWithDirectories } from '../../utils/common';
@@ -97,6 +98,22 @@ async function collectAndAnswerClarifications( resolvedProblem: string, agents: 
   }
   
   return collected;
+}
+
+/**
+ * Creates a logger function that routes messages through the progress UI.
+ * Messages with onlyVerbose=true are only logged when verbose mode is enabled.
+ * 
+ * @param progressUI - The progress UI instance to use for logging
+ * @param verbose - Whether verbose mode is enabled
+ * @returns Logger function compatible with AgentLogger type
+ */
+function createAgentLogger(progressUI: DebateProgressUI, verbose: boolean): AgentLogger {
+  return (message: string, onlyVerbose?: boolean): void => {
+    if (onlyVerbose === false || (onlyVerbose === true && verbose)) {
+      progressUI.log(message);
+    }
+  };
 }
 
 /**
@@ -307,8 +324,8 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  */
 function createAgentWithPromptResolution(
   cfg: AgentConfig,  provider: LLMProvider,  configDir: string,
-  systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, baseToolRegistry: ToolRegistry
-): Agent {
+  systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, baseToolRegistry: ToolRegistry, logger?: AgentLogger ): Agent
+{
   const defaultText = RoleBasedAgent.defaultSystemPrompt(cfg.role);
   const res = resolvePrompt({
     label: cfg.name,
@@ -351,7 +368,7 @@ function createAgentWithPromptResolution(
 
   const agent = RoleBasedAgent.create(  cfg, provider, res.text, promptSource,
                                         mergedSummaryConfig, summaryPromptSource,
-                                        clarificationRes.text, agentToolRegistry );
+                                        clarificationRes.text, agentToolRegistry, logger );
   
   collect.agents.push({
     agentId: cfg.id,
@@ -378,12 +395,12 @@ function createAgentWithPromptResolution(
  * @returns Array of Agent instances.
  */
 function buildAgents(
-  agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection
+  agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, logger?: AgentLogger
 ): Agent[] {
   const baseToolRegistry = createBaseRegistry(); // Shared across all agents
   return agentConfigs.map((cfg) => {
     const provider = createProvider(cfg.provider);
-    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect, baseToolRegistry);
+    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect, baseToolRegistry, logger);
   });
 }
 
@@ -748,7 +765,13 @@ export function debateCommand(program: Command) {
           method: DEFAULT_SUMMARIZATION_METHOD,
         };
 
-        const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources);
+        // Initialize progress UI early so it can be used for agent logging
+        const progressUI = new DebateProgressUI();
+        progressUI.initialize(debateCfg.rounds);
+        
+        const agentLogger = createAgentLogger(progressUI, options.verbose || false); // Create logger wrapper that routes through progress UI
+
+        const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources, agentLogger);
 
         // Create judge with prompt resolution
         const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources);
@@ -781,10 +804,6 @@ export function debateCommand(program: Command) {
           writeStderr(`  - Method: ${systemSummaryConfig.method}\n`);
           writeStderr('\n');
         }
-
-        // Initialize progress UI
-        const progressUI = new DebateProgressUI();
-        progressUI.initialize(debateCfg.rounds);
 
         // Create orchestrator hooks to drive progress UI
         const hooks = createOrchestratorHooks(progressUI, options);

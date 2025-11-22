@@ -7,7 +7,12 @@ import { ToolCall, ToolResult, TOOL_RESULT_STATUS, ToolSchema } from '../types/t
 import { writeStderr } from '../utils/console';
 import { createToolResult, ToolImplementation } from '../tools/tool-implementation';
 
-
+/**
+ * Optional logger callback for agent messages.
+ * @param message - The message to log
+ * @param onlyVerbose - If true, message should only be logged in verbose mode
+ */
+export type AgentLogger = (message: string, onlyVerbose?: boolean) => void;
 
 /**
  * Abstract base class representing an AI agent in the multi-agent debate system.
@@ -32,6 +37,7 @@ import { createToolResult, ToolImplementation } from '../tools/tool-implementati
 export abstract class Agent {
   protected toolRegistry: ToolRegistry | undefined;
   protected toolCallLimit: number;
+  protected logger: AgentLogger | undefined;
 
   /**
    * Constructs an Agent.
@@ -39,13 +45,15 @@ export abstract class Agent {
    * @param provider - The LLMProvider instance used for LLM interactions.
    * @param toolRegistry - Optional tool registry for tool calling functionality.
    * @param toolCallLimit - Optional tool call limit per phase (defaults to DEFAULT_TOOL_CALL_LIMIT).
+   * @param logger - Optional logger callback for agent messages.
    */
   constructor(
     public config: AgentConfig, protected provider: LLMProvider,
-    toolRegistry?: ToolRegistry, toolCallLimit?: number
+    toolRegistry?: ToolRegistry, toolCallLimit?: number, logger?: AgentLogger
   ) {
     this.toolRegistry = toolRegistry;
     this.toolCallLimit = toolCallLimit ?? config.toolCallLimit ?? DEFAULT_TOOL_CALL_LIMIT;
+    this.logger = logger;
   }
 
   /**
@@ -217,6 +225,21 @@ export abstract class Agent {
   }
 
   /**
+   * Logs a message using the logger callback if available, otherwise writes to stderr.
+   * This is a helper method to centralize the logging pattern used throughout the class.
+   *
+   * @param message - The message to log.
+   * @param onlyVerbose - If true, message should only be logged in verbose mode (only used when logger is available).
+   */
+  private logMessage(message: string, onlyVerbose?: boolean): void {
+    if (this.logger) {
+      this.logger(message, onlyVerbose);
+    } else {
+      writeStderr(message);
+    }
+  }
+
+  /**
    * Parses tool call arguments from JSON string.
    * Handles parse errors by logging warnings and recording error results.
    * This is a stateless helper method used during tool calling loops.
@@ -235,7 +258,7 @@ export abstract class Agent {
       // JSON.parse returns any, but we use Record<string, unknown> to indicate it's an object
       return JSON.parse(toolCall.arguments) as Record<string, unknown>;
     } catch (parseError: any) {
-      writeStderr(`Warning: [${this.config.name}] Tool "${toolCall.name}" arguments are invalid JSON: ${parseError.message}. Skipping.\n`);
+      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" arguments are invalid JSON: ${parseError.message}. Skipping.\n`, false);
       this.addToolErrorResult(toolCall.id, `Invalid arguments JSON: ${parseError.message}`, toolResultsForThisIteration, allToolResults);
       return null;
     }
@@ -257,7 +280,7 @@ export abstract class Agent {
     toolResultsForThisIteration: ToolResult[],
     allToolResults: ToolResult[]
   ): void {
-    writeStderr(`[${this.config.name}] Executing tool: ${toolCall.name} with arguments: ${toolCall.arguments}\n`);
+    this.logMessage(`[${this.config.name}] Executing tool: ${toolCall.name} with arguments: ${toolCall.arguments}\n`, false);
 
     try {
       // Get tool from registry
@@ -265,7 +288,7 @@ export abstract class Agent {
       
       if (!tool) {
         // Tool not found
-        writeStderr(`Warning: [${this.config.name}] Tool "${toolCall.name}" not found. Skipping.\n`);
+        this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" not found. Skipping.\n`, false);
         this.addToolErrorResult(toolCall.id, 'Tool not found', toolResultsForThisIteration, allToolResults);
         return;
       }
@@ -279,7 +302,7 @@ export abstract class Agent {
       // Execute tool
       this.executeTool(tool, args, toolCall, context, toolResultsForThisIteration, allToolResults);
     } catch (error: any) {
-      writeStderr(`Warning: [${this.config.name}] Error processing tool call "${toolCall.name}": ${error.message}\n`);
+      this.logMessage(`Warning: [${this.config.name}] Error processing tool call "${toolCall.name}": ${error.message}\n`, false);
       this.addToolErrorResult(toolCall.id, error.message, toolResultsForThisIteration, allToolResults);
     }
   }
@@ -423,7 +446,7 @@ export abstract class Agent {
     try {
       const resultJson = tool.execute(args, context);
       
-      writeStderr(`[${this.config.name}] Tool "${toolCall.name}" execution result: ${resultJson}\n`);
+      this.logMessage(`[${this.config.name}] Tool "${toolCall.name}" execution result: ${resultJson}\n`, true);
       // Create tool result in OpenAI format
       const toolResult: ToolResult = {
         tool_call_id: toolCall.id,
@@ -434,7 +457,7 @@ export abstract class Agent {
       toolResultsForThisIteration.push(toolResult);
       allToolResults.push(toolResult);
     } catch (execError: any) {
-      writeStderr(`Warning: [${this.config.name}] Tool "${toolCall.name}" execution failed: ${execError.message}\n`);
+      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" execution failed: ${execError.message}\n`, false);
       this.addToolErrorResult(toolCall.id, execError.message, toolResultsForThisIteration, allToolResults);
     }
   }

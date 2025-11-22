@@ -56,6 +56,7 @@ export class DebateProgressUI {
   private state: ProgressState;
   private totalRounds: number = 0;
   private lastOutput: string = '';
+  private logLinesWritten: number = 0;
 
   constructor() {
     this.state = {
@@ -86,12 +87,19 @@ export class DebateProgressUI {
 
   /**
    * Writes a log message to stderr without leaving orphaned UI artifacts.
-   * Clears the current UI, writes the message, then redraws the UI.
+   * Writes the message, then redraws the UI (which will clear the log message).
    */
   log(message: string): void {
-    this.clearOutput();
     const text = message.endsWith('\n') ? message : `${message}\n`;
+    
+    // Count lines in the message (number of newlines)
+    const lineCount = (text.match(/\n/g) || []).length;
+    this.logLinesWritten += lineCount;
+    
+    // Write the log message directly (preserve current UI state)
     writeStderr(text);
+    
+    // Update display will clear log lines and redraw UI
     this.updateDisplay();
   }
 
@@ -224,10 +232,22 @@ export class DebateProgressUI {
    * Updates the progress display with current state.
    */
   private updateDisplay(): void {
+    // Clear any log lines that were written since last update
+    const hadLogLines = this.logLinesWritten > 0;
+    if (hadLogLines) {
+      for (let i = 0; i < this.logLinesWritten; i++) {
+        writeStderr(ANSI_MOVE_UP);
+        writeStderr(ANSI_CLEAR_LINE);
+      }
+      this.logLinesWritten = 0;
+    }
+    
     let output = this.buildProgressText();
     
-    // Only update if output has changed
-    if (output !== this.lastOutput) {
+    // Update if output has changed OR if we cleared log lines (need to restore UI)
+    if (output !== this.lastOutput || hadLogLines) {
+      // If we had log lines, we already moved cursor up, so clearOutput will work correctly
+      // If output changed, clearOutput will clear the old UI
       this.clearOutput();
       writeStderr(output);
       this.lastOutput = output;

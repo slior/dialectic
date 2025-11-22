@@ -1,4 +1,4 @@
-import { Agent } from '../core/agent';
+import { Agent, AgentLogger } from '../core/agent';
 import { AgentConfig, Proposal, Critique, PromptSource, AgentRole } from '../types/agent.types';
 import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
@@ -52,13 +52,14 @@ export class RoleBasedAgent extends Agent {
    * @param summaryPromptSource - Optional provenance metadata for summary prompt.
    * @param resolvedClarificationPromptText - Optional resolved clarification prompt text.
    * @param toolRegistry - Optional tool registry for tool calling functionality.
+   * @param logger - Optional logger callback for agent messages.
    */
   private constructor(  config: AgentConfig, provider: LLMProvider, resolvedSystemPrompt: string,
                         promptSource: PromptSource | undefined, summaryConfig: SummarizationConfig,
                         summaryPromptSource?: PromptSource, resolvedClarificationPromptText?: string,
-                        toolRegistry?: ToolRegistry )
+                        toolRegistry?: ToolRegistry, logger?: AgentLogger )
   {
-    super(config, provider, toolRegistry, config.toolCallLimit);
+    super(config, provider, toolRegistry, config.toolCallLimit, logger);
     this.resolvedSystemPrompt = resolvedSystemPrompt;
     this.rolePrompts = getPromptsForRole(config.role);
     this.summaryConfig = summaryConfig;
@@ -95,17 +96,18 @@ export class RoleBasedAgent extends Agent {
    * @param summaryPromptSource - Optional provenance metadata for summary prompt.
    * @param resolvedClarificationPromptText - Optional resolved clarification prompt text.
    * @param toolRegistry - Optional tool registry for tool calling functionality.
+   * @param logger - Optional logger callback for agent messages.
    * @returns A new RoleBasedAgent instance configured for the specified role.
    */
   static create(  config: AgentConfig, provider: LLMProvider, resolvedSystemPrompt: string,
                   promptSource: PromptSource | undefined, summaryConfig: SummarizationConfig,
                   summaryPromptSource?: PromptSource,
                   resolvedClarificationPromptText?: string,
-                  toolRegistry?: ToolRegistry ): RoleBasedAgent
+                  toolRegistry?: ToolRegistry, logger?: AgentLogger ): RoleBasedAgent
   {
     return new RoleBasedAgent(  config, provider, resolvedSystemPrompt,
                                 promptSource, summaryConfig, summaryPromptSource,
-                                resolvedClarificationPromptText, toolRegistry );
+                                resolvedClarificationPromptText, toolRegistry, logger );
   }
 
   /**
