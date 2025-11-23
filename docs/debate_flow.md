@@ -633,11 +633,12 @@ The orchestrator supports optional hooks for receiving real-time progress notifi
 Manages the real-time progress display for debate execution in the CLI.
 
 **Features**:
-- Shows current round and phase information
+- Shows round and phase transitions chronologically
 - Displays individual agent activities as they happen
-- Updates progress counts for each phase
-- Uses ANSI escape codes for in-place terminal updates
+- Appends completion messages for activities and phases
+- Uses colored icons to categorize message types
 - Writes all output to stderr (maintaining stdout for results)
+- Uses append-only log approach (messages are never cleared or redrawn)
 
 **Integration**:
 The CLI (`src/cli/commands/debate.ts`) creates a `DebateProgressUI` instance and connects it to the orchestrator via hooks:
@@ -650,18 +651,29 @@ The CLI (`src/cli/commands/debate.ts`) creates a `DebateProgressUI` instance and
 
 **Display Format**:
 ```
-┌─ Round 2/3
-│  Proposals (2/2)
-│  ⠋ System Architect proposing...
-└─
+ℹ  Round 1/3 starting
+ℹ  Proposals phase starting
+ℹ  System Architect is proposing...
+✓  System Architect completed proposing
+✓  Proposals phase completed
+ℹ  Critiques phase starting
+ℹ  System Architect is critiquing architect...
+✓  System Architect completed critiquing architect
+✓  Critiques phase completed
+✓  Debate completed
 ```
 
+**Message Types**:
+- **Info messages** (blue ℹ): Round start, phase start, agent activity start, synthesis start
+- **Success messages** (green ✓): Activity completion, phase completion, synthesis completion
+- **Warning messages** (yellow ⚠): Errors and warnings
+
 **Progress Tracking**:
-- Round indicators show current/total (e.g., "Round 2/3")
-- Phase progress shows completed/total tasks (e.g., "Proposals (2/2)")
-- Active agents shown with spinner (⠋) and activity description
-- Display updates in-place using ANSI cursor movement codes
-- Automatically clears when debate completes
+- Round indicators show current/total (e.g., "Round 1/3")
+- Phase messages show phase name only (e.g., "Proposals phase starting")
+- Agent activities shown with activity description (e.g., "System Architect is proposing...")
+- Messages are appended chronologically in the order events occur
+- No clearing or redrawing - all messages remain visible throughout execution
 
 ### 12. Clarifications Phase (Optional)
 
@@ -993,9 +1005,10 @@ Handles output of debate results based on options.
 
 **Behavior**:
 
-**Progress UI Cleanup**:
-- Progress UI automatically clears itself before result output
-- Ensures clean separation between progress display and results
+**Progress UI Completion**:
+- Progress UI appends final completion message when debate finishes
+- Progress log remains visible above result output
+- Clean separation maintained via stderr (progress) vs stdout (results)
 
 **If output path specified** (`--output <path>`):
 - **If path ends with `.json`**:

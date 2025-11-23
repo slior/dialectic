@@ -18,7 +18,7 @@ import { DebateOrchestrator } from '../../core/orchestrator';
 import { resolvePrompt } from '../../utils/prompt-loader';
 import { loadEnvironmentFile } from '../../utils/env-loader';
 import { Agent } from '../../core/agent';
-import { DebateProgressUI } from '../../utils/progress-ui';
+import { DebateProgressUI, MessageType } from '../../utils/progress-ui';
 import { AgentLogger } from '../../core/agent';
 import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
@@ -147,7 +147,7 @@ function createOrchestratorHooks(progressUI: DebateProgressUI, options: any) {
     onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
       progressUI.completeAgentActivity(agentName, SUMMARY_ACTIVITY_LABEL);
       if (options.verbose) {
-        progressUI.log(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars`);
+        progressUI.log(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars`, MessageType.SUCCESS);
       }
     },
     // Ensure activity is cleared even when no summary is produced

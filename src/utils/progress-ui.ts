@@ -12,6 +12,33 @@ try {
   });
 }
 
+// Message type enum for categorizing messages
+export enum MessageType {
+  INFO = 'info',
+  SUCCESS = 'success',
+  WARNING = 'warning'
+}
+
+// Message icon constants
+// Exported for testing purposes only - allows tests to reference icons without hardcoding values
+export const MESSAGE_ICONS = {
+  INFO: 'ℹ',
+  SUCCESS: '✓',
+  WARNING: '⚠'
+} as const;
+
+// Message format configuration
+interface MessageFormat {
+  icon: string;
+  color: (text: string) => string;
+}
+
+const MESSAGE_FORMATS: Record<MessageType, MessageFormat> = {
+  [MessageType.INFO]: { icon: MESSAGE_ICONS.INFO, color: chalk.blueBright },
+  [MessageType.SUCCESS]: { icon: MESSAGE_ICONS.SUCCESS, color: chalk.greenBright },
+  [MessageType.WARNING]: { icon: MESSAGE_ICONS.WARNING, color: chalk.yellowBright }
+};
+
 // Constants for UI strings and configuration
 const PHASE_LABELS = {
   [CONTRIBUTION_TYPES.PROPOSAL]: 'Proposals',
@@ -21,17 +48,11 @@ const PHASE_LABELS = {
 
 const SYNTHESIS_LABEL = 'Synthesis';
 
-// ANSI escape codes for terminal control
-const ANSI_MOVE_UP = '\x1b[1A';     // Move cursor up one line
-const ANSI_CLEAR_LINE = '\x1b[2K';  // Clear entire line
-
-// UI styling constants
-const SPINNER_ICON = '⠋';
-const SUMMARIZATION_SECTION_LABEL = 'Summarization';
-const COLOR_STRUCTURE = chalk.blue;      // Blue for lines and round header
-const COLOR_SPINNER = chalk.cyan;        // Cyan (lighter blue) for spinner icon
+const ICON_SPACING = '  '; // Two spaces after icon
 
 // Progress state tracking
+// Note: State is maintained for potential future advanced UI features (e.g., interactive display, progress bars).
+// Currently, state is not used for display rendering as we use an append-only log approach.
 interface ProgressState {
   currentRound: number;
   currentPhase: string;
@@ -44,19 +65,22 @@ interface ProgressState {
 /**
  * DebateProgressUI manages the real-time progress display for debate execution.
  * 
- * This class provides a simple text-based progress indicator that shows:
- * - Current round and phase
+ * This class provides an append-only log-style progress indicator that shows:
+ * - Round and phase transitions
  * - Individual agent activities
- * - Progress counts for each phase
+ * - Completion status for activities and phases
+ * 
+ * Messages are appended chronologically with colored icons:
+ * - Info messages (blue ℹ): Round start, phase start, agent activity start, synthesis start
+ * - Success messages (green ✓): Activity completion, phase completion, synthesis completion
+ * - Warning messages (yellow ⚠): Errors and warnings
  * 
  * The UI writes to stderr to maintain separation from stdout.
- * Output is designed to be simple and informative without complex rendering.
+ * Output uses an append-only approach - messages are never cleared or redrawn.
  */
 export class DebateProgressUI {
   private state: ProgressState;
   private totalRounds: number = 0;
-  private lastOutput: string = '';
-  private logLinesWritten: number = 0;
 
   constructor() {
     this.state = {
@@ -81,26 +105,17 @@ export class DebateProgressUI {
    * Must be called after initialize() and before any round/phase updates.
    */
   async start(): Promise<void> {
-    // Clear any previous output
-    this.clearOutput();
+    // No-op for append-only approach
   }
 
   /**
-   * Writes a log message to stderr without leaving orphaned UI artifacts.
-   * Writes the message, then redraws the UI (which will clear the log message).
+   * Writes a log message to stderr with appropriate icon and color based on message type.
+   * 
+   * @param message - The message text to log.
+   * @param type - The message type (MessageType enum value). Defaults to MessageType.INFO.
    */
-  log(message: string): void {
-    const text = message.endsWith('\n') ? message : `${message}\n`;
-    
-    // Count lines in the message (number of newlines)
-    const lineCount = (text.match(/\n/g) || []).length;
-    this.logLinesWritten += lineCount;
-    
-    // Write the log message directly (preserve current UI state)
-    writeStderr(text);
-    
-    // Update display will clear log lines and redraw UI
-    this.updateDisplay();
+  log(message: string, type: MessageType = MessageType.INFO): void {
+    this.appendMessage(message, type);
   }
 
   /**
@@ -111,14 +126,14 @@ export class DebateProgressUI {
   startRound(roundNumber: number): void {
     this.state.currentRound = roundNumber;
     this.state.currentPhase = '';
-    this.updateDisplay();
+    this.appendMessage(`Round ${roundNumber}/${this.totalRounds} starting`, MessageType.INFO);
   }
 
   /**
    * Signals the start of a phase within the current round.
    * 
    * @param phase - The phase type (proposal, critique, or refinement).
-   * @param expectedAgentCount - Expected number of agent tasks in this phase.
+   * @param expectedAgentCount - Expected number of agent tasks in this phase (tracked for future features).
    */
   startPhase(phase: ContributionType, expectedAgentCount: number): void {
     const phaseLabel = PHASE_LABELS[phase];
@@ -126,7 +141,7 @@ export class DebateProgressUI {
     const phaseKey = `${this.state.currentRound}-${phase}`;
     this.state.phaseProgress.set(phaseKey, { current: 0, total: expectedAgentCount });
     this.state.agentActivity.clear();
-    this.updateDisplay();
+    this.appendMessage(`${phaseLabel} phase starting`, MessageType.INFO);
   }
 
   /**
@@ -136,11 +151,11 @@ export class DebateProgressUI {
    * @param activity - Description of the activity (e.g., "proposing", "critiquing architect"). Multiple activities per agent are supported.
    */
   startAgentActivity(agentName: string, activity: string): void {
-    // Append activity into Map<agentName, activities[]>
+    // Append activity into Map<agentName, activities[]> (for future features)
     const activities = this.state.agentActivity.get(agentName) ?? [];
     activities.push(activity);
     this.state.agentActivity.set(agentName, activities);
-    this.updateDisplay();
+    this.appendMessage(`${agentName} is ${activity}...`, MessageType.INFO);
   }
 
   /**
@@ -150,7 +165,7 @@ export class DebateProgressUI {
    * @param activity - Description of the activity to complete. Removes a single matching occurrence.
    */
   completeAgentActivity(agentName: string, activity: string): void {
-    // Remove a single occurrence of the activity from the agent's list; delete key if list becomes empty
+    // Remove a single occurrence of the activity from the agent's list; delete key if list becomes empty (for future features)
     const activities = this.state.agentActivity.get(agentName);
     if (activities && activities.length > 0) {
       const idx = activities.indexOf(activity);
@@ -164,7 +179,7 @@ export class DebateProgressUI {
       }
     }
     
-    // Update phase progress
+    // Update phase progress (for future features)
     const currentPhase = this.state.currentPhase.toLowerCase();
     const phaseType = Object.keys(PHASE_LABELS).find(
       key => PHASE_LABELS[key as ContributionType].toLowerCase() === currentPhase
@@ -179,18 +194,19 @@ export class DebateProgressUI {
       }
     }
     
-    this.updateDisplay();
+    this.appendMessage(`${agentName} completed ${activity}`, MessageType.SUCCESS);
   }
 
   /**
    * Signals that a phase has completed.
    * 
-   * @param _phase - The phase type that completed (reserved for future use).
+   * @param phase - The phase type that completed.
    */
-  completePhase(_phase: ContributionType): void {
+  completePhase(phase: ContributionType): void {
+    const phaseLabel = PHASE_LABELS[phase];
     this.state.currentPhase = '';
     this.state.agentActivity.clear();
-    this.updateDisplay();
+    this.appendMessage(`${phaseLabel} phase completed`, MessageType.SUCCESS);
   }
 
   /**
@@ -199,7 +215,7 @@ export class DebateProgressUI {
   startSynthesis(): void {
     this.state.currentPhase = SYNTHESIS_LABEL;
     this.state.agentActivity.clear();
-    this.updateDisplay();
+    this.appendMessage('Synthesis starting', MessageType.INFO);
   }
 
   /**
@@ -207,7 +223,7 @@ export class DebateProgressUI {
    */
   completeSynthesis(): void {
     this.state.currentPhase = '';
-    this.updateDisplay();
+    this.appendMessage('Synthesis completed', MessageType.SUCCESS);
   }
 
   /**
@@ -215,119 +231,40 @@ export class DebateProgressUI {
    * Should be called when the debate finishes.
    */
   async complete(): Promise<void> {
-    this.clearOutput();
+    this.appendMessage('Debate completed', MessageType.SUCCESS);
   }
 
   /**
    * Handles errors in the progress UI.
    * 
-   * @param _error - The error that occurred (reserved for future use).
+   * @param error - The error that occurred.
    */
-  handleError(_error: Error): void {
-    // Error handling can be added here if needed
-    this.clearOutput();
+  handleError(error: Error): void {
+    this.appendMessage(`Error: ${error.message}`, MessageType.WARNING);
   }
 
   /**
-   * Updates the progress display with current state.
+   * Formats a message with the appropriate icon and color based on message type.
+   * Icon is colored, text remains in default terminal color.
+   * 
+   * @param message - The message text to format.
+   * @param type - The message type (info, success, or warning).
+   * @returns Formatted message string with colored icon, spacing, and plain text.
    */
-  private updateDisplay(): void {
-    // Clear any log lines that were written since last update
-    const hadLogLines = this.logLinesWritten > 0;
-    if (hadLogLines) {
-      for (let i = 0; i < this.logLinesWritten; i++) {
-        writeStderr(ANSI_MOVE_UP);
-        writeStderr(ANSI_CLEAR_LINE);
-      }
-      this.logLinesWritten = 0;
-    }
-    
-    let output = this.buildProgressText();
-    
-    // Update if output has changed OR if we cleared log lines (need to restore UI)
-    if (output !== this.lastOutput || hadLogLines) {
-      // If we had log lines, we already moved cursor up, so clearOutput will work correctly
-      // If output changed, clearOutput will clear the old UI
-      this.clearOutput();
-      writeStderr(output);
-      this.lastOutput = output;
-    }
+  private formatMessage(message: string, type: MessageType): string {
+    const format = MESSAGE_FORMATS[type];
+    const coloredIcon = format.color(format.icon);
+    return `${coloredIcon}${ICON_SPACING}${message}\n`;
   }
 
   /**
-   * Builds the progress text from current state.
+   * Appends a formatted message to stderr.
+   * 
+   * @param message - The message text to append.
+   * @param type - The message type (info, success, or warning). Defaults to info.
    */
-  private buildProgressText(): string {
-    if (this.state.currentRound === 0) {
-      return '';
-    }
-
-    const lines: string[] = [];
-    
-    // Round progress with blue color
-    lines.push(COLOR_STRUCTURE(`┌─ Round ${this.state.currentRound}/${this.totalRounds}`));
-    
-    // Current phase
-    if (this.state.currentPhase) {
-      const currentPhase = this.state.currentPhase.toLowerCase();
-      const phaseType = Object.keys(PHASE_LABELS).find(
-        key => PHASE_LABELS[key as ContributionType].toLowerCase() === currentPhase
-      ) as ContributionType | undefined;
-      
-      let phaseText = `${this.state.currentPhase}`;
-      
-      if (phaseType) {
-        const phaseKey = `${this.state.currentRound}-${phaseType}`;
-        const progress = this.state.phaseProgress.get(phaseKey);
-        if (progress) {
-          phaseText += ` (${progress.current}/${progress.total})`;
-        }
-      }
-      
-      lines.push(COLOR_STRUCTURE('│  ') + phaseText);
-      
-      // Active agent activities with colored spinner
-      if (this.state.agentActivity.size > 0) {
-        // Map.forEach callback receives (value, key) = (activities[], agentName)
-        this.state.agentActivity.forEach((activities, agentName) => {
-          activities.forEach((activity) => {
-            lines.push(COLOR_STRUCTURE('│  ') + COLOR_SPINNER(SPINNER_ICON) + ` ${agentName} ${activity}...`);
-          });
-        });
-      }
-    } else if (this.state.agentActivity.size > 0) {
-      // No active phase, but there are activities (e.g., summarization)
-      lines.push(COLOR_STRUCTURE('│  ') + SUMMARIZATION_SECTION_LABEL);
-      this.state.agentActivity.forEach((activities, agentName) => {
-        activities.forEach((activity) => {
-          lines.push(COLOR_STRUCTURE('│  ') + COLOR_SPINNER(SPINNER_ICON) + ` ${agentName} ${activity}...`);
-        });
-      });
-    }
-    
-    lines.push(COLOR_STRUCTURE('└─'));
-    
-    // Return with newline at end so cursor is on next line
-    return lines.join('\n') + '\n';
-  }
-
-  /**
-   * Clears the previous output from the terminal.
-   */
-  private clearOutput(): void {
-    if (this.lastOutput) {
-      // Count lines in last output (number of newlines = number of lines)
-      const lineCount = (this.lastOutput.match(/\n/g) || []).length;
-      
-      // Move cursor up and clear each line
-      // Since output ends with \n, cursor is on empty line after content
-      // We need to clear that line first, then move up and clear each content line
-      for (let i = 0; i < lineCount; i++) {
-        writeStderr(ANSI_MOVE_UP);
-        writeStderr(ANSI_CLEAR_LINE);
-      }
-      
-      this.lastOutput = '';
-    }
+  private appendMessage(message: string, type: MessageType = MessageType.INFO): void {
+    const formatted = this.formatMessage(message, type);
+    writeStderr(formatted);
   }
 }
