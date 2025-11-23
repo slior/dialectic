@@ -227,15 +227,19 @@ export abstract class Agent {
   /**
    * Logs a message using the logger callback if available, otherwise writes to stderr.
    * This is a helper method to centralize the logging pattern used throughout the class.
+   * 
+   * Messages should not include trailing newlines - they are added automatically:
+   * - Logger path: progressUI.log() adds newline via formatMessage()
+   * - Direct path: writeStderr() adds newline here
    *
-   * @param message - The message to log.
+   * @param message - The message to log (should not include trailing newline).
    * @param onlyVerbose - If true, message should only be logged in verbose mode (only used when logger is available).
    */
   private logMessage(message: string, onlyVerbose?: boolean): void {
     if (this.logger) {
       this.logger(message, onlyVerbose);
     } else {
-      writeStderr(message);
+      writeStderr(message + '\n');
     }
   }
 
@@ -258,7 +262,7 @@ export abstract class Agent {
       // JSON.parse returns any, but we use Record<string, unknown> to indicate it's an object
       return JSON.parse(toolCall.arguments) as Record<string, unknown>;
     } catch (parseError: any) {
-      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" arguments are invalid JSON: ${parseError.message}. Skipping.\n`, false);
+      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" arguments are invalid JSON: ${parseError.message}. Skipping.`, false);
       this.addToolErrorResult(toolCall.id, `Invalid arguments JSON: ${parseError.message}`, toolResultsForThisIteration, allToolResults);
       return null;
     }
@@ -280,7 +284,7 @@ export abstract class Agent {
     toolResultsForThisIteration: ToolResult[],
     allToolResults: ToolResult[]
   ): void {
-    this.logMessage(`[${this.config.name}] Executing tool: ${toolCall.name} with arguments: ${toolCall.arguments}\n`, false);
+    this.logMessage(`[${this.config.name}] Executing tool: ${toolCall.name} with arguments: ${toolCall.arguments}`, false);
 
     try {
       // Get tool from registry
@@ -288,7 +292,7 @@ export abstract class Agent {
       
       if (!tool) {
         // Tool not found
-        this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" not found. Skipping.\n`, false);
+        this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" not found. Skipping.`, false);
         this.addToolErrorResult(toolCall.id, 'Tool not found', toolResultsForThisIteration, allToolResults);
         return;
       }
@@ -302,7 +306,7 @@ export abstract class Agent {
       // Execute tool
       this.executeTool(tool, args, toolCall, context, toolResultsForThisIteration, allToolResults);
     } catch (error: any) {
-      this.logMessage(`Warning: [${this.config.name}] Error processing tool call "${toolCall.name}": ${error.message}\n`, false);
+      this.logMessage(`Warning: [${this.config.name}] Error processing tool call "${toolCall.name}": ${error.message}`, false);
       this.addToolErrorResult(toolCall.id, error.message, toolResultsForThisIteration, allToolResults);
     }
   }
@@ -446,7 +450,7 @@ export abstract class Agent {
     try {
       const resultJson = tool.execute(args, context);
       
-      this.logMessage(`[${this.config.name}] Tool "${toolCall.name}" execution result: ${resultJson}\n`, true);
+      this.logMessage(`[${this.config.name}] Tool "${toolCall.name}" execution result: ${resultJson}`, true);
       // Create tool result in OpenAI format
       const toolResult: ToolResult = {
         tool_call_id: toolCall.id,
@@ -457,7 +461,7 @@ export abstract class Agent {
       toolResultsForThisIteration.push(toolResult);
       allToolResults.push(toolResult);
     } catch (execError: any) {
-      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" execution failed: ${execError.message}\n`, false);
+      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" execution failed: ${execError.message}`, false);
       this.addToolErrorResult(toolCall.id, execError.message, toolResultsForThisIteration, allToolResults);
     }
   }

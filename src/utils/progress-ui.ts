@@ -115,7 +115,8 @@ export class DebateProgressUI {
    * @param type - The message type (MessageType enum value). Defaults to MessageType.INFO.
    */
   log(message: string, type: MessageType = MessageType.INFO): void {
-    this.appendMessage(message, type);
+    const formattedMessage = this.formatMessageWithRound(message, type);
+    this.appendMessage(formattedMessage, type);
   }
 
   /**
@@ -141,7 +142,8 @@ export class DebateProgressUI {
     const phaseKey = `${this.state.currentRound}-${phase}`;
     this.state.phaseProgress.set(phaseKey, { current: 0, total: expectedAgentCount });
     this.state.agentActivity.clear();
-    this.appendMessage(`${phaseLabel} phase starting`, MessageType.INFO);
+    const message = this.formatMessageWithRound(`${phaseLabel} phase starting`, MessageType.INFO);
+    this.appendMessage(message, MessageType.INFO);
   }
 
   /**
@@ -155,7 +157,8 @@ export class DebateProgressUI {
     const activities = this.state.agentActivity.get(agentName) ?? [];
     activities.push(activity);
     this.state.agentActivity.set(agentName, activities);
-    this.appendMessage(`${agentName} is ${activity}...`, MessageType.INFO);
+    const message = this.formatMessageWithRound(`${agentName} is ${activity}...`, MessageType.INFO);
+    this.appendMessage(message, MessageType.INFO);
   }
 
   /**
@@ -194,7 +197,8 @@ export class DebateProgressUI {
       }
     }
     
-    this.appendMessage(`${agentName} completed ${activity}`, MessageType.SUCCESS);
+    const message = this.formatMessageWithRound(`${agentName} completed ${activity}`, MessageType.SUCCESS);
+    this.appendMessage(message, MessageType.SUCCESS);
   }
 
   /**
@@ -206,7 +210,8 @@ export class DebateProgressUI {
     const phaseLabel = PHASE_LABELS[phase];
     this.state.currentPhase = '';
     this.state.agentActivity.clear();
-    this.appendMessage(`${phaseLabel} phase completed`, MessageType.SUCCESS);
+    const message = this.formatMessageWithRound(`${phaseLabel} phase completed`, MessageType.SUCCESS);
+    this.appendMessage(message, MessageType.SUCCESS);
   }
 
   /**
@@ -241,6 +246,26 @@ export class DebateProgressUI {
    */
   handleError(error: Error): void {
     this.appendMessage(`Error: ${error.message}`, MessageType.WARNING);
+  }
+
+  /**
+   * Prepends round prefix to messages that occur within an active round.
+   * Checks if we're inside an active round (currentRound > 0) before prepending round prefix.
+   * Round-scoped messages (phases, agent activities) get the prefix, while non-round messages
+   * (synthesis, errors, debate completion) do not.
+   * 
+   * @param message - The message text to potentially prefix.
+   * @param _type - The message type (unused, but kept for consistency with formatMessage signature).
+   * @returns Message with round prefix if inside an active round, otherwise unchanged message.
+   */
+  private formatMessageWithRound(message: string, _type: MessageType): string {
+    // Check if we're inside an active round (currentRound > 0) before prepending round prefix.
+    // Round-scoped messages (phases, agent activities) get the prefix, while non-round messages
+    // (synthesis, errors, debate completion) do not.
+    if (this.state.currentRound > 0) {
+      return `[Round ${this.state.currentRound}] ${message}`;
+    }
+    return message;
   }
 
   /**
