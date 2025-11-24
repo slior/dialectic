@@ -23,7 +23,6 @@ import { AgentLogger } from '../../core/agent';
 import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
 import { createValidationError, writeFileWithDirectories } from '../../utils/common';
-import { createBaseRegistry, ToolRegistry } from '../../tools/tool-registry';
 import { buildToolRegistry } from '../../utils/tool-registry-builder';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
@@ -319,12 +318,12 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  * @param configDir - Directory path where the configuration file is located.
  * @param systemSummaryConfig - System-wide summarization configuration.
  * @param collect - Collection object to record prompt source metadata.
- * @param baseToolRegistry - Base tool registry with common tools.
+ * @param logger - Optional logger callback for agent messages.
  * @returns A configured RoleBasedAgent instance.
  */
 function createAgentWithPromptResolution(
   cfg: AgentConfig,  provider: LLMProvider,  configDir: string,
-  systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, baseToolRegistry: ToolRegistry, logger?: AgentLogger ): Agent
+  systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, logger?: AgentLogger ): Agent
 {
   const defaultText = RoleBasedAgent.defaultSystemPrompt(cfg.role);
   const res = resolvePrompt({
@@ -364,7 +363,14 @@ function createAgentWithPromptResolution(
     defaultText: ''
   });
 
-  const agentToolRegistry = buildToolRegistry(cfg, baseToolRegistry);
+  const agentToolRegistry = buildToolRegistry(cfg);
+
+  // Display tool availability info
+  const toolSchemas = agentToolRegistry.getAllSchemas();
+  const toolNames = toolSchemas.length > 0
+    ? toolSchemas.map(schema => schema.name).join(', ')
+    : 'no tools';
+  infoUser(`[${cfg.name}] Tools available: ${toolNames}`);
 
   const agent = RoleBasedAgent.create(  cfg, provider, res.text, promptSource,
                                         mergedSummaryConfig, summaryPromptSource,
@@ -392,15 +398,15 @@ function createAgentWithPromptResolution(
  * @param configDir - Directory where the config file is located, used for resolving relative prompt paths.
  * @param systemSummaryConfig - System-wide summarization configuration.
  * @param collect - Object to collect prompt metadata.
+ * @param logger - Optional logger callback for agent messages.
  * @returns Array of Agent instances.
  */
 function buildAgents(
   agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, logger?: AgentLogger
 ): Agent[] {
-  const baseToolRegistry = createBaseRegistry(); // Shared across all agents
   return agentConfigs.map((cfg) => {
     const provider = createProvider(cfg.provider);
-    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect, baseToolRegistry, logger);
+    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect, logger);
   });
 }
 

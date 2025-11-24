@@ -4,19 +4,17 @@ import { createBaseRegistry } from '../src/tools/tool-registry';
 
 describe('ToolRegistry', () => {
   describe('Base Registry Creation', () => {
-    it('should create a base registry with Context Search tool', () => {
+    it('should create an empty base registry', () => {
       const registry = createBaseRegistry();
       expect(registry).toBeInstanceOf(ToolRegistry);
-      expect(registry.has('context_search')).toBe(true);
+      expect(registry.hasTools()).toBe(false);
+      expect(registry.has('context_search')).toBe(false);
     });
 
-    it('should return Context Search tool schema', () => {
+    it('should return empty schemas array for empty registry', () => {
       const registry = createBaseRegistry();
       const schemas = registry.getAllSchemas();
-      expect(schemas.length).toBeGreaterThan(0);
-      const contextSearchSchema = schemas.find((s) => s.name === 'context_search');
-      expect(contextSearchSchema).toBeDefined();
-      expect(contextSearchSchema?.description).toContain('Search');
+      expect(schemas.length).toBe(0);
     });
   });
 
@@ -82,14 +80,36 @@ describe('ToolRegistry', () => {
 
   describe('Registry Extension', () => {
     it('should create extended registry with base tools', () => {
-      const baseRegistry = createBaseRegistry();
+      const baseRegistry = new ToolRegistry();
+      const baseTool: ToolImplementation = {
+        name: 'base_tool',
+        schema: {
+          name: 'base_tool',
+          description: 'Base tool',
+          parameters: { type: 'object', properties: {} },
+        },
+        execute: () => '{}',
+      };
+      baseRegistry.register(baseTool);
+      
       const extendedRegistry = baseRegistry.extend(new ToolRegistry());
 
-      expect(extendedRegistry.has('context_search')).toBe(true);
+      expect(extendedRegistry.has('base_tool')).toBe(true);
     });
 
     it('should allow extended registry to add new tools', () => {
-      const baseRegistry = createBaseRegistry();
+      const baseRegistry = new ToolRegistry();
+      const baseTool: ToolImplementation = {
+        name: 'base_tool',
+        schema: {
+          name: 'base_tool',
+          description: 'Base tool',
+          parameters: { type: 'object', properties: {} },
+        },
+        execute: () => '{}',
+      };
+      baseRegistry.register(baseTool);
+      
       const extendedRegistry = baseRegistry.extend(new ToolRegistry());
 
       const newTool: ToolImplementation = {
@@ -104,26 +124,37 @@ describe('ToolRegistry', () => {
 
       extendedRegistry.register(newTool);
       expect(extendedRegistry.has('new_tool')).toBe(true);
-      expect(extendedRegistry.has('context_search')).toBe(true);
+      expect(extendedRegistry.has('base_tool')).toBe(true);
     });
 
     it('should allow extended registry to override base tools', () => {
-      const baseRegistry = createBaseRegistry();
+      const baseRegistry = new ToolRegistry();
+      const baseTool: ToolImplementation = {
+        name: 'base_tool',
+        schema: {
+          name: 'base_tool',
+          description: 'Original base tool',
+          parameters: { type: 'object', properties: {} },
+        },
+        execute: () => '{}',
+      };
+      baseRegistry.register(baseTool);
+      
       const extendedRegistry = baseRegistry.extend(new ToolRegistry());
 
       const overrideTool: ToolImplementation = {
-        name: 'context_search',
+        name: 'base_tool',
         schema: {
-          name: 'context_search',
-          description: 'Overridden context search',
+          name: 'base_tool',
+          description: 'Overridden base tool',
           parameters: { type: 'object', properties: {} },
         },
         execute: () => '{}',
       };
 
       extendedRegistry.register(overrideTool);
-      const tool = extendedRegistry.get('context_search');
-      expect(tool?.schema.description).toBe('Overridden context search');
+      const tool = extendedRegistry.get('base_tool');
+      expect(tool?.schema.description).toBe('Overridden base tool');
     });
   });
 

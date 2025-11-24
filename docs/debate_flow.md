@@ -480,19 +480,20 @@ Each agent instance is initialized with:
 **Tool Calling Loop**:
 When an agent has tools available, `callLLM()` implements a tool calling loop:
 
-1. **Initial LLM Call**: Makes first call with system prompt, user prompt, and tool schemas
-2. **Tool Call Detection**: Checks if response contains `toolCalls` array
-3. **Tool Execution**: For each tool call:
+1. **System Prompt Enhancement**: The agent's system prompt is automatically enhanced with a "## Available Tools" section that describes each available tool, its parameters, and usage instructions. This ensures agents are explicitly aware of available tools and their capabilities.
+2. **Initial LLM Call**: Makes first call with enhanced system prompt (containing tool information), user prompt, and tool schemas (via OpenAI function calling API)
+3. **Tool Call Detection**: Checks if response contains `toolCalls` array
+4. **Tool Execution**: For each tool call:
    - Retrieves tool from registry by name
    - Parses tool call arguments (JSON string)
    - Executes tool synchronously with context
    - Creates `ToolResult` in OpenAI format
    - Writes user feedback message to stderr: `[Agent Name] Executing tool: {toolName}`
-4. **Message Building**: Builds messages array for next LLM call:
+5. **Message Building**: Builds messages array for next LLM call:
    - Adds assistant message with tool calls
    - Adds tool result messages (one per tool call)
-5. **Iteration**: Makes next LLM call with accumulated messages
-6. **Termination**: Continues until:
+6. **Iteration**: Makes next LLM call with accumulated messages (using enhanced system prompt)
+7. **Termination**: Continues until:
    - No tool calls returned (uses final response text)
    - Tool call limit reached (uses last response text)
    - Failed tool invocations count toward iteration limit
@@ -862,9 +863,10 @@ All agents produce proposals in parallel for this round.
      - Agent prepares role-specific prompts using the enhanced problem
      - Calls `proposeImpl()` which invokes `callLLM()`
      - `callLLM()` implements tool calling loop if tools are available:
+       - Enhances system prompt with tool information (tool names, descriptions, parameters)
        - Detects tool calls from LLM response
        - Executes tools synchronously with debate context
-       - Builds messages array for subsequent LLM calls
+       - Builds messages array for subsequent LLM calls (using enhanced system prompt)
        - Continues until no tool calls or limit reached
      - Measures latency and calls `provider.complete()` (with tools if available)
      - Returns `Proposal` with content and metadata (tokens, latency, model, toolCalls, toolResults, toolCallIterations)
@@ -901,9 +903,10 @@ Each agent critiques proposals from other agents within the current round.
    - Agent builds critique-specific prompts
    - Calls `critiqueImpl()` which invokes `callLLM()`
    - `callLLM()` implements tool calling loop if tools are available:
+     - Enhances system prompt with tool information (tool names, descriptions, parameters)
      - Detects tool calls from LLM response
      - Executes tools synchronously with debate context
-     - Builds messages array for subsequent LLM calls
+     - Builds messages array for subsequent LLM calls (using enhanced system prompt)
      - Continues until no tool calls or limit reached
    - Measures latency and calls `provider.complete()` (with tools if available)
    - Returns `Critique` with content and metadata (tokens, latency, model, toolCalls, toolResults, toolCallIterations)
@@ -935,9 +938,10 @@ Each agent refines their proposal based on critiques received within the current
    - Agent builds refinement prompts including original and all critiques
    - Calls `refineImpl()` which invokes `callLLM()`
    - `callLLM()` implements tool calling loop if tools are available:
+     - Enhances system prompt with tool information (tool names, descriptions, parameters)
      - Detects tool calls from LLM response
      - Executes tools synchronously with debate context
-     - Builds messages array for subsequent LLM calls
+     - Builds messages array for subsequent LLM calls (using enhanced system prompt)
      - Continues until no tool calls or limit reached
    - Measures latency and calls `provider.complete()` (with tools if available)
    - Returns refined content with updated metadata (tokens, latency, model, toolCalls, toolResults, toolCallIterations)

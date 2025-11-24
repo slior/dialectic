@@ -1,10 +1,9 @@
 import { ToolImplementation } from './tool-implementation';
 import { ToolSchema } from '../types/tool.types';
-import { ContextSearchTool } from './context-search-tool';
 
 /**
  * Registry for managing tool implementations.
- * Supports base registry with common tools and extension for agent-specific tools.
+ * Supports extension from other registries for building agent-specific tool sets.
  */
 export class ToolRegistry {
   private tools: Map<string, ToolImplementation> = new Map();
@@ -82,18 +81,12 @@ export class ToolRegistry {
 }
 
 /**
- * Creates the base tool registry with common tools available to all agents.
- * Currently includes the Context Search tool.
+ * Creates an empty base tool registry.
+ * Tools are now configured per-agent via agent configuration.
  * 
- * @returns A ToolRegistry instance with base tools registered.
+ * @returns An empty ToolRegistry instance.
  */
 export function createBaseRegistry(): ToolRegistry {
-  const registry = new ToolRegistry();
-  
-  // Register Context Search tool
-  const contextSearchTool = new ContextSearchTool();
-  registry.register(contextSearchTool);
-  
-  return registry;
+  return new ToolRegistry();
 }
 

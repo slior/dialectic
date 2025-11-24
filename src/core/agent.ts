@@ -467,6 +467,35 @@ export abstract class Agent {
   }
 
   /**
+   * Formats tool information for inclusion in system prompts.
+   * Creates a human-readable description of available tools and their usage.
+   *
+   * @param toolSchemas - Array of tool schemas to format.
+   * @returns Formatted string describing available tools.
+   */
+  private formatToolInformation(toolSchemas: ToolSchema[]): string {
+    if (toolSchemas.length === 0) {
+      return '';
+    }
+
+    const toolDescriptions = toolSchemas.map((tool) => {
+      const params = tool.parameters.properties;
+      const required = tool.parameters.required || [];
+      const paramDescriptions = Object.entries(params)
+        .map(([name, schema]) => {
+          const requiredMarker = required.includes(name) ? ' (required)' : ' (optional)';
+          const desc = schema.description ? ` - ${schema.description}` : '';
+          return `  - ${name} (${schema.type})${requiredMarker}${desc}`;
+        })
+        .join('\n');
+
+      return `- **${tool.name}**: ${tool.description}${paramDescriptions ? '\n' + paramDescriptions : ''}`;
+    }).join('\n\n');
+
+    return `\n\n## Available Tools\n\nYou have access to the following tools that you can use to gather information or perform actions:\n\n${toolDescriptions}\n\nWhen you need to use a tool, request it naturally in your response. The tool will be executed automatically and the results will be provided to you.`;
+  }
+
+  /**
    * Helper method to call the underlying LLM provider with the specified prompts.
    * Measures latency and returns the generated text, usage statistics, and latency.
    * 
@@ -494,18 +523,22 @@ export abstract class Agent {
 
     // Tools available - implement tool calling loop
     const toolSchemas = this.toolRegistry!.getAllSchemas();
+    
+    // Enhance system prompt with tool information
+    const enhancedSystemPrompt = systemPrompt + this.formatToolInformation(toolSchemas);
+    
     let iterationCount = 0;
     let finalText = '';
     const allToolCalls: ToolCall[] = [];
     const allToolResults: ToolResult[] = [];
     const messages: ChatMessage[] = [
-      { role: CHAT_ROLES.SYSTEM, content: systemPrompt },
+      { role: CHAT_ROLES.SYSTEM, content: enhancedSystemPrompt },
       { role: CHAT_ROLES.USER, content: userPrompt },
     ];
 
     let shouldContinue = iterationCount < this.toolCallLimit;
     while (shouldContinue) {
-      const result = await this.processToolCallIteration( systemPrompt, userPrompt, toolSchemas, messages,
+      const result = await this.processToolCallIteration( enhancedSystemPrompt, userPrompt, toolSchemas, messages,
                                                           context, iterationCount, allToolCalls, allToolResults );
       
       shouldContinue = result.shouldContinue;

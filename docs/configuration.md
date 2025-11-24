@@ -228,11 +228,12 @@ Agents can call tools during proposal, critique, and refinement phases. Tools al
 #### Overview
 
 When an agent has tools configured, the system implements a tool calling loop:
-1. **Initial LLM Call**: Agent makes a request with tool schemas available
-2. **Tool Call Detection**: LLM response may include tool call requests
-3. **Tool Execution**: Each requested tool is executed synchronously
-4. **Result Integration**: Tool results are sent back to the LLM
-5. **Iteration**: Process continues until no tool calls or limit reached
+1. **System Prompt Enhancement**: The agent's system prompt is automatically enhanced with tool information, making agents explicitly aware of available tools and their usage
+2. **Initial LLM Call**: Agent makes a request with enhanced system prompt, user prompt, and tool schemas (via OpenAI function calling API)
+3. **Tool Call Detection**: LLM response may include tool call requests
+4. **Tool Execution**: Each requested tool is executed synchronously
+5. **Result Integration**: Tool results are sent back to the LLM
+6. **Iteration**: Process continues until no tool calls or limit reached
 
 Tool calls, results, and iteration counts are stored in contribution metadata for persistence and analysis.
 
@@ -340,11 +341,18 @@ The `toolCallLimit` field controls the maximum number of tool call iterations pe
 
 When an agent makes an LLM call with tools available:
 
-1. **Initial Request**: System sends system prompt, user prompt, and tool schemas to the LLM
-2. **Response Processing**: LLM may return:
+1. **System Prompt Enhancement**: The agent's system prompt is automatically enhanced with a "## Available Tools" section that describes:
+   - Each available tool's name and description
+   - Tool parameters with types, required/optional status, and parameter descriptions
+   - Instructions on how to use tools naturally in responses
+   
+   This enhancement ensures agents are explicitly aware of available tools and their capabilities, complementing the OpenAI function calling API format.
+
+2. **Initial Request**: System sends enhanced system prompt (with tool information), user prompt, and tool schemas to the LLM via the OpenAI function calling API
+3. **Response Processing**: LLM may return:
    - Text response only (no tool calls) → process completes
    - Text response with tool calls → proceed to execution
-3. **Tool Execution Loop**:
+4. **Tool Execution Loop**:
    - For each tool call in the response:
      - Parse tool call arguments (JSON string)
      - Retrieve tool from registry by name
@@ -354,9 +362,22 @@ When an agent makes an LLM call with tools available:
    - Build messages array for next LLM call:
      - Add assistant message with tool calls
      - Add tool result messages (one per tool call)
-   - Make next LLM call with accumulated conversation history
+   - Make next LLM call with accumulated conversation history (using enhanced system prompt)
    - Repeat until no tool calls or limit reached
-4. **Final Response**: Use text from the last LLM call as the contribution content
+5. **Final Response**: Use text from the last LLM call as the contribution content
+
+**System Prompt Format**: The tool information section is formatted as:
+```
+## Available Tools
+
+You have access to the following tools that you can use to gather information or perform actions:
+
+- **tool_name**: Tool description
+  - paramName (type) (required) - Parameter description
+  - optionalParam (type) (optional) - Optional parameter description
+
+When you need to use a tool, request it naturally in your response. The tool will be executed automatically and the results will be provided to you.
+```
 
 #### Error Handling
 

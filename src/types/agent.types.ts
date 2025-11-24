@@ -1,5 +1,5 @@
 import type { SummarizationConfig } from './config.types';
-import type { ToolSchema, ToolCallMetadata } from './tool.types';
+import type { ToolCallMetadata } from './tool.types';
 
 /**
  * The role of the agent.
@@ -33,6 +33,19 @@ export type PromptSourceType = (typeof PROMPT_SOURCES)[keyof typeof PROMPT_SOURC
 export const DEFAULT_TOOL_CALL_LIMIT = 10;
 
 /**
+ * Configuration for a tool available to an agent.
+ * 
+ * @property name - The name of the tool (must match a tool in AVAILABLE_TOOLS).
+ * @property [future config fields] - Future configuration parameters may be added here
+ *   to customize tool behavior per agent (e.g., timeouts, retry counts, etc.).
+ */
+export interface ToolConfig {
+  /** The name of the tool (must match a tool in AVAILABLE_TOOLS). */
+  name: string;
+  // Future configuration fields may be added here for tool-specific customization
+}
+
+/**
  * Configuration for an AI agent.
  *
  * @property id - Unique identifier for the agent.
@@ -45,7 +58,7 @@ export const DEFAULT_TOOL_CALL_LIMIT = 10;
  * @property summaryPromptPath - (Optional) Filesystem path to a markdown/text file containing the summary prompt. Resolved relative to the configuration file directory.
  * @property summarization - (Optional) Per-agent summarization configuration that overrides system-wide settings.
  * @property enabled - (Optional) Whether the agent is enabled; defaults to true if omitted.
- * @property tools - (Optional) Array of tool schemas available to this agent. Uses OpenAI function calling schema format.
+ * @property tools - (Optional) Array of tool configurations available to this agent. Each tool is specified by name only; schemas are resolved from AVAILABLE_TOOLS.
  * @property toolCallLimit - (Optional) Maximum number of tool call iterations per phase. Defaults to DEFAULT_TOOL_CALL_LIMIT (10).
  */
 export interface AgentConfig {
@@ -71,8 +84,8 @@ export interface AgentConfig {
   summarization?: SummarizationConfig;
   /** (Optional) Whether the agent is enabled; defaults to true if omitted. */
   enabled?: boolean;
-  /** (Optional) Array of tool schemas available to this agent. Uses OpenAI function calling schema format. */
-  tools?: ToolSchema[];
+  /** (Optional) Array of tool configurations available to this agent. Each tool is specified by name only. */
+  tools?: ToolConfig[];
   /** (Optional) Maximum number of tool call iterations per phase. Defaults to DEFAULT_TOOL_CALL_LIMIT (10). */
   toolCallLimit?: number;
 }

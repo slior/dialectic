@@ -1,42 +1,85 @@
 import { AgentConfig } from '../types/agent.types';
 import { ToolRegistry } from '../tools/tool-registry';
-import { DebateContext } from '../types/debate.types';
+import { ToolImplementation } from '../tools/tool-implementation';
+import { ToolSchema } from '../types/tool.types';
+import { ContextSearchTool } from '../tools/context-search-tool';
+import { writeStderr } from './console';
+
+/**
+ * Tool definition containing schema and implementation factory.
+ */
+type ToolDefinition = {
+  schema: ToolSchema;
+  createImplementation: () => ToolImplementation;
+};
+
+/**
+ * Map of available tool definitions.
+ * Tools are registered here with their schemas and implementation factories.
+ */
+const AVAILABLE_TOOLS: Record<string, ToolDefinition> = {
+  context_search: {
+    schema: {
+      name: 'context_search',
+      description: 'Search for a term in the debate history. Returns relevant contributions containing the search term.',
+      parameters: {
+        type: 'object',
+        properties: {
+          term: {
+            type: 'string',
+            description: 'The search term to find in debate history',
+          },
+        },
+        required: ['term'],
+      },
+    },
+    createImplementation: () => new ContextSearchTool(),
+  },
+};
 
 /**
  * Builds a tool registry for an agent based on configuration.
  * 
- * If the agent has no tools configured, returns the base registry.
- * If the agent has tools configured, creates an extended registry with agent-specific tools.
- * 
- * Note: Currently, only base registry tools are supported. Agent-specific tools from config
- * require tool implementation factories (future enhancement).
+ * Each agent gets its own independent tool registry. Tools are registered based on
+ * the agent's configuration. Tool schemas are resolved from AVAILABLE_TOOLS based on
+ * the tool name. If a tool name in the configuration is not recognized or is empty,
+ * a warning is issued and the tool is skipped.
  * 
  * @param agentConfig - Agent configuration containing optional tools.
- * @param baseRegistry - Base registry with common tools (e.g., Context Search).
- * @param context - Optional debate context (currently unused, reserved for future use).
- * @returns Tool registry for the agent (base or extended).
+ * @returns Tool registry for the agent (empty if no tools configured).
  */
-export function buildToolRegistry(
-  agentConfig: AgentConfig,
-  baseRegistry: ToolRegistry,
-  _context?: DebateContext
-): ToolRegistry {
-  // If agent has no tools in config, return base registry
+export function buildToolRegistry(agentConfig: AgentConfig): ToolRegistry {
+  const registry = new ToolRegistry();
+
+  // If agent has no tools configured, return empty registry
   if (!agentConfig.tools || agentConfig.tools.length === 0) {
-    return baseRegistry;
+    return registry;
   }
 
-  // If agent has tools, create extended registry
-  // For now, only base registry tools are supported
-  // Agent-specific tools from config require implementation factory (future enhancement)
-  const extendedRegistry = new ToolRegistry().extend(baseRegistry);
-  
-  // TODO: When tool implementation factory is available, register agent-specific tools here
-  // for (const toolSchema of agentConfig.tools) {
-  //   const toolImplementation = createToolFromSchema(toolSchema);
-  //   extendedRegistry.register(toolImplementation);
-  // }
-  
-  return extendedRegistry;
+  // Register tools from agent configuration
+  for (const toolConfig of agentConfig.tools) {
+    const toolName = toolConfig.name;
+
+    if (!toolName || toolName.trim() === '') {
+      writeStderr(`Warning: Invalid tool name (empty string) configured for agent "${agentConfig.id}". Skipping.\n`);
+      continue;
+    }
+
+    const toolDefinition = AVAILABLE_TOOLS[toolName];
+
+    if (!toolDefinition) {
+      writeStderr(`Warning: Unknown tool "${toolName}" configured for agent "${agentConfig.id}". Skipping.\n`);
+      continue;
+    }
+
+    const toolImplementation = toolDefinition.createImplementation();
+    
+    // TODO: Support tool configuration overrides from toolConfig if needed
+    // For now, use default implementation
+    
+    registry.register(toolImplementation);
+  }
+
+  return registry;
 }
 
