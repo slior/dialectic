@@ -1,0 +1,84 @@
+{
+  "agents": [
+    {
+      "id": "agent-architect",
+      "name": "System Architect",
+      "role": "architect",
+      "model": "google/gemini-2.5-flash-lite",
+      "provider": "openrouter",
+      "temperature": 0.5,
+      "enabled": true,
+      "tools": [
+        {
+          "name": "context_search"
+        }
+      ]
+    },
+    {
+      "id": "agent-performance",
+      "name": "Performance Engineer",
+      "role": "performance",
+      "model": "google/gemini-2.5-flash-lite",
+      "provider": "openrouter",
+      "temperature": 0.5,
+      "enabled": true,
+      "tools": [
+        {
+          "name": "context_search"
+        }
+      ]
+    },
+    {
+      "id": "agent-security",
+      "name": "Security Specialist",
+      "role": "security",
+      "model": "google/gemini-2.5-flash-lite",
+      "provider": "openrouter",
+      "temperature": 0.5,
+      "enabled": true,
+      "tools": [
+        {
+          "name": "context_search"
+        }
+      ]
+    },
+    {
+      "id": "agent-kiss",
+      "name": "KISS Advocate",
+      "role": "kiss",
+      "model": "google/gemini-2.5-flash-lite",
+      "provider": "openrouter",
+      "temperature": 0.5,
+      "enabled": true,
+      "tools": [
+        {
+          "name": "context_search"
+        }
+      ]
+    }
+  ],
+  "judge": {
+    "id": "judge-main",
+    "name": "Technical Judge",
+    "role": "generalist",
+    "model": "google/gemini-2.5-flash-lite",
+    "provider": "openrouter",
+    "temperature": 0.5
+  },
+  "debate": {
+    "rounds": 3,
+    "terminationCondition": {
+      "type": "fixed"
+    },
+    "synthesisMethod": "judge",
+    "includeFullHistory": false,
+    "timeoutPerRound": 300000,
+    "summarization": {
+      "enabled": false,
+      "threshold": 10000,
+      "maxLength": 5000,
+      "method": "length-based"
+    }
+  }
+}
+

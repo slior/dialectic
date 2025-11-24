@@ -15,7 +15,7 @@ mkdir -p "$OUTPUT_DIR"
 BASE_DIR="examples/kata2"
 
 # Run evaluations for all debate outputs
-dialectic eval -c ./$BASE_DIR/eval_config.json -d "$OUTPUT_DIR/all_agents_with_summary.json" -v -o "$OUTPUT_DIR/eval_all_agents_with_summary.eval.json"
-dialectic eval -c ./$BASE_DIR/eval_config.json -d "$OUTPUT_DIR/all_agents_no_summary.json" -v -o "$OUTPUT_DIR/eval_all_agents_no_summary.eval.json"
+# dialectic eval -c ./$BASE_DIR/eval_config.json -d "$OUTPUT_DIR/all_agents_with_summary.json" -v -o "$OUTPUT_DIR/eval_all_agents_with_summary.eval.json"
+dialectic eval -c ./$BASE_DIR/eval_config.json -d "$OUTPUT_DIR/all_agents_context_search_no_history.json" -v -o "$OUTPUT_DIR/eval_all_agents_context_search_no_history.eval.json"
 
 
