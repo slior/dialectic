@@ -1,4 +1,19 @@
-#!/usr/bin/env node
+#!/usr/bin/env ts-node
+
+/**
+ * Meta-test script for running tests across multiple examples.
+ * 
+ * Invocation:
+ *   npx ts-node examples/meta-test.ts <base_output_dir> [test_name]
+ * 
+ * Arguments:
+ *   base_output_dir - Required. Base directory where test outputs will be written.
+ *   test_name       - Optional. If provided, only runs tests matching this name (by basename).
+ * 
+ * Examples:
+ *   npx ts-node examples/meta-test.ts ~/tmp/dialectic/tests
+ *   npx ts-node examples/meta-test.ts ~/tmp/dialectic/tests summary_test
+ */
 
 import fs from 'fs';
 import path from 'path';
