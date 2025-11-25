@@ -28,6 +28,26 @@ export function averageOrNull(values: number[]): number | null {
 }
 
 /**
+ * Safely extracts an error message from an unknown error value.
+ * Handles Error objects, objects with message property, and converts other types to strings.
+ * 
+ * This utility function is useful for safely accessing error messages from catch clauses,
+ * which catch `unknown` types in TypeScript.
+ * 
+ * @param error - The error value (unknown type from catch clause).
+ * @returns A string representation of the error message.
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String(error.message);
+  }
+  return String(error);
+}
+
+/**
  * Creates a validation error with a custom error code.
  * 
  * This function is used throughout the CLI to create errors with specific exit codes
@@ -71,8 +91,7 @@ export function readJsonFile<T>(filePath: string, errorContext: string = 'File')
   try {
     return JSON.parse(raw) as T;
   } catch (parseError: unknown) {
-    const message = parseError instanceof Error ? parseError.message : 'Unknown parsing error';
-    throw createValidationError(`Invalid JSON format in ${errorContext.toLowerCase()}: ${abs} (${message})`, EXIT_INVALID_ARGS);
+    throw createValidationError(`Invalid JSON format in ${errorContext.toLowerCase()}: ${abs} (${getErrorMessage(parseError)})`, EXIT_INVALID_ARGS);
   }
 }
 

@@ -2,6 +2,7 @@ import { Agent } from './agent';
 import { JudgeAgent } from './judge';
 import { StateManager } from './state-manager';
 import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType, AgentClarifications } from '../types/debate.types';
+import { TracingContext } from '../types/tracing.types';
 import { writeStderr } from '../utils/console';
 import { AgentRole, Critique } from '../types/agent.types';
 import { enhanceProblemWithContext } from '../utils/context-enhancer';
@@ -114,13 +115,20 @@ interface OrchestratorHooks {
  * @param hooks - Optional hooks for phase completion notifications.
  */
 export class DebateOrchestrator {
+  private tracingContext?: TracingContext;
+
   constructor(
     private agents: Agent[],
     private judge: JudgeAgent,
     private stateManager: StateManager,
     private config: DebateConfig,
-    private hooks?: OrchestratorHooks
-  ) {}
+    private hooks?: OrchestratorHooks,
+    tracingContext?: TracingContext
+  ) {
+    if (tracingContext !== undefined) {
+      this.tracingContext = tracingContext;
+    }
+  }
 
   /**
    * Runs the full debate workflow (proposal → critique → refinement → synthesis).
@@ -131,10 +139,12 @@ export class DebateOrchestrator {
    *
    * @param problem - The problem statement to debate.
    * @param context - Optional additional context for agents and judge.
+   * @param clarifications - Optional clarifications collected before the debate.
+   * @param debateId - Optional debate ID. If provided, uses this ID instead of generating a new one.
    * @returns The DebateResult including final solution and metadata.
    */
-  async runDebate(problem: string, context?: string, clarifications?: AgentClarifications[]): Promise<DebateResult> {
-    const state = await this.stateManager.createDebate(problem, context);
+  async runDebate(problem: string, context?: string, clarifications?: AgentClarifications[], debateId?: string): Promise<DebateResult> {
+    const state = await this.stateManager.createDebate(problem, context, debateId);
     if (clarifications && clarifications.length > 0) {
       await this.stateManager.setClarifications(state.id, clarifications);
     }
@@ -177,21 +187,21 @@ export class DebateOrchestrator {
   /**
    * Builds DebateContext for agent and judge calls.
    * Includes full history when config.includeFullHistory is true.
+   * Preserves tracing context if present (but does not persist it in state).
    *
    * @param state - The current debate state.
    * @returns Context object passed to agents and judge.
    */
   private buildContext(state: DebateState): DebateContext {
-    const base: any = { problem: state.problem };
-    if (state.context !== undefined) base.context = state.context;
-    if (this.config.includeFullHistory) {
-      base.history = state.rounds;
-    }
-    base.includeFullHistory = this.config.includeFullHistory;
-    if (state.clarifications) {
-      base.clarifications = state.clarifications;
-    }
-    return base as DebateContext;
+    const base: DebateContext = {
+      problem: state.problem,
+      ...(state.context !== undefined && { context: state.context }),
+      ...(this.config.includeFullHistory && { history: state.rounds }),
+      includeFullHistory: this.config.includeFullHistory,
+      ...(state.clarifications && { clarifications: state.clarifications }),
+      ...(this.tracingContext && { tracingContext: this.tracingContext }),
+    };
+    return base;
   }
 
   /**
@@ -420,7 +430,7 @@ export class DebateOrchestrator {
    */
   private async synthesisPhase(state: DebateState): Promise<Solution> {
     // Prepare judge context with potential summarization
-    const result = await this.judge.prepareContext(state.rounds);
+    const result = await this.judge.prepareContext(state.rounds, this.tracingContext);
     
     // Store judge summary if one was created
     if (result.summary) {

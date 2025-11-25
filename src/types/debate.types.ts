@@ -1,5 +1,6 @@
 import { AgentRole, AgentPromptMetadata, JudgePromptMetadata, LLM_PROVIDERS } from './agent.types';
 import { ToolCallMetadata } from './tool.types';
+import { TraceOption, TracingContext } from './tracing.types';
 
 /** String literal constants for termination types */
 export const TERMINATION_TYPES = {
@@ -111,6 +112,8 @@ export interface DebateConfig {
   interactiveClarifications?: boolean;
   /** Maximum number of clarification questions to accept per agent (default 5). */
   clarificationsMaxPerAgent?: number;
+  /** Optional tracing configuration. Currently supports 'langfuse'. */
+  trace?: TraceOption;
 }
 
 /**
@@ -201,6 +204,8 @@ export interface DebateContext {
   history?: DebateRound[]; /** Optional full history of rounds when enabled. */
   includeFullHistory?: boolean; /** Whether to fall back to full history when no summary is found. */
   clarifications?: AgentClarifications[]; /** Optional clarifications to include in prompts (grouped by agent). */
+  /** Optional tracing context. This field should NOT be persisted in debate state. */
+  tracingContext?: TracingContext;
 }
 
 /**

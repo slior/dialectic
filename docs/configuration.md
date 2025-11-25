@@ -544,6 +544,7 @@ The `DebateConfig` schema controls how debates execute:
 | `timeoutPerRound` | `number` | Yes | Maximum time allowed per round in milliseconds. |
 | `interactiveClarifications` | `boolean` | No | Run a one-time pre-debate clarifications phase (default: false). |
 | `clarificationsMaxPerAgent` | `number` | No | Max questions per agent in clarifications phase (default: 5; excess truncated with a warning). |
+| `trace` | `string` | No | Tracing provider to use for observability. Currently supports `"langfuse"` only. If omitted, tracing is disabled. |
 
 ### Field Details
 
@@ -592,6 +593,13 @@ The `DebateConfig` schema controls how debates execute:
 - **Default**: `300000` (5 minutes)
 - **Example**: `300000`
 
+#### `trace`
+- **Type**: String (optional)
+- **Accepted Values**: `"langfuse"` (currently the only supported value)
+- **Semantics**: Enables observability tracing for the debate. When set to `"langfuse"`, all agent operations, LLM calls, and tool executions are traced to Langfuse. Requires Langfuse environment variables to be configured (see [Tracing Configuration](#tracing-configuration) section).
+- **Default**: Tracing is disabled if omitted
+- **Example**: `"langfuse"`
+
 ### Default Debate Configuration
 
 If no debate configuration is specified, the system uses:
@@ -617,6 +625,213 @@ If no debate configuration is specified, the system uses:
   "timeoutPerRound": 600000
 }
 ```
+
+## Tracing Configuration
+
+The debate system supports observability tracing through Langfuse, allowing you to monitor and analyze agent behavior, LLM calls, and tool executions in real-time.
+
+### Overview
+
+When tracing is enabled, the system creates a hierarchical trace structure in Langfuse:
+- **Top-level trace**: Represents the entire debate command execution
+- **Agent spans**: One span per agent method call (propose, critique, refine, prepareContext, askClarifyingQuestions)
+- **LLM generations**: Nested within agent spans, one per LLM call (including tool-calling iterations)
+- **Tool execution spans**: Nested within agent spans, one per tool invocation
+
+This structure provides complete visibility into the debate execution flow, making it easier to debug issues, analyze performance, and understand agent behavior.
+
+### Configuration
+
+Tracing is enabled by setting the `trace` field in the debate configuration:
+
+```json
+{
+  "debate": {
+    "rounds": 3,
+    "terminationCondition": { "type": "fixed" },
+    "synthesisMethod": "judge",
+    "includeFullHistory": true,
+    "timeoutPerRound": 300000,
+    "trace": "langfuse"
+  }
+}
+```
+
+### Environment Variables
+
+Langfuse tracing requires the following environment variables to be set:
+
+#### `LANGFUSE_SECRET_KEY`
+- **Type**: String
+- **Required**: Yes (when tracing is enabled)
+- **Description**: Your Langfuse secret key for authenticating API requests. This is a write-only key used to send traces to Langfuse.
+- **How to Set**:
+  - Windows PowerShell: `$Env:LANGFUSE_SECRET_KEY = "sk-lf-..."`
+  - macOS/Linux bash/zsh: `export LANGFUSE_SECRET_KEY="sk-lf-..."`
+- **Security**: Never commit this value to version control. Use environment variables or secret management systems.
+- **Where to Find**: Available in your Langfuse project settings under "API Keys"
+
+#### `LANGFUSE_PUBLIC_KEY`
+- **Type**: String
+- **Required**: Yes (when tracing is enabled)
+- **Description**: Your Langfuse public key for identifying your project. This is a read-only key used to identify which project the traces belong to.
+- **How to Set**:
+  - Windows PowerShell: `$Env:LANGFUSE_PUBLIC_KEY = "pk-lf-..."`
+  - macOS/Linux bash/zsh: `export LANGFUSE_PUBLIC_KEY="pk-lf-..."`
+- **Security**: While this is a read-only key, it's still recommended to keep it secure and not commit it to version control.
+- **Where to Find**: Available in your Langfuse project settings under "API Keys"
+
+#### `LANGFUSE_BASE_URL`
+- **Type**: String
+- **Required**: No
+- **Description**: Base URL for the Langfuse API. Use this to point to a self-hosted Langfuse instance or a custom endpoint.
+- **Default**: `"https://cloud.langfuse.com"` (Langfuse Cloud)
+- **How to Set**:
+  - Windows PowerShell: `$Env:LANGFUSE_BASE_URL = "https://your-langfuse-instance.com"`
+  - macOS/Linux bash/zsh: `export LANGFUSE_BASE_URL="https://your-langfuse-instance.com"`
+- **Example**: For self-hosted instances: `"https://langfuse.yourcompany.com"`
+
+### Trace Structure
+
+When tracing is enabled, the following structure is created in Langfuse:
+
+```
+debate-command (trace)
+├── agent-propose-{agentId} (span)
+│   ├── llm-generation-0 (generation)
+│   ├── tool-execution-{toolName} (span) [if tools are called]
+│   ├── llm-generation-1 (generation) [if tool calling continues]
+│   └── ...
+├── agent-critique-{agentId} (span)
+│   └── llm-generation-0 (generation)
+├── agent-refine-{agentId} (span)
+│   └── llm-generation-0 (generation)
+└── ...
+```
+
+### Trace Metadata
+
+Each trace and span includes relevant metadata:
+
+**Top-level trace metadata:**
+- `debateId`: Unique identifier for the debate
+
+**Agent span metadata:**
+- `agentName`: Human-readable agent name
+- `agentRole`: Agent role (architect, performance, security, etc.)
+- `agentId`: Unique agent identifier
+- `debateId`: Debate identifier
+- `roundNumber`: Current round number (if available)
+
+**LLM generation metadata:**
+- `model`: LLM model used
+- `temperature`: Temperature setting
+- `provider`: LLM provider (openai, openrouter)
+- `iteration`: Tool calling iteration number (0-indexed)
+
+**Tool execution span metadata:**
+- `toolName`: Name of the tool executed
+- `agentId`: Agent that executed the tool
+- `debateId`: Debate identifier
+
+### Behavior
+
+#### Initialization
+
+When tracing is enabled:
+1. The system validates that required environment variables (`LANGFUSE_SECRET_KEY` and `LANGFUSE_PUBLIC_KEY`) are set
+2. A Langfuse client is created with the provided credentials
+3. A top-level trace is created for the debate command
+4. If initialization fails, a warning is logged and the debate continues without tracing
+
+#### During Execution
+
+- All agent operations are wrapped in spans
+- LLM calls create generation spans within the active agent span
+- Tool executions create nested spans within the active agent span
+- Errors are captured and marked with error level in spans
+- Tracing failures are non-blocking - warnings are logged but the debate continues
+
+#### Completion
+
+- After the debate completes, the trace is automatically flushed to Langfuse
+- The trace is ended when all spans are completed
+- If flushing fails, a warning is logged but does not affect the debate result
+
+### Error Handling
+
+The tracing system is designed to be non-blocking:
+- **Missing Environment Variables**: If tracing is enabled but environment variables are missing, a warning is logged and the debate continues without tracing
+- **Initialization Failures**: If Langfuse client creation fails, a warning is logged and the debate continues without tracing
+- **Tracing Failures**: If individual span or generation creation fails, a warning is logged for that operation but execution continues
+- **Flush Failures**: If trace flushing fails at the end, a warning is logged but does not affect the debate result
+
+### Example Configuration
+
+#### Enable Tracing in Configuration File
+
+```json
+{
+  "debate": {
+    "rounds": 3,
+    "terminationCondition": { "type": "fixed" },
+    "synthesisMethod": "judge",
+    "includeFullHistory": true,
+    "timeoutPerRound": 300000,
+    "trace": "langfuse"
+  }
+}
+```
+
+#### Using Environment Variables
+
+**Windows PowerShell:**
+```powershell
+$Env:LANGFUSE_SECRET_KEY = "sk-lf-..."
+$Env:LANGFUSE_PUBLIC_KEY = "pk-lf-..."
+# Optional: for self-hosted instances
+$Env:LANGFUSE_BASE_URL = "https://your-langfuse-instance.com"
+dialectic debate "Design a caching system"
+```
+
+**macOS/Linux:**
+```bash
+export LANGFUSE_SECRET_KEY="sk-lf-..."
+export LANGFUSE_PUBLIC_KEY="pk-lf-..."
+# Optional: for self-hosted instances
+export LANGFUSE_BASE_URL="https://your-langfuse-instance.com"
+dialectic debate "Design a caching system"
+```
+
+**Using .env file:**
+```bash
+# .env file
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```
+
+Then run:
+```bash
+dialectic debate "Design a caching system" --env-file .env
+```
+
+### Best Practices
+
+1. **Development**: Enable tracing during development to understand agent behavior and debug issues
+2. **Production**: Consider enabling tracing in production for monitoring and analysis, but be aware of the performance overhead
+3. **Environment Variables**: Use `.env` files for local development and secure secret management systems for production
+4. **Self-Hosted**: If using a self-hosted Langfuse instance, set `LANGFUSE_BASE_URL` to point to your instance
+5. **Error Monitoring**: Check Langfuse dashboard regularly to identify any tracing failures or issues
+6. **Performance**: Tracing adds minimal overhead, but for high-volume production use, monitor performance impact
+
+### Viewing Traces
+
+After a debate completes with tracing enabled:
+1. Navigate to your Langfuse project dashboard
+2. Find the trace named `debate-command` with the matching `debateId` metadata
+3. Expand the trace to see all agent spans and LLM generations
+4. Click on individual spans to see detailed metadata, inputs, outputs, and timing information
 
 ## Complete Configuration Example
 
@@ -664,9 +879,13 @@ If no debate configuration is specified, the system uses:
     "terminationCondition": { "type": "fixed" },
     "synthesisMethod": "judge",
     "includeFullHistory": true,
-    "timeoutPerRound": 300000
+    "timeoutPerRound": 300000,
+    "trace": "langfuse"
   }
 }
+```
+
+**Note**: The `trace` field is optional. When set to `"langfuse"`, ensure `LANGFUSE_SECRET_KEY` and `LANGFUSE_PUBLIC_KEY` environment variables are set (see [Tracing Configuration](#tracing-configuration) section).
 ```
 
 ## Context Summarization Configuration
@@ -1010,6 +1229,36 @@ If summarization fails due to LLM errors:
   - Windows PowerShell: `$Env:OPENROUTER_API_KEY = "sk-or-..."`
   - macOS/Linux bash/zsh: `export OPENROUTER_API_KEY="sk-or-..."`
 - **Security**: Never commit this value to version control. Use environment variables or secret management systems.
+
+### `LANGFUSE_SECRET_KEY`
+- **Type**: String
+- **Required**: Yes (when tracing is enabled with `trace: "langfuse"`)
+- **Description**: Your Langfuse secret key for authenticating API requests. This is a write-only key used to send traces to Langfuse.
+- **How to Set**:
+  - Windows PowerShell: `$Env:LANGFUSE_SECRET_KEY = "sk-lf-..."`
+  - macOS/Linux bash/zsh: `export LANGFUSE_SECRET_KEY="sk-lf-..."`
+- **Security**: Never commit this value to version control. Use environment variables or secret management systems.
+- **Where to Find**: Available in your Langfuse project settings under "API Keys"
+
+### `LANGFUSE_PUBLIC_KEY`
+- **Type**: String
+- **Required**: Yes (when tracing is enabled with `trace: "langfuse"`)
+- **Description**: Your Langfuse public key for identifying your project. This is a read-only key used to identify which project the traces belong to.
+- **How to Set**:
+  - Windows PowerShell: `$Env:LANGFUSE_PUBLIC_KEY = "pk-lf-..."`
+  - macOS/Linux bash/zsh: `export LANGFUSE_PUBLIC_KEY="pk-lf-..."`
+- **Security**: While this is a read-only key, it's still recommended to keep it secure and not commit it to version control.
+- **Where to Find**: Available in your Langfuse project settings under "API Keys"
+
+### `LANGFUSE_BASE_URL`
+- **Type**: String
+- **Required**: No
+- **Description**: Base URL for the Langfuse API. Use this to point to a self-hosted Langfuse instance or a custom endpoint.
+- **Default**: `"https://cloud.langfuse.com"` (Langfuse Cloud)
+- **How to Set**:
+  - Windows PowerShell: `$Env:LANGFUSE_BASE_URL = "https://your-langfuse-instance.com"`
+  - macOS/Linux bash/zsh: `export LANGFUSE_BASE_URL="https://your-langfuse-instance.com"`
+- **Example**: For self-hosted instances: `"https://langfuse.yourcompany.com"`
 
 ## Command Line Options
 

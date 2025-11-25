@@ -8,6 +8,9 @@ const config: Config = {
   clearMocks: true,
   collectCoverage: false,
   verbose: false,
+  moduleNameMapper: {
+    '^langfuse$': '<rootDir>/tests/__mocks__/langfuse.ts',
+  },
 };
 
 export default config;

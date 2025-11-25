@@ -37,6 +37,7 @@
     "chalk": "^4.1.2",
     "commander": "^11.0.0",
     "dotenv": "^16.3.1",
+    "langfuse": "^3.38.6",
     "openai": "^4.52.0"
   },
   "devDependencies": {

@@ -92,4 +92,10 @@ The `report` command generates a comprehensive markdown report from a saved deba
 
 Debate behavior is configured via a JSON file (default: `./debate-config.json`). If the file is missing, built-in defaults are used.
 
-For detailed configuration documentation, including all fields, validation rules, and examples, see [docs/configuration.md](docs/configuration.md).
+**Features:**
+- Agent and judge configuration (models, temperatures, custom prompts)
+- Debate settings (rounds, timeouts, synthesis methods)
+- Context summarization to manage debate history length
+- Observability tracing via Langfuse (optional) - enables monitoring and analysis of agent behavior, LLM calls, and tool executions
+
+For detailed configuration documentation, including all fields, validation rules, tracing setup, and examples, see [docs/configuration.md](docs/configuration.md).

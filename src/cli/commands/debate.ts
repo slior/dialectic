@@ -24,6 +24,9 @@ import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
 import { createValidationError, writeFileWithDirectories } from '../../utils/common';
 import { buildToolRegistry } from '../../utils/tool-registry-builder';
+import { TRACE_OPTIONS, TracingContext } from '../../types/tracing.types';
+import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent } from '../../utils/tracing-factory';
+import { generateDebateId } from '../../utils/id';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -61,6 +64,7 @@ const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 
 // Default summary prompt fallback
 const DEFAULT_SUMMARY_PROMPT_FALLBACK = 'Summarize the following debate history from your perspective, preserving key points and decisions.';
+
 
 /**
  * Collects clarifying questions from agents and prompts the user for answers.
@@ -173,7 +177,8 @@ function createOrchestratorHooks(progressUI: DebateProgressUI, options: any) {
 function createJudgeWithPromptResolution(
   sysConfig: SystemConfig,
   systemSummaryConfig: SummarizationConfig,
-  promptSources: { judge: JudgePromptMetadata }
+  promptSources: { judge: JudgePromptMetadata },
+  tracingContext?: TracingContext
 ): JudgeAgent {
   // Judge prompt resolution
   const judgeDefault = JudgeAgent.defaultSystemPrompt();
@@ -194,9 +199,10 @@ function createJudgeWithPromptResolution(
   });
   
   const judgeProvider = createProvider(sysConfig.judge!.provider);
+  const wrappedJudgeProvider = createTracingProvider(judgeProvider, tracingContext);
   const judge = new JudgeAgent(
     sysConfig.judge!,
-    judgeProvider,
+    wrappedJudgeProvider,
     jres.text,
     jres.source === PROMPT_SOURCES.FILE ? ({ source: PROMPT_SOURCES.FILE, ...(jres.absPath !== undefined && { absPath: jres.absPath }) }) : ({ source: PROMPT_SOURCES.BUILT_IN }),
     systemSummaryConfig,
@@ -402,11 +408,13 @@ function createAgentWithPromptResolution(
  * @returns Array of Agent instances.
  */
 function buildAgents(
-  agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, logger?: AgentLogger
+  agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, logger?: AgentLogger, tracingContext?: TracingContext
 ): Agent[] {
   return agentConfigs.map((cfg) => {
     const provider = createProvider(cfg.provider);
-    return createAgentWithPromptResolution(cfg, provider, configDir, systemSummaryConfig, collect, logger);
+    const wrappedProvider = createTracingProvider(provider, tracingContext);
+    const agent = createAgentWithPromptResolution(cfg, wrappedProvider, configDir, systemSummaryConfig, collect, logger);
+    return createTracingAgent(agent, tracingContext);
   });
 }
 
@@ -777,12 +785,30 @@ export function debateCommand(program: Command) {
         
         const agentLogger = createAgentLogger(progressUI, options.verbose || false); // Create logger wrapper that routes through progress UI
 
-        const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources, agentLogger);
+        const stateManager = new StateManager();
+        
+        // Generate debate ID early so we can use it for tracing context
+        // This ensures the trace metadata has the correct debate ID from the start
+        const debateId = generateDebateId();
+        
+        // Initialize tracing context if enabled
+        let tracingContext: TracingContext | undefined = undefined;
+        if (debateCfg.trace === TRACE_OPTIONS.LANGFUSE) {
+          try {
+            validateLangfuseConfig();
+            tracingContext = createTracingContext(debateCfg, debateId);
+            if (tracingContext) {
+              infoUser('Langfuse tracing enabled');
+            }
+          } catch (error: any) {
+            warnUser(`Langfuse tracing initialization failed: ${error.message}. Continuing without tracing.`);
+          }
+        }
+
+        const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources, agentLogger, tracingContext);
 
         // Create judge with prompt resolution
-        const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources);
-
-        const stateManager = new StateManager();
+        const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources, tracingContext);
 
         // Clarifications phase (optional)
         const shouldClarify: boolean = (options.clarify === true) || (sysConfig.debate?.interactiveClarifications === true);
@@ -814,12 +840,22 @@ export function debateCommand(program: Command) {
         // Create orchestrator hooks to drive progress UI
         const hooks = createOrchestratorHooks(progressUI, options);
 
-        const orchestrator = new DebateOrchestrator(agents, judge, stateManager, debateCfg, hooks);
+        const orchestrator = new DebateOrchestrator(agents, judge, stateManager, debateCfg, hooks, tracingContext);
         
         // Start progress UI and run debate
         await progressUI.start();
-        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, contextString, finalClarifications);
+        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, contextString, finalClarifications, debateId);
         await progressUI.complete();
+
+        // Flush trace if tracing was enabled
+        // Note: Traces are automatically ended when all spans are ended
+        if (tracingContext) {
+          try {
+            await tracingContext.langfuse.flushAsync();
+          } catch (error: any) {
+            writeStderr(`Warning: Failed to flush Langfuse trace: ${error.message}\n`);
+          }
+        }
 
         // Persist prompt sources once per debate
         await stateManager.setPromptSources(result.debateId, promptSources);

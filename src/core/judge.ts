@@ -1,9 +1,11 @@
 import { AgentConfig, PromptSource } from '../types/agent.types';
 import { DebateContext, DebateRound, Solution, DebateSummary, ContextPreparationResult, SummarizationConfig, CONTRIBUTION_TYPES } from '../types/debate.types';
+import { TracingContext, LangfuseSpan, LangfuseGeneration, SPAN_LEVEL } from '../types/tracing.types';
 import { LLMProvider } from '../providers/llm-provider';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
 import { DEFAULT_JUDGE_SUMMARY_PROMPT } from '../agents/prompts/judge-prompts';
 import { writeStderr } from '../utils/console';
+import { getErrorMessage } from '../utils/common';
 
 /**
  * Default system instructions for the judge when synthesizing a final solution.
@@ -70,19 +72,175 @@ export class JudgeAgent {
    *
    * @param problem - The problem statement under debate.
    * @param rounds - The debate rounds containing proposals and critiques.
-   * @param _context - Additional debate context (unused for now).
+   * @param context - Additional debate context, including optional tracing context.
    * @returns A synthesized Solution that includes a description and basic metadata.
    */
-  async synthesize(problem: string, rounds: DebateRound[], _context: DebateContext): Promise<Solution> {
+  async synthesize(problem: string, rounds: DebateRound[], context: DebateContext): Promise<Solution> {
     const prompt = this.buildSynthesisPrompt(problem, rounds);
     const systemPrompt = this.resolvedSystemPrompt;
     const temperature = this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE;
 
+    const tracingContext = context.tracingContext;
+    const spanName = `judge-synthesize-${this.config.id}`;
+
+    if (tracingContext) {
+      return await this.synthesizeWithTracing(tracingContext, spanName, systemPrompt, prompt, temperature);
+    }
+
+    // Non-tracing execution (when tracing disabled)
+    return await this.executeSynthesis(systemPrompt, prompt, temperature);
+  }
+
+  /**
+   * Synthesizes a solution with Langfuse tracing enabled.
+   * Creates spans and generations for observability, with fallback to non-tracing execution on errors.
+   * 
+   * @param tracingContext - The tracing context for creating spans and generations.
+   * @param spanName - Name for the synthesis span.
+   * @param systemPrompt - The system prompt for the LLM.
+   * @param prompt - The user prompt for synthesis.
+   * @param temperature - Temperature setting for the LLM.
+   * @returns A synthesized Solution.
+   * @private
+   */
+  private async synthesizeWithTracing(
+    tracingContext: TracingContext,
+    spanName: string,
+    systemPrompt: string,
+    prompt: string,
+    temperature: number
+  ): Promise<Solution> {
+    let span: LangfuseSpan | undefined;
+    let generation: LangfuseGeneration | undefined;
+    
+    try {
+      // Create span - if this fails, we'll fall back to non-tracing execution
+      span = tracingContext.trace.span({
+        name: spanName,
+        metadata: {
+          judgeName: this.config.name,
+          judgeId: this.config.id,
+          debateId: tracingContext.trace.id || 'unknown',
+        },
+      });
+    } catch (tracingError: unknown) {
+      writeStderr(`Warning: Langfuse tracing failed for judge synthesize (span creation): ${getErrorMessage(tracingError)}\n`);
+      // Fallback to non-tracing execution
+      return await this.executeSynthesis(systemPrompt, prompt, temperature);
+    }
+
+    try {
+      // Create generation - if this fails, we'll end the span and fall back
+      // span is guaranteed to be defined here (if it wasn't, we would have returned early)
+      generation = span!.generation({
+        name: 'llm-generation-0',
+        input: {
+          systemPrompt,
+          userPrompt: prompt,
+          model: this.config.model,
+          temperature,
+        },
+        metadata: {
+          model: this.config.model,
+          temperature,
+          provider: this.config.provider,
+        },
+      });
+    } catch (tracingError: unknown) {
+      const errorMessage = getErrorMessage(tracingError);
+      writeStderr(`Warning: Langfuse tracing failed for judge synthesize (generation creation): ${errorMessage}\n`);
+      // End span and fall back to non-tracing execution
+      // span is guaranteed to be defined here (if it wasn't, we would have returned early)
+      try {
+        span!.end({
+          level: SPAN_LEVEL.ERROR,
+          statusMessage: errorMessage,
+        });
+      } catch {
+        // Ignore errors ending span
+      }
+      return await this.executeSynthesis(systemPrompt, prompt, temperature);
+    }
+
+    // Execute LLM call - if this fails, we should NOT retry, just propagate the error
+    try {
+      const res = await this.provider.complete({
+        model: this.config.model,
+        temperature,
+        systemPrompt,
+        userPrompt: prompt,
+      });
+
+      // Convert usage to langfuse format
+      const langfuseUsage = res.usage ? {
+        input: res.usage.inputTokens ?? null,
+        output: res.usage.outputTokens ?? null,
+        total: res.usage.totalTokens ?? null,
+        unit: 'TOKENS' as const,
+      } : undefined;
+
+      // generation and span are guaranteed to be defined here (if they weren't, we would have returned early)
+      generation!.end({
+        output: {
+          text: res.text,
+        },
+        ...(langfuseUsage && { usage: langfuseUsage }),
+      });
+
+      span!.end({
+        output: {
+          solutionDescription: res.text.substring(0, 200), // Truncate for metadata
+        },
+      });
+
+      return {
+        description: res.text,
+        tradeoffs: [],
+        recommendations: [],
+        confidence: DEFAULT_CONFIDENCE_SCORE,
+        synthesizedBy: this.config.id,
+      };
+    } catch (error: unknown) {
+      // LLM call failed - end tracing with error and propagate the error (don't retry)
+      // generation and span are guaranteed to be defined here (if they weren't, we would have returned early)
+      const errorMessage = getErrorMessage(error);
+      try {
+        generation!.end({
+          level: SPAN_LEVEL.ERROR,
+          statusMessage: errorMessage,
+        });
+        span!.end({
+          level: SPAN_LEVEL.ERROR,
+          statusMessage: errorMessage,
+        });
+      } catch (tracingError: unknown) {
+        // If ending tracing fails, log but don't mask the original error
+        writeStderr(`Warning: Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}\n`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Executes the LLM completion call for synthesis and returns a Solution.
+   * This is a helper method that encapsulates the common pattern of calling the provider
+   * and creating a Solution object from the response.
+   * 
+   * @param systemPrompt - The system prompt for the LLM.
+   * @param userPrompt - The user prompt for synthesis.
+   * @param temperature - Temperature setting for the LLM.
+   * @returns A Solution object created from the LLM response.
+   */
+  private async executeSynthesis(
+    systemPrompt: string,
+    userPrompt: string,
+    temperature: number
+  ): Promise<Solution> {
     const res = await this.provider.complete({
       model: this.config.model,
       temperature,
       systemPrompt,
-      userPrompt: prompt,
+      userPrompt,
     });
 
     return {
@@ -175,15 +333,156 @@ export class JudgeAgent {
    * On summarization errors, falls back to the final round's proposals and refinements.
    * 
    * @param rounds - The debate rounds to prepare.
+   * @param tracingContext - Optional tracing context for adding tracing spans.
    * @returns The context preparation result.
    */
-  async prepareContext(rounds: DebateRound[]): Promise<ContextPreparationResult> {
-    
+  async prepareContext(rounds: DebateRound[], tracingContext?: TracingContext): Promise<ContextPreparationResult> {
     if (!this.shouldSummarize(rounds)) {
       return { context: { problem: '', history: rounds } };
     }
 
+    const spanName = `judge-prepareContext-${this.config.id}`;
+
+    if (tracingContext) {
+      let span: LangfuseSpan | undefined;
+      
+      try {
+        // Create span - if this fails, we'll fall back to non-tracing execution
+        span = tracingContext.trace.span({
+          name: spanName,
+          metadata: {
+            judgeName: this.config.name,
+            judgeId: this.config.id,
+            debateId: tracingContext.trace.id || 'unknown',
+          },
+        });
+      } catch (tracingError: unknown) {
+        writeStderr(`Warning: Langfuse tracing failed for judge prepareContext (span creation): ${getErrorMessage(tracingError)}\n`);
+        // Fallback to non-tracing execution
+        return this.executeSummarization(rounds);
+      }
+
+      try {
+        // Execute summarization with tracing - if this fails due to LLM error, propagate it
+        const result = await this.executeSummarizationWithTracing(rounds, span);
+        span.end();
+        return result;
+      } catch (error: unknown) {
+        // Error from summarization (could be LLM error) - end span and propagate error (don't retry)
+        const errorMessage = getErrorMessage(error);
+        try {
+          span.end({
+            level: SPAN_LEVEL.ERROR,
+            statusMessage: errorMessage,
+          });
+        } catch (tracingError: unknown) {
+          // If ending span fails, log but don't mask the original error
+          writeStderr(`Warning: Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}\n`);
+        }
+        throw error;
+      }
+    }
+
+    // Non-tracing execution (when tracing disabled)
+    return this.executeSummarization(rounds);
+  }
+
+  /**
+   * Executes summarization with tracing support for LLM call.
+   */
+  private async executeSummarizationWithTracing(
+    rounds: DebateRound[],
+    parentSpan: LangfuseSpan
+  ): Promise<ContextPreparationResult> {
+    const contentToSummarize = this.getFinalRoundRelevantContent(rounds);
+
+    if (!this.summarizer) {
+      writeStderr(`Warning: Judge ${this.config.name}: Summarization enabled but no summarizer available. Using final round content.\n`);
+      return { context: { problem: '', history: rounds } };
+    }
+
+    const summaryPrompt = DEFAULT_JUDGE_SUMMARY_PROMPT(contentToSummarize, this.summaryConfig.maxLength);
+
+    let generation: LangfuseGeneration | undefined;
     
+    try {
+      // Create generation - if this fails, we'll fall back to non-tracing execution
+      generation = parentSpan.generation({
+        name: 'llm-generation-0',
+        input: {
+          systemPrompt: this.resolvedSystemPrompt,
+          userPrompt: summaryPrompt,
+          model: this.config.model,
+          temperature: this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+        },
+        metadata: {
+          model: this.config.model,
+          temperature: this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+          provider: this.config.provider,
+        },
+      });
+    } catch (tracingError: unknown) {
+      writeStderr(`Warning: Langfuse tracing failed for judge prepareContext (generation creation): ${getErrorMessage(tracingError)}\n`);
+      // Fallback to non-tracing execution
+      return this.executeSummarization(rounds);
+    }
+
+    // Execute summarization - if this fails, we should NOT retry, just propagate the error
+    try {
+      const result = await this.summarizer.summarize(
+        contentToSummarize,
+        this.config.role,
+        this.summaryConfig,
+        this.resolvedSystemPrompt,
+        summaryPrompt
+      );
+
+      // Convert usage to langfuse format
+      const langfuseUsage = result.metadata.tokensUsed ? {
+        input: null,
+        output: null,
+        total: result.metadata.tokensUsed,
+        unit: 'TOKENS' as const,
+      } : undefined;
+
+      // generation is guaranteed to be defined here (if it wasn't, we would have returned early)
+      generation!.end({
+        output: {
+          summary: result.summary,
+        },
+        ...(langfuseUsage && { usage: langfuseUsage }),
+      });
+
+      const summary: DebateSummary = {
+        agentId: this.config.id,
+        agentRole: this.config.role,
+        summary: result.summary,
+        metadata: result.metadata,
+      };
+
+      return { context: { problem: '', history: rounds }, summary };
+    } catch (error: unknown) {
+      // Summarization LLM call failed - end generation with error and propagate (don't retry)
+      // generation is guaranteed to be defined here (if it wasn't, we would have returned early)
+      const errorMessage = getErrorMessage(error);
+      try {
+        generation!.end({
+          level: SPAN_LEVEL.ERROR,
+          statusMessage: errorMessage,
+        });
+      } catch (tracingError: unknown) {
+        // If ending generation fails, log but don't mask the original error
+        writeStderr(`Warning: Langfuse tracing failed while ending generation: ${getErrorMessage(tracingError)}\n`);
+      }
+      // Propagate the original error - don't fall back, let the caller handle it
+      throw error;
+    }
+  }
+
+  /**
+   * Executes the summarization logic. Extracted to a separate method for reuse with/without tracing.
+   */
+  private async executeSummarization(rounds: DebateRound[]): Promise<ContextPreparationResult> {
     try {
       const contentToSummarize = this.getFinalRoundRelevantContent(rounds);
 
@@ -214,10 +513,10 @@ export class JudgeAgent {
 
       
       return { context: { problem: '', history: rounds }, summary };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Log error to stderr and fallback to final round content
       writeStderr(
-        `Warning: Judge ${this.config.name}: Summarization failed with error: ${error.message}. Falling back to final round content.\n`
+        `Warning: Judge ${this.config.name}: Summarization failed with error: ${getErrorMessage(error)}. Falling back to final round content.\n`
       );
       return { context: { problem: '', history: rounds } };
     }

@@ -50,14 +50,23 @@ sequenceDiagram
     Config-->>Cmd: SystemConfig
     Cmd->>Cmd: debateConfigFromSysConfig()
     Cmd->>Cmd: agentConfigsFromSysConfig()
+    Cmd->>Cmd: generateDebateId()
+    opt tracing enabled (config.trace === "langfuse")
+        Cmd->>Cmd: validateLangfuseConfig()
+        Cmd->>Cmd: createTracingContext(debateId)
+        Note over Cmd: Creates Langfuse client and top-level trace
+    end
     Cmd->>Provider: new OpenAIProvider(apiKey)
-    Cmd->>Builder: buildAgents(configs, provider)
+    Cmd->>Builder: buildAgents(configs, provider, tracingContext?)
+    Builder->>Builder: createTracingProvider(provider, tracingContext?)
     Builder->>Agents: RoleBasedAgent.create() (for each role)
-    Builder-->>Cmd: agents[]
-    Cmd->>Judge: new JudgeAgent(config, provider)
+    Builder->>Builder: createTracingAgent(agent, tracingContext?)
+    Builder-->>Cmd: agents[] (wrapped with tracing if enabled)
+    Cmd->>Judge: createJudgeWithPromptResolution(config, tracingContext?)
+    Note over Judge: Judge provider wrapped with tracing if enabled
     Cmd->>SM: new StateManager()
     SM->>FS: ensure debates/ directory exists
-    Cmd->>Orch: new DebateOrchestrator(agents, judge, sm, config)
+    Cmd->>Orch: new DebateOrchestrator(agents, judge, sm, config, hooks, tracingContext?)
     
     opt clarifications enabled (--clarify or config.interactiveClarifications)
         Cmd->>Cmd: collectClarifications(problem, agents, maxPerAgent)
@@ -190,6 +199,10 @@ sequenceDiagram
     SM->>FS: save final state JSON
     
     Orch-->>Cmd: DebateResult
+    opt tracing enabled
+        Cmd->>Cmd: tracingContext.langfuse.flushAsync()
+        Note over Cmd: Flushes all traces and spans to Langfuse
+    end
     Cmd->>Cmd: outputResults(result, stateManager, options)
     alt output to file
         Cmd->>FS: write result to file
@@ -594,6 +607,43 @@ Manages debate state persistence to disk.
   - Reads all JSON files from debates directory
   - Returns array of DebateState objects sorted by creation time
 
+### 10.1 Tracing Initialization (Optional)
+
+**Functions**: `validateLangfuseConfig()`, `createTracingContext()`  
+**Location**: `src/utils/tracing-factory.ts`
+
+If tracing is enabled in the debate configuration (`debate.trace === "langfuse"`), the system initializes Langfuse tracing before creating agents and judge.
+
+**Process**:
+1. **Debate ID Generation**: Generates unique debate ID early (before tracing initialization) so it can be included in trace metadata
+2. **Configuration Validation**: Validates that required environment variables are set:
+   - `LANGFUSE_SECRET_KEY` (required)
+   - `LANGFUSE_PUBLIC_KEY` (required)
+   - `LANGFUSE_BASE_URL` (optional, defaults to cloud)
+3. **Client Creation**: Creates Langfuse client instance with provided credentials
+4. **Trace Creation**: Creates top-level trace named `debate-command` with metadata:
+   - `debateId`: Unique identifier for this debate
+5. **Error Handling**: If initialization fails (missing env vars, connection error, etc.):
+   - Warning is logged to stderr
+   - Debate continues without tracing (non-blocking)
+   - Tracing context remains `undefined`
+
+**Tracing Context**: The `TracingContext` object contains:
+- `langfuse`: Langfuse client instance
+- `trace`: Top-level trace for the debate command
+- `currentSpan`: Current active span (set dynamically during execution)
+
+**Integration**: The tracing context is passed to:
+- `buildAgents()` - Wraps agent providers and agents with tracing decorators
+- `createJudgeWithPromptResolution()` - Wraps judge provider with tracing
+- `DebateOrchestrator` constructor - Passed through to agent operations
+
+**Tracing Wrappers**:
+- **TracingLLMProvider**: Wraps LLM providers to create generation spans for each LLM call
+- **TracingDecoratorAgent**: Wraps agents to create spans for agent methods (propose, critique, refine, etc.)
+
+For detailed tracing configuration and setup, see [docs/configuration.md](docs/configuration.md#tracing-configuration).
+
 ### 11. Orchestrator Initialization
 
 **Class**: `DebateOrchestrator`  
@@ -602,11 +652,12 @@ Manages debate state persistence to disk.
 Coordinates the multi-round debate flow, executing N complete rounds where each round consists of proposal, critique, and refinement phases.
 
 **Constructor Parameters**:
-- `agents`: Array of initialized agent instances
-- `judge`: Initialized judge agent
+- `agents`: Array of initialized agent instances (wrapped with tracing if enabled)
+- `judge`: Initialized judge agent (provider wrapped with tracing if enabled)
 - `stateManager`: State manager instance
 - `config`: Debate configuration (includes number of rounds)
 - `hooks`: Optional hooks object for progress notifications
+- `tracingContext`: Optional tracing context for observability
 
 **Orchestrator Hooks**:
 The orchestrator supports optional hooks for receiving real-time progress notifications:
@@ -857,15 +908,18 @@ All agents produce proposals in parallel for this round.
 
 **For each agent (parallel execution)**:
 1. **Hook Invoked**: `onAgentStart(agentName, 'proposing')` - Notifies progress UI that agent is starting
-2. Behavior by round:
+2. **Tracing**: If tracing enabled, `TracingDecoratorAgent` creates span `agent-propose-{agentId}` with metadata (agentName, agentRole, agentId, debateId, roundNumber)
+3. Behavior by round:
    - Round 1: Combines problem with context (if provided) using `enhanceProblemWithContext()`, then calls `agent.propose(enhancedProblem, context)`
      - If `DebateState.context` exists, it is appended to the problem under a markdown heading `# Extra Context`
      - Agent prepares role-specific prompts using the enhanced problem
      - Calls `proposeImpl()` which invokes `callLLM()`
+     - **Tracing**: If tracing enabled, `TracingLLMProvider` creates generation spans (`llm-generation-0`, `llm-generation-1`, etc.) nested within the agent span
      - `callLLM()` implements tool calling loop if tools are available:
        - Enhances system prompt with tool information (tool names, descriptions, parameters)
        - Detects tool calls from LLM response
        - Executes tools synchronously with debate context
+       - **Tracing**: If tracing enabled, `TracingDecoratorAgent` creates tool execution spans (`tool-execution-{toolName}`) nested within the agent span
        - Builds messages array for subsequent LLM calls (using enhanced system prompt)
        - Continues until no tool calls or limit reached
      - Measures latency and calls `provider.complete()` (with tools if available)
@@ -899,13 +953,16 @@ Each agent critiques proposals from other agents within the current round.
 1. Filters to get proposals from other agents only
 2. **For each other agent's proposal**:
    - **Hook Invoked**: `onAgentStart(agentName, 'critiquing {targetRole}')` - Notifies progress UI
+   - **Tracing**: If tracing enabled, `TracingDecoratorAgent` creates span `agent-critique-{agentId}` with metadata
    - Calls `agent.critique(proposal, context)`
    - Agent builds critique-specific prompts
    - Calls `critiqueImpl()` which invokes `callLLM()`
+   - **Tracing**: If tracing enabled, `TracingLLMProvider` creates generation spans nested within the agent span
    - `callLLM()` implements tool calling loop if tools are available:
      - Enhances system prompt with tool information (tool names, descriptions, parameters)
      - Detects tool calls from LLM response
      - Executes tools synchronously with debate context
+     - **Tracing**: If tracing enabled, tool execution spans are created nested within the agent span
      - Builds messages array for subsequent LLM calls (using enhanced system prompt)
      - Continues until no tool calls or limit reached
    - Measures latency and calls `provider.complete()` (with tools if available)
@@ -931,16 +988,19 @@ Each agent refines their proposal based on critiques received within the current
 
 **For each agent (parallel execution)**:
 1. **Hook Invoked**: `onAgentStart(agentName, 'refining')` - Notifies progress UI that agent is starting
-2. Retrieves agent's proposal from current round
-3. Retrieves all critiques targeting this agent from current round
-4. Maps critique contributions to `Critique` objects (extracting content and metadata)
-5. Calls `agent.refine(original, critiques, context)`
+2. **Tracing**: If tracing enabled, `TracingDecoratorAgent` creates span `agent-refine-{agentId}` with metadata
+3. Retrieves agent's proposal from current round
+4. Retrieves all critiques targeting this agent from current round
+5. Maps critique contributions to `Critique` objects (extracting content and metadata)
+6. Calls `agent.refine(original, critiques, context)`
    - Agent builds refinement prompts including original and all critiques
    - Calls `refineImpl()` which invokes `callLLM()`
+   - **Tracing**: If tracing enabled, `TracingLLMProvider` creates generation spans nested within the agent span
    - `callLLM()` implements tool calling loop if tools are available:
      - Enhances system prompt with tool information (tool names, descriptions, parameters)
      - Detects tool calls from LLM response
      - Executes tools synchronously with debate context
+     - **Tracing**: If tracing enabled, tool execution spans are created nested within the agent span
      - Builds messages array for subsequent LLM calls (using enhanced system prompt)
      - Continues until no tool calls or limit reached
    - Measures latency and calls `provider.complete()` (with tools if available)
@@ -994,6 +1054,33 @@ Judge synthesizes the final solution from all debate rounds, with optional summa
 3. Attaches final solution to state
 4. Saves final complete state to JSON file
 5. Returns `DebateResult` with solution, rounds, and metadata
+
+#### 13.6 Tracing Flush (Optional)
+**Function**: `tracingContext.langfuse.flushAsync()`  
+**Location**: `src/cli/commands/debate.ts`
+
+If tracing was enabled during initialization, the system flushes all traces and spans to Langfuse after the debate completes.
+
+**Process**:
+1. **Check**: Verifies that `tracingContext` exists (tracing was enabled)
+2. **Flush**: Calls `langfuse.flushAsync()` to send all pending traces, spans, and generations to Langfuse
+3. **Error Handling**: If flush fails:
+   - Warning is logged to stderr
+   - Does not affect debate result (non-blocking)
+   - Traces may be lost if flush fails
+
+**Trace Structure**: By this point, the trace contains:
+- Top-level trace: `debate-command` with debate ID metadata
+- Agent spans: One per agent method call (propose, critique, refine, etc.)
+- LLM generations: Nested within agent spans, one per LLM call
+- Tool execution spans: Nested within agent spans, one per tool invocation
+
+**Viewing Traces**: After flush completes, traces are available in the Langfuse dashboard:
+- Navigate to project dashboard
+- Find trace named `debate-command` with matching `debateId` metadata
+- Expand to see all agent operations, LLM calls, and tool executions
+
+For detailed tracing configuration and setup, see [docs/configuration.md](docs/configuration.md#tracing-configuration).
 
 ### 14. Result Output and Report Generation
 

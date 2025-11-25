@@ -1,12 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { Contribution, DebateRound, DebateState, Solution, DebateSummary, DEBATE_STATUS, AgentClarifications } from '../types/debate.types';
+import { generateDebateId } from '../utils/id';
 
 // File-level constants to eliminate magic strings and improve clarity
 const DEFAULT_DEBATES_DIR = 'debates';
 const FILE_EXTENSION_JSON = '.json';
 const FILE_ENCODING_UTF8 = 'utf-8';
-const ID_PREFIX = 'deb-';
 const JSON_SPACE = 2;
 
 /**
@@ -29,12 +29,13 @@ export class StateManager {
    * Creates a new debate entry, initializes state, and persists it.
    * @param problem - Problem statement for the debate.
    * @param context - Optional additional context.
+   * @param id - Optional debate ID. If not provided, a new ID will be generated.
    * @returns The created DebateState.
    */
-  async createDebate(problem: string, context?: string): Promise<DebateState> {
+  async createDebate(problem: string, context?: string, id?: string): Promise<DebateState> {
     const now = new Date();
     const state: DebateState = {
-      id: this.generateId(now),
+      id: id ?? generateDebateId(now),
       problem,
       // Conditional spread: only include context property if defined (avoids explicit undefined with exactOptionalPropertyTypes)
       ...(context !== undefined && { context }),
@@ -302,21 +303,4 @@ export class StateManager {
     return path.join(this.baseDir, `${debateId}${FILE_EXTENSION_JSON}`);
   }
 
-  /**
-   * Generates a unique debate id using a timestamp and a short random suffix.
-   * 
-   * @param now - The current date and time.
-   * @returns The unique debate id.
-   */
-  private generateId(now: Date): string {
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const yyyy = now.getFullYear();
-    const MM = pad(now.getMonth() + 1);
-    const dd = pad(now.getDate());
-    const hh = pad(now.getHours());
-    const mm = pad(now.getMinutes());
-    const ss = pad(now.getSeconds());
-    const rand = Math.random().toString(36).slice(2, 6);
-    return `${ID_PREFIX}${yyyy}${MM}${dd}-${hh}${mm}${ss}-${rand}`;
-  }
 }

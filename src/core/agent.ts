@@ -439,7 +439,7 @@ export abstract class Agent {
    * @param toolResultsForThisIteration - Array to add the result to for the current iteration.
    * @param allToolResults - Array to add the result to for the overall collection.
    */
-  private executeTool(
+  protected executeTool(
     tool: ToolImplementation,
     args: Record<string, unknown>,
     toolCall: ToolCall,
