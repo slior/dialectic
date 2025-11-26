@@ -96,6 +96,7 @@ Debate behavior is configured via a JSON file (default: `./debate-config.json`).
 - Agent and judge configuration (models, temperatures, custom prompts)
 - Debate settings (rounds, timeouts, synthesis methods)
 - Context summarization to manage debate history length
+- Tool configuration for agents to interact with external functionality during debates
 - Observability tracing via Langfuse (optional) - enables monitoring and analysis of agent behavior, LLM calls, and tool executions
 
-For detailed configuration documentation, including all fields, validation rules, tracing setup, and examples, see [docs/configuration.md](docs/configuration.md).
+For detailed configuration documentation, including all fields, validation rules, tracing setup, and examples, see [docs/configuration.md](docs/configuration.md). For information about available tools and how to configure them, see [docs/tools.md](docs/tools.md).
