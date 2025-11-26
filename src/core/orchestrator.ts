@@ -297,7 +297,7 @@ export class DebateOrchestrator {
   {
     const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
     const enhancedProblem = enhanceProblemWithContext(state.problem, state.context);
-    const proposal = await agent.propose(enhancedProblem, ctx);
+    const proposal = await agent.propose(enhancedProblem, ctx, state);
     return this.buildContribution( agent, CONTRIBUTION_TYPES.PROPOSAL, proposal.content, proposal.metadata, startedAtMs );
   }
 
@@ -373,7 +373,7 @@ export class DebateOrchestrator {
           try {
             const started = Date.now();
             const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
-            const critique = await agent.critique({ content: prop.content, metadata: prop.metadata }, ctx);
+            const critique = await agent.critique({ content: prop.content, metadata: prop.metadata }, ctx, state);
             const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.CRITIQUE, critique.content, critique.metadata, started, prop.agentId );
             return contribution;
           } finally {
@@ -415,7 +415,7 @@ export class DebateOrchestrator {
         
         const started = Date.now();
         const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state); // Use the prepared context for this agent
-        const refined = await agent.refine({ content: original?.content || '', metadata: original?.metadata || {} }, critiques, ctx);
+        const refined = await agent.refine({ content: original?.content || '', metadata: original?.metadata || {} }, critiques, ctx, state);
         const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.REFINEMENT, refined.content, refined.metadata, started );
         await this.stateManager.addContribution(state.id, contribution);
         this.hooks?.onAgentComplete?.(agent.config.name, ACTIVITY_REFINING);

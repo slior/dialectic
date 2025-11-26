@@ -1,7 +1,7 @@
 import { RoleBasedAgent } from '../src/agents/role-based-agent';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../src/types/agent.types';
 import { ToolSchema } from '../src/types/tool.types';
-import { DebateContext } from '../src/types/debate.types';
+import { DebateContext, DebateState } from '../src/types/debate.types';
 import { LLMProvider, CompletionRequest, CompletionResponse } from '../src/providers/llm-provider';
 import { ToolRegistry } from '../src/tools/tool-registry';
 import { ToolImplementation } from '../src/tools/tool-implementation';
@@ -22,7 +22,7 @@ class TestTool implements ToolImplementation {
     },
   };
 
-  execute(_args: any, _context?: DebateContext): string {
+  execute(_args: any, _context?: DebateContext, _state?: DebateState): string {
     return JSON.stringify({ status: 'success', result: { output: 'test' } });
   }
 }

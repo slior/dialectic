@@ -3,7 +3,7 @@ import { ToolRegistry } from '../src/tools/tool-registry';
 import { ToolImplementation } from '../src/tools/tool-implementation';
 import { ToolCall } from '../src/types/tool.types';
 import { LLMProvider, CompletionRequest, CompletionResponse } from '../src/providers/llm-provider';
-import { DebateContext } from '../src/types/debate.types';
+import { DebateContext, DebateState } from '../src/types/debate.types';
 
 // Mock tool implementation
 class MockTool implements ToolImplementation {
@@ -20,7 +20,7 @@ class MockTool implements ToolImplementation {
     },
   };
 
-  execute(args: any, _context?: DebateContext): string {
+  execute(args: any, _context?: DebateContext, _state?: DebateState): string {
     if (args.input === 'error') {
       return JSON.stringify({ status: 'error', error: 'Mock error' });
     }

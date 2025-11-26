@@ -1,5 +1,5 @@
 import { AgentConfig, Proposal, Critique, ContributionMetadata, DEFAULT_TOOL_CALL_LIMIT } from '../types/agent.types';
-import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse } from '../types/debate.types';
+import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { LLMProvider, ChatMessage, CHAT_ROLES, CompletionRequest } from '../providers/llm-provider';
 import { CompletionResponse, CompletionUsage } from '../providers/llm-provider';
 import { ToolRegistry } from '../tools/tool-registry';
@@ -60,26 +60,29 @@ export abstract class Agent {
    * Generates a proposal for the given problem.
    * @param problem - The software design problem to solve.
    * @param context - The current debate context, including history and state.
+   * @param state - Optional debate state providing access to full debate rounds for tools.
    * @returns A Promise resolving to a Proposal object containing the agent's solution and metadata.
    */
-  abstract propose(problem: string, context: DebateContext): Promise<Proposal>;
+  abstract propose(problem: string, context: DebateContext, state?: DebateState): Promise<Proposal>;
 
   /**
    * Critiques a given proposal from another agent.
    * @param proposal - The proposal to critique.
    * @param context - The current debate context.
+   * @param state - Optional debate state providing access to full debate rounds for tools.
    * @returns A Promise resolving to a Critique object containing the agent's review and metadata.
    */
-  abstract critique(proposal: Proposal, context: DebateContext): Promise<Critique>;
+  abstract critique(proposal: Proposal, context: DebateContext, state?: DebateState): Promise<Critique>;
 
   /**
    * Refines the agent's original proposal by addressing critiques and incorporating suggestions.
    * @param originalProposal - The original proposal to refine.
    * @param critiques - Array of critiques to address.
    * @param context - The current debate context.
+   * @param state - Optional debate state providing access to full debate rounds for tools.
    * @returns A Promise resolving to a new Proposal object with the refined solution and metadata.
    */
-  abstract refine(originalProposal: Proposal, critiques: Critique[], context: DebateContext): Promise<Proposal>;
+  abstract refine(originalProposal: Proposal, critiques: Critique[], context: DebateContext, state?: DebateState): Promise<Proposal>;
 
   /**
    * Determines whether the debate context should be summarized based on configured thresholds.
@@ -118,10 +121,11 @@ export abstract class Agent {
    * @param context - The current debate context (passed to tools if needed).
    * @param systemPrompt - The system prompt to use for the LLM.
    * @param userPrompt - The user prompt to use for the LLM.
+   * @param state - Optional debate state passed to tools.
    * @returns A Promise resolving to a Proposal object containing the agent's solution and metadata.
    */
-  protected async proposeImpl( context: DebateContext, systemPrompt: string, userPrompt: string ): Promise<Proposal> {
-    const { text, usage, latencyMs, toolCalls, toolResults, toolCallIterations } = await this.callLLM(systemPrompt, userPrompt, context);
+  protected async proposeImpl( context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState ): Promise<Proposal> {
+    const { text, usage, latencyMs, toolCalls, toolResults, toolCallIterations } = await this.callLLM(systemPrompt, userPrompt, context, state);
     const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
     if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
     if (toolCalls) metadata.toolCalls = toolCalls;
@@ -140,10 +144,11 @@ export abstract class Agent {
    * @param context - The current debate context (passed to tools if needed).
    * @param systemPrompt - The system prompt to use for the LLM.
    * @param userPrompt - The user prompt to use for the LLM. Should contain the proposal content to critique.
+   * @param state - Optional debate state passed to tools.
    * @returns A Promise resolving to a Critique object containing the agent's review and metadata.
    */
-  protected async critiqueImpl( context: DebateContext, systemPrompt: string, userPrompt: string ): Promise<Critique> {
-    const { text, usage, latencyMs, toolCalls, toolResults, toolCallIterations } = await this.callLLM(systemPrompt, userPrompt, context);
+  protected async critiqueImpl( context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState ): Promise<Critique> {
+    const { text, usage, latencyMs, toolCalls, toolResults, toolCallIterations } = await this.callLLM(systemPrompt, userPrompt, context, state);
     const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
     if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
     if (toolCalls) metadata.toolCalls = toolCalls;
@@ -162,10 +167,11 @@ export abstract class Agent {
    * @param context - The current debate context (passed to tools if needed).
    * @param systemPrompt - The system prompt to use for the LLM.
    * @param userPrompt - The user prompt to use for the LLM. Should contain the original proposal content and critiques to address.
+   * @param state - Optional debate state passed to tools.
    * @returns A Promise resolving to a refined Proposal object with updated content and metadata.
    */
-  protected async refineImpl( context: DebateContext, systemPrompt: string, userPrompt: string ): Promise<Proposal> {
-    const { text, usage, latencyMs, toolCalls, toolResults, toolCallIterations } = await this.callLLM(systemPrompt, userPrompt, context);
+  protected async refineImpl( context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState ): Promise<Proposal> {
+    const { text, usage, latencyMs, toolCalls, toolResults, toolCallIterations } = await this.callLLM(systemPrompt, userPrompt, context, state);
     const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
     if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
     if (toolCalls) metadata.toolCalls = toolCalls;
@@ -275,12 +281,14 @@ export abstract class Agent {
    *
    * @param toolCall - The tool call to process.
    * @param context - Optional debate context passed to the tool.
+   * @param state - Optional debate state passed to the tool.
    * @param toolResultsForThisIteration - Array to add results to for the current iteration.
    * @param allToolResults - Array to add results to for the overall collection.
    */
   private processToolCall(
     toolCall: ToolCall,
     context: DebateContext | undefined,
+    state: DebateState | undefined,
     toolResultsForThisIteration: ToolResult[],
     allToolResults: ToolResult[]
   ): void {
@@ -304,7 +312,7 @@ export abstract class Agent {
       }
 
       // Execute tool
-      this.executeTool(tool, args, toolCall, context, toolResultsForThisIteration, allToolResults);
+      this.executeTool(tool, args, toolCall, context, state, toolResultsForThisIteration, allToolResults);
     } catch (error: any) {
       this.logMessage(`Warning: [${this.config.name}] Error processing tool call "${toolCall.name}": ${error.message}`, false);
       this.addToolErrorResult(toolCall.id, error.message, toolResultsForThisIteration, allToolResults);
@@ -321,6 +329,7 @@ export abstract class Agent {
    * @param toolSchemas - Array of tool schemas available for function calling.
    * @param messages - The conversation history (modified in place).
    * @param context - Optional debate context passed to tools.
+   * @param state - Optional debate state passed to tools.
    * @param iterationCount - Current iteration count (will be incremented if tool calls are processed).
    * @param allToolCalls - Array to add tool calls to (modified in place).
    * @param allToolResults - Array to add tool results to (modified in place).
@@ -332,6 +341,7 @@ export abstract class Agent {
     toolSchemas: ToolSchema[],
     messages: ChatMessage[],
     context: DebateContext | undefined,
+    state: DebateState | undefined,
     iterationCount: number,
     allToolCalls: ToolCall[],
     allToolResults: ToolResult[]
@@ -351,7 +361,7 @@ export abstract class Agent {
       // Execute each tool call
       const toolResultsForThisIteration: ToolResult[] = [];
       for (const toolCall of toolCalls) {
-        this.processToolCall(toolCall, context, toolResultsForThisIteration, allToolResults);
+        this.processToolCall(toolCall, context, state, toolResultsForThisIteration, allToolResults);
       }
 
       allToolCalls.push(...toolCalls); // Add tool calls to collection
@@ -436,6 +446,7 @@ export abstract class Agent {
    * @param args - Parsed arguments for the tool.
    * @param toolCall - The tool call metadata (used for ID and name).
    * @param context - Optional debate context passed to the tool.
+   * @param state - Optional debate state passed to the tool.
    * @param toolResultsForThisIteration - Array to add the result to for the current iteration.
    * @param allToolResults - Array to add the result to for the overall collection.
    */
@@ -444,11 +455,12 @@ export abstract class Agent {
     args: Record<string, unknown>,
     toolCall: ToolCall,
     context: DebateContext | undefined,
+    state: DebateState | undefined,
     toolResultsForThisIteration: ToolResult[],
     allToolResults: ToolResult[]
   ): void {
     try {
-      const resultJson = tool.execute(args, context);
+      const resultJson = tool.execute(args, context, state);
       
       this.logMessage(`[${this.config.name}] Tool "${toolCall.name}" execution result: ${resultJson}`, true);
       // Create tool result in OpenAI format
@@ -508,9 +520,10 @@ export abstract class Agent {
    * @param systemPrompt - The system prompt to prime the LLM.
    * @param userPrompt - The user prompt representing the agent's request.
    * @param context - Optional debate context (needed for tools like context search).
+   * @param state - Optional debate state providing access to full debate rounds for tools.
    * @returns A Promise resolving to an AgentLLMResponse containing text, usage metadata, latency, and tool metadata.
    */
-  protected async callLLM(systemPrompt: string, userPrompt: string, context?: DebateContext): Promise<AgentLLMResponse> {
+  protected async callLLM(systemPrompt: string, userPrompt: string, context?: DebateContext, state?: DebateState): Promise<AgentLLMResponse> {
     const started = Date.now();
     
     // Check if tools are available
@@ -539,7 +552,7 @@ export abstract class Agent {
     let shouldContinue = iterationCount < this.toolCallLimit;
     while (shouldContinue) {
       const result = await this.processToolCallIteration( enhancedSystemPrompt, userPrompt, toolSchemas, messages,
-                                                          context, iterationCount, allToolCalls, allToolResults );
+                                                          context, state, iterationCount, allToolCalls, allToolResults );
       
       shouldContinue = result.shouldContinue;
       finalText = result.finalText;

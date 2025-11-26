@@ -1,6 +1,6 @@
 import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
 import { ToolSchema } from '../types/tool.types';
-import { DebateContext, Contribution } from '../types/debate.types';
+import { DebateContext, Contribution, DebateState } from '../types/debate.types';
 
 /**
  * Maximum length for content snippets returned by context search.
@@ -43,12 +43,14 @@ export class ContextSearchTool implements ToolImplementation {
   /**
    * Executes the context search tool.
    * Searches through debate history for contributions containing the search term.
+   * Uses state.rounds if provided (takes precedence), otherwise falls back to context.history.
    * 
    * @param args - Tool arguments containing the search term.
-   * @param context - Debate context containing history to search.
+   * @param context - Optional debate context containing history to search.
+   * @param state - Optional debate state providing access to full debate rounds (takes precedence over context.history).
    * @returns JSON string with status and matches array.
    */
-  execute(args: { term?: string }, context?: DebateContext): string {
+  execute(args: { term?: string }, context?: DebateContext, state?: DebateState): string {
     if (!context) {
       return createToolErrorJson('Context is required for context search');
     }
@@ -57,7 +59,10 @@ export class ContextSearchTool implements ToolImplementation {
       return createToolErrorJson('Search term is required and must be a string');
     }
 
-    if (!context.history || context.history.length === 0) {
+    // Determine history source: prefer state.rounds, fall back to context.history
+    const history = state?.rounds ?? context.history;
+
+    if (!history || history.length === 0) {
       return createToolSuccessJson({
         matches: [],
       });
@@ -67,7 +72,7 @@ export class ContextSearchTool implements ToolImplementation {
     const matches: ContextSearchMatch[] = [];
 
     // Search through all rounds and contributions
-    for (const round of context.history) {
+    for (const round of history) {
       if (!round.contributions) continue;
 
       for (const contribution of round.contributions) {

@@ -1,5 +1,5 @@
 import { ToolSchema, ToolResult, TOOL_RESULT_STATUS, ToolResultStatus } from '../types/tool.types';
-import { DebateContext } from '../types/debate.types';
+import { DebateContext, DebateState } from '../types/debate.types';
 import { CHAT_ROLES } from '../providers/llm-provider';
 
 /**
@@ -16,9 +16,10 @@ export interface ToolImplementation {
    * 
    * @param args - Parsed arguments from tool call (object).
    * @param context - Optional debate context (needed for tools like context search).
+   * @param state - Optional debate state providing access to full debate rounds (takes precedence over context.history).
    * @returns JSON string with status and result/error: `{"status":"success","result":{...}}` or `{"status":"error","error":"..."}`
    */
-  execute(args: any, context?: DebateContext): string;
+  execute(args: any, context?: DebateContext, state?: DebateState): string;
 }
 
 /**

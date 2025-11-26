@@ -101,17 +101,20 @@ describe('RoleBasedAgent (Security Role)', () => {
       expect(proposeImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('security specialist')
+        expect.stringContaining('security specialist'),
+        undefined // state parameter
       );
       expect(proposeImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('Threat Model')
+        expect.stringContaining('Threat Model'),
+        undefined // state parameter
       );
       expect(proposeImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('Security Objectives')
+        expect.stringContaining('Security Objectives'),
+        undefined // state parameter
       );
       expect(result).toBeDefined();
       expect(result.content).toBe('Security solution text');
@@ -132,17 +135,20 @@ describe('RoleBasedAgent (Security Role)', () => {
       expect(critiqueImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('security engineering perspective')
+        expect.stringContaining('security engineering perspective'),
+        undefined // state parameter
       );
       expect(critiqueImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('vulnerabilities')
+        expect.stringContaining('vulnerabilities'),
+        undefined // state parameter
       );
       expect(critiqueImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('missing controls')
+        expect.stringContaining('missing controls'),
+        undefined // state parameter
       );
       expect(result).toBeDefined();
       expect(result.content).toBe('Security solution text');
@@ -167,17 +173,20 @@ describe('RoleBasedAgent (Security Role)', () => {
       expect(refineImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('security concerns')
+        expect.stringContaining('security concerns'),
+        undefined // state parameter
       );
       expect(refineImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('strengthen the protection')
+        expect.stringContaining('strengthen the protection'),
+        undefined // state parameter
       );
       expect(refineImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('Revised Security Architecture')
+        expect.stringContaining('Revised Security Architecture'),
+        undefined // state parameter
       );
       expect(result).toBeDefined();
       expect(result.content).toBe('Security solution text');

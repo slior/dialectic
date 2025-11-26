@@ -1,6 +1,6 @@
 import { Agent, AgentLogger } from '../core/agent';
 import { AgentConfig, Proposal, Critique, PromptSource, AgentRole } from '../types/agent.types';
-import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse } from '../types/debate.types';
+import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
 import { getPromptsForRole, RolePrompts } from './prompts';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
@@ -150,12 +150,13 @@ export class RoleBasedAgent extends Agent {
    * 
    * @param problem - The software design problem to solve.
    * @param context - Debate context containing history and state.
+   * @param state - Optional debate state providing access to full debate rounds for tools.
    * @returns A Proposal object containing the agent's solution and metadata.
    */
-  async propose(problem: string, context: DebateContext): Promise<Proposal> {
+  async propose(problem: string, context: DebateContext, state?: DebateState): Promise<Proposal> {
     const system = this.resolvedSystemPrompt;
     const user = this.rolePrompts.proposePrompt(problem, context, this.config.id, context.includeFullHistory);
-    return this.proposeImpl(context, system, user);
+    return this.proposeImpl(context, system, user, state);
   }
 
   /**
@@ -166,12 +167,13 @@ export class RoleBasedAgent extends Agent {
    * 
    * @param proposal - The proposal to critique.
    * @param context - Debate context.
+   * @param state - Optional debate state providing access to full debate rounds for tools.
    * @returns A Critique object containing the agent's review and metadata.
    */
-  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
+  async critique(proposal: Proposal, context: DebateContext, state?: DebateState): Promise<Critique> {
     const system = this.resolvedSystemPrompt;
     const user = this.rolePrompts.critiquePrompt(proposal.content, context, this.config.id, context.includeFullHistory);
-    return this.critiqueImpl(context, system, user);
+    return this.critiqueImpl(context, system, user, state);
   }
 
   /**
@@ -183,13 +185,14 @@ export class RoleBasedAgent extends Agent {
    * @param original - The original proposal to refine.
    * @param critiques - Array of critiques to address.
    * @param context - Debate context.
+   * @param state - Optional debate state providing access to full debate rounds for tools.
    * @returns A new Proposal object with the refined solution and metadata.
    */
-  async refine(original: Proposal, critiques: Critique[], context: DebateContext): Promise<Proposal> {
+  async refine(original: Proposal, critiques: Critique[], context: DebateContext, state?: DebateState): Promise<Proposal> {
     const system = this.resolvedSystemPrompt;
     const critiquesText = critiques.map((c, i) => `Critique ${i + 1}:\n${c.content}`).join('\n\n');
     const user = this.rolePrompts.refinePrompt(original.content, critiquesText, context, this.config.id, context.includeFullHistory);
-    return this.refineImpl(context, system, user);
+    return this.refineImpl(context, system, user, state);
   }
 
   /**

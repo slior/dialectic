@@ -1,6 +1,6 @@
 import { Agent, AgentLLMResponse } from '../core/agent';
 import { Proposal, Critique } from '../types/agent.types';
-import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse } from '../types/debate.types';
+import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
 import { writeStderr } from './console';
 import { ToolCall, ToolResult, TOOL_RESULT_STATUS } from '../types/tool.types';
@@ -52,7 +52,7 @@ export class TracingDecoratorAgent extends Agent {
    * we prepare prompts from the wrapped agent and call our own proposeImpl(),
    * which will use our callLLM override (which uses our executeTool override).
    */
-  async propose(problem: string, context: DebateContext): Promise<Proposal> {
+  async propose(problem: string, context: DebateContext, state?: DebateState): Promise<Proposal> {
     const spanName = `agent-propose-${this.config.id}`;
     return this.executeWithSpan(spanName, context, async () => {
       // Access wrapped agent's prompt preparation (RoleBasedAgent-specific)
@@ -62,14 +62,14 @@ export class TracingDecoratorAgent extends Agent {
       const userPrompt = rolePrompts.proposePrompt(problem, context, this.config.id, context.includeFullHistory);
       
       // Call our own proposeImpl, which will use our callLLM (which uses our executeTool)
-      return await this.proposeImpl(context, systemPrompt, userPrompt);
+      return await this.proposeImpl(context, systemPrompt, userPrompt, state);
     });
   }
 
   /**
    * Creates a critique with tracing span.
    */
-  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
+  async critique(proposal: Proposal, context: DebateContext, state?: DebateState): Promise<Critique> {
     const spanName = `agent-critique-${this.config.id}`;
     return this.executeWithSpan(spanName, context, async () => {
       // Access wrapped agent's prompt preparation (RoleBasedAgent-specific)
@@ -79,14 +79,14 @@ export class TracingDecoratorAgent extends Agent {
       const userPrompt = rolePrompts.critiquePrompt(proposal.content, context, this.config.id, context.includeFullHistory);
       
       // Call our own critiqueImpl, which will use our callLLM (which uses our executeTool)
-      return await this.critiqueImpl(context, systemPrompt, userPrompt);
+      return await this.critiqueImpl(context, systemPrompt, userPrompt, state);
     });
   }
 
   /**
    * Refines a proposal with tracing span.
    */
-  async refine(originalProposal: Proposal, critiques: Critique[], context: DebateContext): Promise<Proposal> {
+  async refine(originalProposal: Proposal, critiques: Critique[], context: DebateContext, state?: DebateState): Promise<Proposal> {
     const spanName = `agent-refine-${this.config.id}`;
     return this.executeWithSpan(spanName, context, async () => {
       // Access wrapped agent's prompt preparation (RoleBasedAgent-specific)
@@ -97,7 +97,7 @@ export class TracingDecoratorAgent extends Agent {
       const userPrompt = rolePrompts.refinePrompt(originalProposal.content, critiquesText, context, this.config.id, context.includeFullHistory);
       
       // Call our own refineImpl, which will use our callLLM (which uses our executeTool)
-      return await this.refineImpl(context, systemPrompt, userPrompt);
+      return await this.refineImpl(context, systemPrompt, userPrompt, state);
     });
   }
 
@@ -138,33 +138,33 @@ export class TracingDecoratorAgent extends Agent {
    * this.proposeImpl(), it will call our override, which calls super.proposeImpl() (which
    * calls our callLLM override, which uses our executeTool override).
    */
-  protected async proposeImpl(context: DebateContext, systemPrompt: string, userPrompt: string): Promise<Proposal> {
+  protected async proposeImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal> {
     // Call the base class proposeImpl, which will call this.callLLM() (our override)
     // which will use our executeTool override for tracing
-    return super.proposeImpl(context, systemPrompt, userPrompt);
+    return super.proposeImpl(context, systemPrompt, userPrompt, state);
   }
 
   /**
    * Overrides critiqueImpl to ensure our executeTool override is used.
    */
-  protected async critiqueImpl(context: DebateContext, systemPrompt: string, userPrompt: string): Promise<Critique> {
-    return super.critiqueImpl(context, systemPrompt, userPrompt);
+  protected async critiqueImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Critique> {
+    return super.critiqueImpl(context, systemPrompt, userPrompt, state);
   }
 
   /**
    * Overrides refineImpl to ensure our executeTool override is used.
    */
-  protected async refineImpl(context: DebateContext, systemPrompt: string, userPrompt: string): Promise<Proposal> {
-    return super.refineImpl(context, systemPrompt, userPrompt);
+  protected async refineImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal> {
+    return super.refineImpl(context, systemPrompt, userPrompt, state);
   }
 
   /**
    * Overrides callLLM to ensure our executeTool override is used.
    * This is called by proposeImpl/critiqueImpl/refineImpl, and will use our executeTool override.
    */
-  protected async callLLM(systemPrompt: string, userPrompt: string, context?: DebateContext): Promise<AgentLLMResponse> {
+  protected async callLLM(systemPrompt: string, userPrompt: string, context?: DebateContext, state?: DebateState): Promise<AgentLLMResponse> {
     // Call the base class callLLM, which will call this.executeTool() (our override)
-    return super.callLLM(systemPrompt, userPrompt, context);
+    return super.callLLM(systemPrompt, userPrompt, context, state);
   }
 
   /**
@@ -176,6 +176,7 @@ export class TracingDecoratorAgent extends Agent {
     args: Record<string, unknown>,
     toolCall: ToolCall,
     context: DebateContext | undefined,
+    state: DebateState | undefined,
     toolResultsForThisIteration: ToolResult[],
     allToolResults: ToolResult[]
   ): void {
@@ -184,7 +185,7 @@ export class TracingDecoratorAgent extends Agent {
     // Only create tracing span if tracing context is available
     if (!this.tracingContext) {
       // No tracing - fall back to base class behavior
-      super.executeTool(tool, args, toolCall, context, toolResultsForThisIteration, allToolResults);
+      super.executeTool(tool, args, toolCall, context, state, toolResultsForThisIteration, allToolResults);
       return;
     }
     
@@ -206,7 +207,7 @@ export class TracingDecoratorAgent extends Agent {
       const resultCountBefore = toolResultsForThisIteration.length;
       
       // Execute tool using base class implementation
-      super.executeTool(tool, args, toolCall, context, toolResultsForThisIteration, allToolResults);
+      super.executeTool(tool, args, toolCall, context, state, toolResultsForThisIteration, allToolResults);
       
       // Get the result that was just added
       const result = toolResultsForThisIteration[resultCountBefore];
@@ -243,7 +244,7 @@ export class TracingDecoratorAgent extends Agent {
       writeStderr(`Warning: Langfuse tracing failed for tool execution: ${tracingError.message}\n`);
       
       // Fall back to base class behavior - call super.executeTool
-      super.executeTool(tool, args, toolCall, context, toolResultsForThisIteration, allToolResults);
+      super.executeTool(tool, args, toolCall, context, state, toolResultsForThisIteration, allToolResults);
     }
   }
 

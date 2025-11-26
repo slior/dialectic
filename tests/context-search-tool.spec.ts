@@ -1,5 +1,5 @@
 import { ContextSearchTool } from '../src/tools/context-search-tool';
-import { DebateContext, DebateRound, Contribution, CONTRIBUTION_TYPES } from '../src/types/debate.types';
+import { DebateContext, DebateRound, Contribution, CONTRIBUTION_TYPES, DebateState, DEBATE_STATUS } from '../src/types/debate.types';
 
 describe('ContextSearchTool', () => {
   let tool: ContextSearchTool;
@@ -165,6 +165,119 @@ describe('ContextSearchTool', () => {
         expect(parsed.result.matches[0].contentSnippet).toBeDefined();
         expect(typeof parsed.result.matches[0].contentSnippet).toBe('string');
       }
+    });
+  });
+
+  describe('DebateState Support', () => {
+    it('should search state.rounds when DebateState is provided', () => {
+      const mockState: DebateState = {
+        id: 'test-debate',
+        problem: 'Design a system',
+        status: DEBATE_STATUS.RUNNING,
+        currentRound: 2,
+        rounds: [
+          {
+            roundNumber: 1,
+            contributions: [
+              {
+                agentId: 'agent1',
+                agentRole: 'architect',
+                type: CONTRIBUTION_TYPES.PROPOSAL,
+                content: 'This proposal mentions authentication systems',
+                metadata: {},
+              } as Contribution,
+            ],
+            timestamp: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const contextWithoutHistory: DebateContext = {
+        problem: 'Design a system',
+      };
+
+      const result = tool.execute({ term: 'authentication' }, contextWithoutHistory, mockState);
+      const parsed = JSON.parse(result);
+      
+      expect(parsed.status).toBe('success');
+      expect(parsed.result.matches.length).toBeGreaterThan(0);
+      expect(parsed.result.matches[0].contentSnippet).toContain('authentication');
+    });
+
+    it('should prefer state.rounds over context.history when both provided', () => {
+      const mockState: DebateState = {
+        id: 'test-debate',
+        problem: 'Design a system',
+        status: DEBATE_STATUS.RUNNING,
+        currentRound: 1,
+        rounds: [
+          {
+            roundNumber: 1,
+            contributions: [
+              {
+                agentId: 'agent1',
+                agentRole: 'architect',
+                type: CONTRIBUTION_TYPES.PROPOSAL,
+                content: 'State rounds content with database term',
+                metadata: {},
+              } as Contribution,
+            ],
+            timestamp: new Date(),
+          },
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const contextWithDifferentHistory: DebateContext = {
+        problem: 'Design a system',
+        history: [
+          {
+            roundNumber: 1,
+            contributions: [
+              {
+                agentId: 'agent2',
+                agentRole: 'performance',
+                type: CONTRIBUTION_TYPES.PROPOSAL,
+                content: 'Context history content with caching term',
+                metadata: {},
+              } as Contribution,
+            ],
+            timestamp: new Date(),
+          },
+        ],
+      };
+
+      const result = tool.execute({ term: 'database' }, contextWithDifferentHistory, mockState);
+      const parsed = JSON.parse(result);
+      
+      expect(parsed.status).toBe('success');
+      expect(parsed.result.matches.length).toBeGreaterThan(0);
+      expect(parsed.result.matches[0].contentSnippet).toContain('database');
+      expect(parsed.result.matches[0].contentSnippet).not.toContain('caching');
+    });
+
+    it('should fall back to context.history when state not provided (backward compatibility)', () => {
+      const result = tool.execute({ term: 'caching' }, mockContext);
+      const parsed = JSON.parse(result);
+      
+      expect(parsed.status).toBe('success');
+      expect(parsed.result.matches.length).toBeGreaterThan(0);
+      expect(parsed.result.matches[0].contentSnippet).toContain('caching');
+    });
+
+    it('should return empty matches when neither state.rounds nor context.history available', () => {
+      const contextWithoutHistory: DebateContext = {
+        problem: 'Test problem',
+      };
+
+      const result = tool.execute({ term: 'test' }, contextWithoutHistory);
+      const parsed = JSON.parse(result);
+      
+      expect(parsed.status).toBe('success');
+      expect(parsed.result.matches).toEqual([]);
     });
   });
 });

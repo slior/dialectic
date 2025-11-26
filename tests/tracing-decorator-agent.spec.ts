@@ -2,9 +2,27 @@ import { TracingDecoratorAgent } from '../src/utils/tracing-decorator-agent';
 import { RoleBasedAgent } from '../src/agents/role-based-agent';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, Proposal, Critique } from '../src/types/agent.types';
 import { SummarizationConfig } from '../src/types/config.types';
-import { DebateContext } from '../src/types/debate.types';
+import { DebateContext, DebateState } from '../src/types/debate.types';
 import { TracingContext } from '../src/types/tracing.types';
 import { LLMProvider } from '../src/providers/llm-provider';
+import { ToolImplementation } from '../src/tools/tool-implementation';
+import { ToolCall, ToolResult } from '../src/types/tool.types';
+
+/**
+ * Test-only type that exposes protected methods for testing.
+ * This allows us to test protected methods without using `any`.
+ */
+type TracingDecoratorAgentTestAccess = TracingDecoratorAgent & {
+  executeTool(
+    tool: ToolImplementation,
+    args: Record<string, unknown>,
+    toolCall: ToolCall,
+    context: DebateContext | undefined,
+    state: DebateState | undefined,
+    toolResultsForThisIteration: ToolResult[],
+    allToolResults: ToolResult[]
+  ): void;
+};
 
 describe('TracingDecoratorAgent', () => {
   let mockProvider: LLMProvider;
@@ -231,8 +249,17 @@ describe('TracingDecoratorAgent', () => {
 
   describe('executeTool', () => {
     it('should create tool span and delegate to wrapped agent', () => {
-      const tool = {
+      const tool: ToolImplementation = {
         name: 'test_tool',
+        schema: {
+          name: 'test_tool',
+          description: 'Test tool',
+          parameters: {
+            type: 'object',
+            properties: {},
+            required: [],
+          },
+        },
         execute: jest.fn().mockReturnValue('{"result": "success"}'),
       };
       const args = { param: 'value' };
@@ -245,11 +272,17 @@ describe('TracingDecoratorAgent', () => {
       const allToolResults: any[] = [];
 
       // Access protected method via type assertion for testing
-      (decoratorAgent as any).executeTool(
+      // Using a test-only type that exposes the protected method
+      const context: DebateContext = {
+        problem: 'Test problem',
+        tracingContext,
+      };
+      (decoratorAgent as TracingDecoratorAgentTestAccess).executeTool(
         tool,
         args,
         toolCall,
-        { tracingContext },
+        context,
+        undefined, // state parameter
         toolResultsForThisIteration,
         allToolResults
       );
