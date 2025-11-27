@@ -1,13 +1,22 @@
 import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent } from '../src/utils/tracing-factory';
-import { TRACE_OPTIONS } from '../src/types/tracing.types';
+import { TRACE_OPTIONS, TraceMetadata } from '../src/types/tracing.types';
 import { DebateConfig } from '../src/types/debate.types';
 import { LLMProvider } from '../src/providers/llm-provider';
 import { RoleBasedAgent } from '../src/agents/role-based-agent';
-import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../src/types/agent.types';
+import { AgentConfig, AgentRole, AGENT_ROLES, LLM_PROVIDERS } from '../src/types/agent.types';
 import { SummarizationConfig } from '../src/types/config.types';
 
 describe('TracingFactory', () => {
   const originalEnv = process.env;
+
+  const createMockAgentConfig = (id: string, role: AgentRole): AgentConfig => ({
+    id,
+    name: `Test ${role} Agent`,
+    role,
+    model: 'gpt-4',
+    provider: LLM_PROVIDERS.OPENAI,
+    temperature: 0.5,
+  });
 
   beforeEach(() => {
     jest.resetModules();
@@ -56,6 +65,26 @@ describe('TracingFactory', () => {
   });
 
   describe('createTracingContext', () => {
+    const createMockTraceMetadata = (includeJudge = true): TraceMetadata => ({
+      debateId: 'test-debate-id',
+      clarificationRequested: false,
+      verboseRun: false,
+      configFileName: 'debate-config.json',
+      debateConfig: {
+        rounds: 3,
+        terminationCondition: { type: 'fixed' },
+        synthesisMethod: 'judge',
+        includeFullHistory: true,
+        timeoutPerRound: 300000,
+        trace: TRACE_OPTIONS.LANGFUSE,
+      },
+      agentConfigs: [
+        createMockAgentConfig('agent-architect', AGENT_ROLES.ARCHITECT),
+        createMockAgentConfig('agent-performance', AGENT_ROLES.PERFORMANCE),
+      ],
+      ...(includeJudge && { judgeConfig: createMockAgentConfig('judge', AGENT_ROLES.GENERALIST) }),
+    });
+
     it('should create tracing context with valid config', () => {
       process.env.LANGFUSE_SECRET_KEY = 'sk-test-secret';
       process.env.LANGFUSE_PUBLIC_KEY = 'pk-test-public';
@@ -69,7 +98,49 @@ describe('TracingFactory', () => {
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
-      const tracingContext = createTracingContext(debateConfig, 'test-debate-id');
+      const traceMetadata = createMockTraceMetadata();
+      const traceName = 'debate-command-20240101-1200';
+      const tags: string[] = [];
+      
+      const tracingContext = createTracingContext(debateConfig, traceMetadata, traceName, tags);
+      
+      expect(tracingContext).toBeDefined();
+      expect(tracingContext?.langfuse).toBeDefined();
+      expect(tracingContext?.trace).toBeDefined();
+    });
+
+    it('should create tracing context with all metadata fields', () => {
+      process.env.LANGFUSE_SECRET_KEY = 'sk-test-secret';
+      process.env.LANGFUSE_PUBLIC_KEY = 'pk-test-public';
+      
+      const debateConfig: DebateConfig = {
+        rounds: 3,
+        terminationCondition: { type: 'fixed' },
+        synthesisMethod: 'judge',
+        includeFullHistory: true,
+        timeoutPerRound: 300000,
+        trace: TRACE_OPTIONS.LANGFUSE,
+      };
+      
+      const traceMetadata: TraceMetadata = {
+        debateId: 'test-debate-id',
+        problemFileName: 'problem.txt',
+        contextFileName: 'context.md',
+        clarificationRequested: true,
+        verboseRun: true,
+        configFileName: 'custom-config.json',
+        debateConfig,
+        agentConfigs: [
+          createMockAgentConfig('agent-architect', AGENT_ROLES.ARCHITECT),
+          createMockAgentConfig('agent-performance', AGENT_ROLES.PERFORMANCE),
+        ],
+        judgeConfig: createMockAgentConfig('judge', AGENT_ROLES.GENERALIST),
+      };
+      
+      const traceName = 'debate-command-20240101-1200';
+      const tags = ['clarify', 'architect', 'performance'];
+      
+      const tracingContext = createTracingContext(debateConfig, traceMetadata, traceName, tags);
       
       expect(tracingContext).toBeDefined();
       expect(tracingContext?.langfuse).toBeDefined();
@@ -85,7 +156,11 @@ describe('TracingFactory', () => {
         timeoutPerRound: 300000,
       };
       
-      const tracingContext = createTracingContext(debateConfig, 'test-debate-id');
+      const traceMetadata = createMockTraceMetadata();
+      const traceName = 'debate-command-20240101-1200';
+      const tags: string[] = [];
+      
+      const tracingContext = createTracingContext(debateConfig, traceMetadata, traceName, tags);
       
       expect(tracingContext).toBeUndefined();
     });
@@ -103,9 +178,38 @@ describe('TracingFactory', () => {
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
-      const tracingContext = createTracingContext(debateConfig, 'test-debate-id');
+      const traceMetadata = createMockTraceMetadata();
+      const traceName = 'debate-command-20240101-1200';
+      const tags: string[] = [];
+      
+      const tracingContext = createTracingContext(debateConfig, traceMetadata, traceName, tags);
       
       expect(tracingContext).toBeUndefined();
+    });
+
+    it('should handle optional judgeConfig', () => {
+      process.env.LANGFUSE_SECRET_KEY = 'sk-test-secret';
+      process.env.LANGFUSE_PUBLIC_KEY = 'pk-test-public';
+      
+      const debateConfig: DebateConfig = {
+        rounds: 3,
+        terminationCondition: { type: 'fixed' },
+        synthesisMethod: 'judge',
+        includeFullHistory: true,
+        timeoutPerRound: 300000,
+        trace: TRACE_OPTIONS.LANGFUSE,
+      };
+      
+      const traceMetadata = createMockTraceMetadata(false);
+      const traceName = 'debate-command-20240101-1200';
+      const tags: string[] = [];
+      
+      const tracingContext = createTracingContext(debateConfig, traceMetadata, traceName, tags);
+      
+      expect(tracingContext).toBeDefined();
+      expect(tracingContext?.langfuse).toBeDefined();
+      expect(tracingContext?.trace).toBeDefined();
+      expect(traceMetadata.judgeConfig).toBeUndefined();
     });
   });
 
@@ -127,7 +231,21 @@ describe('TracingFactory', () => {
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
-      const tracingContext = createTracingContext(debateConfig, 'test-debate-id');
+      const traceMetadata: TraceMetadata = {
+        debateId: 'test-debate-id',
+        clarificationRequested: false,
+        verboseRun: false,
+        configFileName: 'debate-config.json',
+        debateConfig,
+        agentConfigs: [
+          createMockAgentConfig('agent-architect', AGENT_ROLES.ARCHITECT),
+        ],
+        judgeConfig: createMockAgentConfig('judge', AGENT_ROLES.GENERALIST),
+      };
+      const traceName = 'debate-command-20240101-1200';
+      const tags: string[] = [];
+      
+      const tracingContext = createTracingContext(debateConfig, traceMetadata, traceName, tags);
       
       if (!tracingContext) {
         throw new Error('Tracing context should be created');
@@ -193,7 +311,21 @@ describe('TracingFactory', () => {
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
-      const tracingContext = createTracingContext(debateConfig, 'test-debate-id');
+      const traceMetadata: TraceMetadata = {
+        debateId: 'test-debate-id',
+        clarificationRequested: false,
+        verboseRun: false,
+        configFileName: 'debate-config.json',
+        debateConfig,
+        agentConfigs: [
+          createMockAgentConfig('agent-architect', AGENT_ROLES.ARCHITECT),
+        ],
+        judgeConfig: createMockAgentConfig('judge', AGENT_ROLES.GENERALIST),
+      };
+      const traceName = 'debate-command-20240101-1200';
+      const tags: string[] = [];
+      
+      const tracingContext = createTracingContext(debateConfig, traceMetadata, traceName, tags);
       
       if (!tracingContext) {
         throw new Error('Tracing context should be created');

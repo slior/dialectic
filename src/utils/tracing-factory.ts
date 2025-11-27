@@ -1,5 +1,5 @@
 import { Langfuse } from 'langfuse';
-import { TracingContext, TRACE_OPTIONS } from '../types/tracing.types';
+import { TracingContext, TRACE_OPTIONS, TraceMetadata } from '../types/tracing.types';
 import { DebateConfig } from '../types/debate.types';
 import { Agent } from '../core/agent';
 import { LLMProvider } from '../providers/llm-provider';
@@ -41,12 +41,16 @@ export function validateLangfuseConfig(): void {
  * Creates a tracing context for the debate command if tracing is enabled.
  * 
  * @param debateConfig - The debate configuration.
- * @param debateId - The unique identifier for this debate.
+ * @param traceMetadata - Metadata to include in the trace.
+ * @param traceName - Name for the trace (should include timestamp).
+ * @param tags - Array of tags to attach to the trace.
  * @returns Tracing context if tracing is enabled and config is valid, undefined otherwise.
  */
 export function createTracingContext(
   debateConfig: DebateConfig,
-  debateId: string
+  traceMetadata: TraceMetadata,
+  traceName: string,
+  tags: string[]
 ): TracingContext | undefined {
   // Check if tracing is enabled
   if (debateConfig.trace !== TRACE_OPTIONS.LANGFUSE) {
@@ -69,13 +73,11 @@ export function createTracingContext(
       baseUrl,
     });
 
-    // Create top-level trace for debate command
-    // Note: debateId may be temporary initially, will be updated after debate state is created
+    // Create top-level trace for debate command with metadata and tags
     const trace = langfuse.trace({
-      name: `debate-command`,
-      metadata: {
-        debateId,
-      },
+      name: traceName,
+      metadata: traceMetadata,
+      ...(tags.length > 0 && { tags }),
     });
 
     return {

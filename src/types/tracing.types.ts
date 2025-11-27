@@ -1,4 +1,6 @@
 import type { Langfuse } from 'langfuse';
+import type { DebateConfig } from './debate.types';
+import type { AgentConfig } from './agent.types';
 
 /**
  * String literal constants for trace options.
@@ -6,6 +8,30 @@ import type { Langfuse } from 'langfuse';
 export const TRACE_OPTIONS = {
   LANGFUSE: 'langfuse',
 } as const;
+
+/**
+ * Metadata to include in the top-level Langfuse trace.
+ */
+export interface TraceMetadata {
+  /** Unique identifier for the debate. */
+  debateId: string;
+  /** Problem file name if provided via --problemDescription, undefined if inline string. */
+  problemFileName?: string;
+  /** Context file name if provided via --context, undefined if not provided. */
+  contextFileName?: string;
+  /** Whether clarification phase was requested. */
+  clarificationRequested: boolean;
+  /** Whether verbose mode is enabled. */
+  verboseRun: boolean;
+  /** Configuration file name used for this debate. */
+  configFileName: string;
+  /** The debate configuration object. */
+  debateConfig: DebateConfig;
+  /** Array of active agent configurations used in this debate. */
+  agentConfigs: AgentConfig[];
+  /** Optional judge configuration. */
+  judgeConfig?: AgentConfig;
+}
 
 /**
  * Union type of all trace options.

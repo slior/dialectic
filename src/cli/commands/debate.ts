@@ -25,9 +25,10 @@ import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
 import { createValidationError, writeFileWithDirectories } from '../../utils/common';
 import { buildToolRegistry } from '../../utils/tool-registry-builder';
-import { TRACE_OPTIONS, TracingContext } from '../../types/tracing.types';
+import { TRACE_OPTIONS, TracingContext, TraceMetadata } from '../../types/tracing.types';
 import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent } from '../../utils/tracing-factory';
 import { generateDebateId } from '../../utils/id';
+import { buildTraceTags, formatTraceNameWithTimestamp } from '../../utils/tracing-utils';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;
@@ -739,6 +740,97 @@ async function generateReport(
   }
 }
 
+/**
+ * Extracts the problem file name from options if provided via --problemDescription.
+ * 
+ * @param options - Command-line options containing optional problemDescription.
+ * @returns The filename if provided, undefined if problem is an inline string.
+ */
+function extractProblemFileName(options: any): string | undefined {
+  if (options.problemDescription) {
+    return path.basename(options.problemDescription);
+  }
+  return undefined;
+}
+
+/**
+ * Extracts the context file name from options if provided via --context.
+ * 
+ * @param options - Command-line options containing optional context path.
+ * @returns The filename if provided, undefined if not provided.
+ */
+function extractContextFileName(options: any): string | undefined {
+  if (options.context) {
+    return path.basename(options.context);
+  }
+  return undefined;
+}
+
+/**
+ * Initializes the Langfuse tracing context if tracing is enabled in the debate configuration.
+ * Builds trace metadata, trace name, and tags, then creates the tracing context.
+ * Errors during initialization are caught and logged as warnings, but do not fail the debate.
+ *
+ * @param debateCfg - The debate configuration (contains trace option).
+ * @param debateId - Unique identifier for the debate.
+ * @param debateIdDate - Date instance used for debate ID generation (also used for trace name timestamp).
+ * @param options - CLI options containing problem/context file paths, verbose flag, etc.
+ * @param resolvedConfigPath - Absolute path to the configuration file used.
+ * @param clarificationRequested - Whether clarification phase was requested.
+ * @param agentConfigs - Array of active agent configurations.
+ * @param sysConfig - System configuration containing judge config.
+ * @returns Tracing context if successfully initialized, undefined otherwise.
+ */
+function initializeTracingContext(
+  debateCfg: DebateConfig,
+  debateId: string,
+  debateIdDate: Date,
+  options: any,
+  resolvedConfigPath: string,
+  clarificationRequested: boolean,
+  agentConfigs: AgentConfig[],
+  sysConfig: SystemConfig
+): TracingContext | undefined {
+  if (debateCfg.trace !== TRACE_OPTIONS.LANGFUSE) {
+    return undefined;
+  }
+
+  try {
+    validateLangfuseConfig();
+
+    // Build trace metadata
+    const problemFileName = extractProblemFileName(options);
+    const contextFileName = extractContextFileName(options);
+    const traceMetadata: TraceMetadata = {
+      debateId,
+      ...(problemFileName !== undefined && { problemFileName }),
+      ...(contextFileName !== undefined && { contextFileName }),
+      clarificationRequested,
+      verboseRun: options.verbose === true,
+      configFileName: path.basename(resolvedConfigPath),
+      debateConfig: debateCfg,
+      agentConfigs,
+      ...(sysConfig.judge && { judgeConfig: sysConfig.judge }),
+    };
+
+    // Build trace name with timestamp
+    const traceName = formatTraceNameWithTimestamp(debateIdDate);
+
+    // Build tags
+    const tags = buildTraceTags(agentConfigs, clarificationRequested);
+
+    const tracingContext = createTracingContext(debateCfg, traceMetadata, traceName, tags);
+    if (tracingContext) {
+      infoUser('Langfuse tracing enabled');
+    }
+    return tracingContext;
+  } catch (error: any) {
+    warnUser(`Langfuse tracing initialization failed: ${error.message}. Continuing without tracing.`);
+    return undefined;
+  }
+}
+
+
 export function debateCommand(program: Command) {
   program
     .command('debate')
@@ -763,6 +855,9 @@ export function debateCommand(program: Command) {
         // Read context file if provided
         const contextString = options.context ? await readContextFile(options.context) : undefined;
 
+        // Track resolved config path for trace metadata
+        const resolvedConfigPath = options.config ? path.resolve(process.cwd(), options.config) : DEFAULT_CONFIG_PATH;
+        
         const sysConfig = await loadConfig(options.config);
         const debateCfg = debateConfigFromSysConfig(sysConfig, options);
         const agentConfigs = agentConfigsFromSysConfig(sysConfig, options);
@@ -790,21 +885,15 @@ export function debateCommand(program: Command) {
         
         // Generate debate ID early so we can use it for tracing context
         // This ensures the trace metadata has the correct debate ID from the start
-        const debateId = generateDebateId();
+        const debateIdDate = new Date();
+        const debateId = generateDebateId(debateIdDate);
+        
+        // Determine if clarification was requested (calculate once, reuse for trace metadata and clarifications phase)
+        const clarificationRequested = options.clarify === true || sysConfig.debate?.interactiveClarifications === true;
         
         // Initialize tracing context if enabled
-        let tracingContext: TracingContext | undefined = undefined;
-        if (debateCfg.trace === TRACE_OPTIONS.LANGFUSE) {
-          try {
-            validateLangfuseConfig();
-            tracingContext = createTracingContext(debateCfg, debateId);
-            if (tracingContext) {
-              infoUser('Langfuse tracing enabled');
-            }
-          } catch (error: any) {
-            warnUser(`Langfuse tracing initialization failed: ${error.message}. Continuing without tracing.`);
-          }
-        }
+        const tracingContext = initializeTracingContext( debateCfg, debateId, debateIdDate, options,
+                                                          resolvedConfigPath, clarificationRequested, agentConfigs, sysConfig );
 
         const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources, agentLogger, tracingContext);
 
@@ -812,9 +901,8 @@ export function debateCommand(program: Command) {
         const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources, tracingContext);
 
         // Clarifications phase (optional)
-        const shouldClarify: boolean = (options.clarify === true) || (sysConfig.debate?.interactiveClarifications === true);
         let finalClarifications: AgentClarifications[] | undefined = undefined;
-        if (shouldClarify) {
+        if (clarificationRequested) {
           const maxPer = sysConfig.debate?.clarificationsMaxPerAgent ?? DEFAULT_CLARIFICATIONS_MAX_PER_AGENT;
           finalClarifications = await collectAndAnswerClarifications(resolvedProblem, agents, maxPer);
         }
