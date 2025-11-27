@@ -53,6 +53,7 @@
     "synthesisMethod": "judge",
     "includeFullHistory": true,
     "timeoutPerRound": 300000,
+    "trace": "langfuse",
     "summarization": {
       "enabled": false,
       "threshold": 10000,
