@@ -4,7 +4,7 @@ import { TracingContext, LangfuseSpan, LangfuseGeneration, SPAN_LEVEL } from '..
 import { LLMProvider } from '../providers/llm-provider';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
 import { DEFAULT_JUDGE_SUMMARY_PROMPT } from '../agents/prompts/judge-prompts';
-import { writeStderr } from '../utils/console';
+import { logWarning } from '../utils/console';
 import { getErrorMessage } from '../utils/common';
 
 /**
@@ -124,7 +124,7 @@ export class JudgeAgent {
         },
       });
     } catch (tracingError: unknown) {
-      writeStderr(`Warning: Langfuse tracing failed for judge synthesize (span creation): ${getErrorMessage(tracingError)}\n`);
+      logWarning(`Langfuse tracing failed for judge synthesize (span creation): ${getErrorMessage(tracingError)}`);
       // Fallback to non-tracing execution
       return await this.executeSynthesis(systemPrompt, prompt, temperature);
     }
@@ -148,7 +148,7 @@ export class JudgeAgent {
       });
     } catch (tracingError: unknown) {
       const errorMessage = getErrorMessage(tracingError);
-      writeStderr(`Warning: Langfuse tracing failed for judge synthesize (generation creation): ${errorMessage}\n`);
+      logWarning(`Langfuse tracing failed for judge synthesize (generation creation): ${errorMessage}`);
       // End span and fall back to non-tracing execution
       // span is guaranteed to be defined here (if it wasn't, we would have returned early)
       try {
@@ -215,7 +215,7 @@ export class JudgeAgent {
         });
       } catch (tracingError: unknown) {
         // If ending tracing fails, log but don't mask the original error
-        writeStderr(`Warning: Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}\n`);
+        logWarning(`Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}`);
       }
       throw error;
     }
@@ -357,7 +357,7 @@ export class JudgeAgent {
           },
         });
       } catch (tracingError: unknown) {
-        writeStderr(`Warning: Langfuse tracing failed for judge prepareContext (span creation): ${getErrorMessage(tracingError)}\n`);
+        logWarning(`Langfuse tracing failed for judge prepareContext (span creation): ${getErrorMessage(tracingError)}`);
         // Fallback to non-tracing execution
         return this.executeSummarization(rounds);
       }
@@ -377,7 +377,7 @@ export class JudgeAgent {
           });
         } catch (tracingError: unknown) {
           // If ending span fails, log but don't mask the original error
-          writeStderr(`Warning: Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}\n`);
+          logWarning(`Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}`);
         }
         throw error;
       }
@@ -397,7 +397,7 @@ export class JudgeAgent {
     const contentToSummarize = this.getFinalRoundRelevantContent(rounds);
 
     if (!this.summarizer) {
-      writeStderr(`Warning: Judge ${this.config.name}: Summarization enabled but no summarizer available. Using final round content.\n`);
+      logWarning(`Judge ${this.config.name}: Summarization enabled but no summarizer available. Using final round content.`);
       return { context: { problem: '', history: rounds } };
     }
 
@@ -422,7 +422,7 @@ export class JudgeAgent {
         },
       });
     } catch (tracingError: unknown) {
-      writeStderr(`Warning: Langfuse tracing failed for judge prepareContext (generation creation): ${getErrorMessage(tracingError)}\n`);
+      logWarning(`Langfuse tracing failed for judge prepareContext (generation creation): ${getErrorMessage(tracingError)}`);
       // Fallback to non-tracing execution
       return this.executeSummarization(rounds);
     }
@@ -472,7 +472,7 @@ export class JudgeAgent {
         });
       } catch (tracingError: unknown) {
         // If ending generation fails, log but don't mask the original error
-        writeStderr(`Warning: Langfuse tracing failed while ending generation: ${getErrorMessage(tracingError)}\n`);
+        logWarning(`Langfuse tracing failed while ending generation: ${getErrorMessage(tracingError)}`);
       }
       // Propagate the original error - don't fall back, let the caller handle it
       throw error;
@@ -488,7 +488,7 @@ export class JudgeAgent {
 
       if (!this.summarizer) {
         
-        writeStderr(`Warning: Judge ${this.config.name}: Summarization enabled but no summarizer available. Using final round content.\n`);
+        logWarning(`Judge ${this.config.name}: Summarization enabled but no summarizer available. Using final round content.`);
         return { context: { problem: '', history: rounds } };
       }
 
@@ -515,8 +515,8 @@ export class JudgeAgent {
       return { context: { problem: '', history: rounds }, summary };
     } catch (error: unknown) {
       // Log error to stderr and fallback to final round content
-      writeStderr(
-        `Warning: Judge ${this.config.name}: Summarization failed with error: ${getErrorMessage(error)}. Falling back to final round content.\n`
+      logWarning(
+        `Judge ${this.config.name}: Summarization failed with error: ${getErrorMessage(error)}. Falling back to final round content.`
       );
       return { context: { problem: '', history: rounds } };
     }

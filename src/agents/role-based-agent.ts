@@ -4,7 +4,7 @@ import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TY
 import { LLMProvider } from '../providers/llm-provider';
 import { getPromptsForRole, RolePrompts } from './prompts';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
-import { writeStderr } from '../utils/console';
+import { logWarning } from '../utils/console';
 import type { SummarizationConfig } from '../types/config.types';
 import { ToolRegistry } from '../tools/tool-registry';
 
@@ -216,7 +216,7 @@ export class RoleBasedAgent extends Agent {
         .map((q: any, idx: number) => ({ id: q.id || `q${idx + 1}`, text: q.text }));
       return { questions: normalized };
     } catch (err: any) {
-      writeStderr(`Warning: Agent ${this.config.name}: Invalid clarifications JSON. Error: ${err.message}\n`);
+      logWarning(`Agent ${this.config.name}: Invalid clarifications JSON. Error: ${err.message}`);
       return { questions: [] };
     }
   }
@@ -358,7 +358,7 @@ export class RoleBasedAgent extends Agent {
       if (!this.summarizer) {
         // Summarization is enabled but no summarizer (shouldn't happen, but handle gracefully)
         // This is an internal error that should be logged to stderr
-        writeStderr(`Warning: Agent ${this.config.name}: Summarization enabled but no summarizer available. Using full history.\n`);
+        logWarning(`Agent ${this.config.name}: Summarization enabled but no summarizer available. Using full history.`);
         return { context };
       }
 
@@ -386,8 +386,8 @@ export class RoleBasedAgent extends Agent {
       return { context, summary };
     } catch (error: any) {
       // Log error to stderr and fallback to full history
-      writeStderr(
-        `Warning: Agent ${this.config.name}: Summarization failed with error: ${error.message}. Falling back to full history.\n`
+      logWarning(
+        `Agent ${this.config.name}: Summarization failed with error: ${error.message}. Falling back to full history.`
       );
       return { context };
     }

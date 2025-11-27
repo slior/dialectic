@@ -4,7 +4,7 @@ import readline from 'readline';
 import { Command } from 'commander';
 import { EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR } from '../../utils/exit-codes';
 import { warnUser, infoUser } from '../index';
-import { writeStderr } from '../../utils/console';
+import { writeStderr, logWarning } from '../../utils/console';
 import { SystemConfig } from '../../types/config.types';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata, JudgePromptMetadata, PromptSource, AgentPromptMetadataCollection } from '../../types/agent.types';
 import { DebateConfig, DebateResult, DebateRound, Contribution, ContributionType, TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES, SummarizationConfig, AgentClarifications } from '../../types/debate.types';
@@ -18,7 +18,8 @@ import { DebateOrchestrator } from '../../core/orchestrator';
 import { resolvePrompt } from '../../utils/prompt-loader';
 import { loadEnvironmentFile } from '../../utils/env-loader';
 import { Agent } from '../../core/agent';
-import { DebateProgressUI, MessageType } from '../../utils/progress-ui';
+import { DebateProgressUI } from '../../utils/progress-ui';
+import { MessageType } from '../../utils/console';
 import { AgentLogger } from '../../core/agent';
 import { generateDebateReport } from '../../utils/report-generator';
 import { collectClarifications } from '../../core/clarifications';
@@ -853,7 +854,7 @@ export function debateCommand(program: Command) {
           try {
             await tracingContext.langfuse.flushAsync();
           } catch (error: any) {
-            writeStderr(`Warning: Failed to flush Langfuse trace: ${error.message}\n`);
+            logWarning(`Failed to flush Langfuse trace: ${error.message}`);
           }
         }
 

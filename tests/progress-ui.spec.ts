@@ -1,14 +1,16 @@
-import { DebateProgressUI, MessageType, MESSAGE_ICONS } from '../src/utils/progress-ui';
+import { DebateProgressUI } from '../src/utils/progress-ui';
+import { MessageType, MESSAGE_ICONS } from '../src/utils/console';
 import { CONTRIBUTION_TYPES } from '../src/types/debate.types';
 
-// Mock writeStderr to capture output
+// Mock process.stderr.write to capture output
 let stderrOutput: string[] = [];
 
 beforeEach(() => {
   stderrOutput = [];
-  jest.spyOn(require('../src/utils/console'), 'writeStderr').mockImplementation((...args: unknown[]) => {
+  jest.spyOn(process.stderr, 'write').mockImplementation((...args: unknown[]) => {
     const text = args[0] as string;
     stderrOutput.push(text);
+    return true;
   });
 });
 

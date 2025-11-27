@@ -4,34 +4,24 @@ import { debateCommand, loadConfig as loadDebateConfig } from './commands/debate
 import { evalCommand } from './commands/eval';
 import { reportCommand } from './commands/report';
 import { EXIT_GENERAL_ERROR } from '../utils/exit-codes';
+import { logInfo, logWarning } from '../utils/console';
 
-// Color constants for CLI output
-export const WARNING_COLOR = 'yellow';
-export const INFO_COLOR = 'gray';
 export const PROGRAM_NAME = 'dialectic';
 
-// Lazy optional chalk import for colored output
-let chalk: any;
-try { chalk = require('chalk'); } catch { chalk = null; }
-
-function color(method: string, msg: string): string {
-  return chalk && chalk[method] ? chalk[method](msg) : msg;
-}
-
 /**
- * Outputs a warning message to stderr with consistent formatting.
+ * Outputs a warning message to stderr with unified formatting.
  * Used for user-facing warnings throughout the CLI.
  */
 export function warnUser(message: string): void {
-  process.stderr.write(color(WARNING_COLOR, message) + '\n');
+  logWarning(message);
 }
 
 /**
- * Outputs an info message to stderr with consistent formatting.
+ * Outputs an info message to stderr with unified formatting.
  * Used for user-facing informational messages throughout the CLI.
  */
 export function infoUser(message: string): void {
-  process.stderr.write(color(INFO_COLOR, message) + '\n');
+  logInfo(message);
 }
 
 

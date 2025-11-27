@@ -3,7 +3,7 @@ import { ToolRegistry } from '../tools/tool-registry';
 import { ToolImplementation } from '../tools/tool-implementation';
 import { ToolSchema } from '../types/tool.types';
 import { ContextSearchTool } from '../tools/context-search-tool';
-import { writeStderr } from './console';
+import { logWarning } from './console';
 
 /**
  * Tool definition containing schema and implementation factory.
@@ -61,14 +61,14 @@ export function buildToolRegistry(agentConfig: AgentConfig): ToolRegistry {
     const toolName = toolConfig.name;
 
     if (!toolName || toolName.trim() === '') {
-      writeStderr(`Warning: Invalid tool name (empty string) configured for agent "${agentConfig.id}". Skipping.\n`);
+      logWarning(`Invalid tool name (empty string) configured for agent "${agentConfig.id}". Skipping.`);
       continue;
     }
 
     const toolDefinition = AVAILABLE_TOOLS[toolName];
 
     if (!toolDefinition) {
-      writeStderr(`Warning: Unknown tool "${toolName}" configured for agent "${agentConfig.id}". Skipping.\n`);
+      logWarning(`Unknown tool "${toolName}" configured for agent "${agentConfig.id}". Skipping.`);
       continue;
     }
 

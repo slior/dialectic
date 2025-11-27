@@ -181,8 +181,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
     } as any;
 
     // Spy on stderr warnings
-    const stderr = await import('../src/utils/console');
-    const warnSpy = jest.spyOn(stderr, 'writeStderr').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     const cfg: DebateConfig = {
       rounds: 2,

@@ -5,7 +5,7 @@ import { Agent } from '../core/agent';
 import { LLMProvider } from '../providers/llm-provider';
 import { TracingLLMProvider } from './tracing-provider';
 import { TracingDecoratorAgent } from './tracing-decorator-agent';
-import { writeStderr } from './console';
+import { logWarning } from './console';
 
 /**
  * Default Langfuse base URL if not specified in environment.
@@ -85,7 +85,7 @@ export function createTracingContext(
     };
   } catch (error: any) {
     // Log warning but don't throw - tracing failures should be non-blocking
-    writeStderr(`Warning: Failed to create Langfuse tracing context: ${error.message}\n`);
+    logWarning(`Failed to create Langfuse tracing context: ${error.message}`);
     return undefined;
   }
 }

@@ -1,6 +1,6 @@
 import { LLMProvider, CompletionRequest, CompletionResponse } from '../providers/llm-provider';
 import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
-import { writeStderr } from './console';
+import { logWarning } from './console';
 import { getSpanParent } from './tracing-utils';
 
 /**
@@ -90,7 +90,7 @@ export class TracingLLMProvider implements LLMProvider {
       }
     } catch (tracingError: any) {
       // If tracing fails, log warning and continue with original provider call
-      writeStderr(`Warning: Langfuse tracing failed for LLM call: ${tracingError.message}\n`);
+      logWarning(`Langfuse tracing failed for LLM call: ${tracingError.message}`);
       return await this.wrappedProvider.complete(request);
     }
   }

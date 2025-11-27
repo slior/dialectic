@@ -116,7 +116,7 @@ describe('buildToolRegistry', () => {
       
       expect(registry.hasTools()).toBe(false);
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Warning: Invalid tool name (empty string) configured for agent "test-agent". Skipping.\n')
+        expect.stringContaining('Invalid tool name (empty string) configured for agent "test-agent". Skipping.')
       );
     });
 
@@ -132,7 +132,7 @@ describe('buildToolRegistry', () => {
       expect(registry.hasTools()).toBe(false);
       expect(registry.has('unknown_tool')).toBe(false);
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Warning: Unknown tool "unknown_tool" configured for agent "test-agent". Skipping.\n')
+        expect.stringContaining('Unknown tool "unknown_tool" configured for agent "test-agent". Skipping.')
       );
     });
 
@@ -151,10 +151,10 @@ describe('buildToolRegistry', () => {
       expect(registry.hasTools()).toBe(false);
       expect(stderrSpy).toHaveBeenCalledTimes(2);
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Warning: Unknown tool "unknown_tool_1" configured for agent "test-agent". Skipping.\n')
+        expect.stringContaining('Unknown tool "unknown_tool_1" configured for agent "test-agent". Skipping.')
       );
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Warning: Unknown tool "unknown_tool_2" configured for agent "test-agent". Skipping.\n')
+        expect.stringContaining('Unknown tool "unknown_tool_2" configured for agent "test-agent". Skipping.')
       );
     });
 
@@ -174,7 +174,7 @@ describe('buildToolRegistry', () => {
       expect(registry.has('context_search')).toBe(true);
       expect(registry.has('unknown_tool')).toBe(false);
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Warning: Unknown tool "unknown_tool" configured for agent "test-agent". Skipping.\n')
+        expect.stringContaining('Unknown tool "unknown_tool" configured for agent "test-agent". Skipping.')
       );
     });
   });

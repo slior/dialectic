@@ -2,7 +2,7 @@ import { Agent, AgentLLMResponse } from '../core/agent';
 import { Proposal, Critique } from '../types/agent.types';
 import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
-import { writeStderr } from './console';
+import { logWarning } from './console';
 import { ToolCall, ToolResult, TOOL_RESULT_STATUS } from '../types/tool.types';
 import { ToolImplementation } from '../tools/tool-implementation';
 import { TracingLLMProvider } from './tracing-provider';
@@ -241,7 +241,7 @@ export class TracingDecoratorAgent extends Agent {
       }
     } catch (tracingError: any) {
       // If tracing fails, log warning and continue with tool execution
-      writeStderr(`Warning: Langfuse tracing failed for tool execution: ${tracingError.message}\n`);
+      logWarning(`Langfuse tracing failed for tool execution: ${tracingError.message}`);
       
       // Fall back to base class behavior - call super.executeTool
       super.executeTool(tool, args, toolCall, context, state, toolResultsForThisIteration, allToolResults);
@@ -303,7 +303,7 @@ export class TracingDecoratorAgent extends Agent {
       }
     } catch (tracingError: any) {
       // If tracing fails, log warning and continue with original operation
-      writeStderr(`Warning: Langfuse tracing failed for ${spanName}: ${tracingError.message}\n`);
+      logWarning(`Langfuse tracing failed for ${spanName}: ${tracingError.message}`);
       return await fn();
     }
   }

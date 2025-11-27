@@ -3,7 +3,7 @@ import { JudgeAgent } from './judge';
 import { StateManager } from './state-manager';
 import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType, AgentClarifications } from '../types/debate.types';
 import { TracingContext } from '../types/tracing.types';
-import { writeStderr } from '../utils/console';
+import { logWarning } from '../utils/console';
 import { AgentRole, Critique } from '../types/agent.types';
 import { enhanceProblemWithContext } from '../utils/context-enhancer';
 
@@ -332,7 +332,7 @@ export class DebateOrchestrator {
             contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.PROPOSAL, prevRefinement.content, carryMetadata, started );
           }
           else { // Fallback: warn and perform LLM proposal
-            writeStderr(`Warning: [Round ${roundNumber}] Missing previous refinement for ${agent.config.name}; falling back to LLM proposal.\n`);
+            logWarning(`[Round ${roundNumber}] Missing previous refinement for ${agent.config.name}; falling back to LLM proposal.`);
             contribution = await this.buildProposalContributionFromLLM(agent, state, preparedContexts, started);
           }
         }

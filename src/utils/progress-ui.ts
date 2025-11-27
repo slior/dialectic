@@ -1,43 +1,5 @@
 import { ContributionType, CONTRIBUTION_TYPES } from '../types/debate.types';
-import { writeStderr } from './console';
-
-// Lazy load chalk for optional color support
-let chalk: any;
-try {
-  chalk = require('chalk');
-} catch {
-  // If chalk is not available, create a pass-through mock
-  chalk = new Proxy({}, {
-    get: () => (text: string) => text
-  });
-}
-
-// Message type enum for categorizing messages
-export enum MessageType {
-  INFO = 'info',
-  SUCCESS = 'success',
-  WARNING = 'warning'
-}
-
-// Message icon constants
-// Exported for testing purposes only - allows tests to reference icons without hardcoding values
-export const MESSAGE_ICONS = {
-  INFO: 'ℹ',
-  SUCCESS: '✓',
-  WARNING: '⚠'
-} as const;
-
-// Message format configuration
-interface MessageFormat {
-  icon: string;
-  color: (text: string) => string;
-}
-
-const MESSAGE_FORMATS: Record<MessageType, MessageFormat> = {
-  [MessageType.INFO]: { icon: MESSAGE_ICONS.INFO, color: chalk.blueBright },
-  [MessageType.SUCCESS]: { icon: MESSAGE_ICONS.SUCCESS, color: chalk.greenBright },
-  [MessageType.WARNING]: { icon: MESSAGE_ICONS.WARNING, color: chalk.yellowBright }
-};
+import { MessageType, logInfo, logSuccess, logWarning } from './console';
 
 // Constants for UI strings and configuration
 const PHASE_LABELS = {
@@ -47,8 +9,6 @@ const PHASE_LABELS = {
 } as const;
 
 const SYNTHESIS_LABEL = 'Synthesis';
-
-const ICON_SPACING = '  '; // Two spaces after icon
 
 // Progress state tracking
 // Note: State is maintained for potential future advanced UI features (e.g., interactive display, progress bars).
@@ -269,27 +229,18 @@ export class DebateProgressUI {
   }
 
   /**
-   * Formats a message with the appropriate icon and color based on message type.
-   * Icon is colored, text remains in default terminal color.
-   * 
-   * @param message - The message text to format.
-   * @param type - The message type (info, success, or warning).
-   * @returns Formatted message string with colored icon, spacing, and plain text.
-   */
-  private formatMessage(message: string, type: MessageType): string {
-    const format = MESSAGE_FORMATS[type];
-    const coloredIcon = format.color(format.icon);
-    return `${coloredIcon}${ICON_SPACING}${message}\n`;
-  }
-
-  /**
-   * Appends a formatted message to stderr.
+   * Appends a formatted message to stderr using unified formatting.
    * 
    * @param message - The message text to append.
    * @param type - The message type (info, success, or warning). Defaults to info.
    */
   private appendMessage(message: string, type: MessageType = MessageType.INFO): void {
-    const formatted = this.formatMessage(message, type);
-    writeStderr(formatted);
+    if (type === MessageType.INFO) {
+      logInfo(message);
+    } else if (type === MessageType.SUCCESS) {
+      logSuccess(message);
+    } else if (type === MessageType.WARNING) {
+      logWarning(message);
+    }
   }
 }
