@@ -1,0 +1,97 @@
+---
+description: Update CHANGELOG.md with changes for a given version or the latest tagged version
+---
+
+# Update Changelog
+
+Update the CHANGELOG.md file with changes for a specified version (compared to its previous version), or if no version is provided, update it with changes from the latest tagged version.
+
+## Input Parameters
+
+- **version** (optional)
+  - The version tag to generate changelog for (e.g., `v0.2.0`, `0.3.0`)
+  - If not provided, uses the latest git tag
+  - Must be a valid git tag that exists in the repository
+
+## Process
+
+1. **Determine versions:**
+   - If `version` is provided: use that version and find its previous version
+   - If `version` is not provided: get the latest git tag and its previous version
+   - Use `git tag -l --sort=-v:refname` to get sorted tags
+
+2. **Get commits:**
+   - Get all commits between `previous_version` and `version` using `git log previous_version..version --pretty=format:"%s" --no-merges`
+   - Filter out commits that are:
+     - Chore commits (start with "chore:", "chore(", or contain "chore" in a significant way)
+     - Cleanup commits (contain "cleanup" as a standalone word, not as part of "cleanup eval implementation" which is meaningful)
+     - Refactoring commits (start with "refactor:" or "refactor(") unless they include significant functionality changes
+     - Version bump commits (just version numbers like "0.1.2", "0.2.0")
+     - Package metadata commits (contain "package metadata" or "package details")
+   - Keep commits that are:
+     - Feature additions (start with "feat:", "add", "Add", "implement", "Implement")
+     - Bug fixes (start with "fix:", "fix(", "bug fix", "Fix")
+     - Performance improvements (contain "performance:", "performance(")
+     - Documentation (start with "docs:", "docs(") but only if substantial
+     - Changes/improvements (contain meaningful change descriptions)
+
+3. **Categorize commits:**
+   - **Added**: Commits that add new features, capabilities, or functionality
+     - Look for: "add", "Add", "feat:", "implement", "Implement", "introduce", "Introduce", "support", "Support"
+   - **Changed**: Commits that modify or improve existing functionality
+     - Look for: "update", "Update", "improve", "Improve", "enhance", "Enhance", "change", "Change", "modify", "Modify", "performance:", "refactor:" (if significant)
+   - **Fixed**: Commits that fix bugs or issues
+     - Look for: "fix:", "fix(", "Fix", "bug fix", "Bug fix", "fix bug", "Fix bug"
+   - **Documentation**: Commits that add or update documentation
+     - Look for: "docs:", "docs(", "documentation", "Documentation", "README", "docs/", "Add * documentation", "Enhance * documentation"
+
+4. **Format entries:**
+   - Extract a meaningful title from the commit message (remove prefixes like "feat:", "fix:", etc.)
+   - Create a brief, user-friendly description
+   - Format as: `- **Title**: Description`
+   - Use title case for the title (capitalize first letter of each significant word)
+
+5. **Update CHANGELOG.md:**
+   - Read the current CHANGELOG.md file
+   - Insert a new section at the top (after the "# Changelog" header) with format:
+     ```
+     ## [version]
+     
+     ### Added
+     - **Feature 1**: Description
+     - **Feature 2**: Description
+     
+     ### Changed
+     - **Change 1**: Description
+     
+     ### Fixed
+     - **Fix 1**: Description
+     
+     ### Documentation
+     - **Doc 1**: Description
+     
+     ---
+     ```
+   - Only include sections that have entries
+   - Maintain the same formatting style as existing entries
+   - Add a separator (`---`) after the new section
+
+## Example Usage
+
+**With version specified:**
+```
+Update changelog for version v0.3.0
+```
+
+**Without version (uses latest tag):**
+```
+Update changelog
+```
+
+## Implementation Notes
+
+- Use git commands to get version information and commits
+- Parse commit messages intelligently to extract meaningful information
+- Filter aggressively to keep only high-signal commits
+- Format consistently with existing changelog entries
+- Preserve existing changelog content, only prepending new sections
