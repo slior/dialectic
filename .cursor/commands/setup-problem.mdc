@@ -1,0 +1,187 @@
+---
+description: Generate a problem definition for dialectic debate testing with debate config and evaluation config
+---
+
+# Setup Problem Infrastructure
+
+Generate a problem definition for dialectic debate testing. This command creates a new problem directory in `examples/` with the problem statement and default configurations. Problems are independent and can be used with any test in the `e2e-tests/` directory.
+
+## Input Parameters
+
+The command accepts the following parameters:
+
+- **problem_name** (required)
+  - The name of the problem directory to create (e.g., `my_problem`, `rate_limiting`, `auth_system`)
+  - Will be created as `examples/{problem_name}/`
+  - Must not start with underscore (underscore-prefixed directories are skipped by the test runner)
+  - Must be a valid directory name (no special characters that would cause filesystem issues)
+
+- **problem_description** (required, provided in fenced code block)
+  - The problem description text to use for the debate
+  - Should be provided in a markdown fenced code block (```...```)
+  - Will be written to `examples/{problem_name}/problem.md`
+  - Must be non-empty after trimming
+
+- **model** (optional, default: `google/gemini-2.5-flash-lite`)
+  - The LLM model identifier to use for all agents and evaluators
+  - Format depends on provider (e.g., `google/gemini-2.5-flash-lite` for OpenRouter, `gpt-4` for OpenAI)
+
+- **provider** (optional, default: `openrouter`)
+  - The LLM provider to use (`openai` or `openrouter`)
+  - All agents and evaluators will use this provider
+
+## Generated Files
+
+The command will create the following files:
+
+### 1. `examples/{problem_name}/problem.md`
+Problem description file containing the provided problem description text.
+
+### 2. `examples/{problem_name}/debate-config.json`
+Debate configuration file with:
+- Four agents: architect, performance, security, and kiss (all enabled)
+- Judge agent with generalist role
+- All agents configured with the specified model and provider
+- Summarization disabled by default (threshold 10000, maxLength 5000, method "length-based")
+- Default debate settings (3 rounds, fixed termination, judge synthesis)
+
+### 3. `examples/{problem_name}/eval_config.json`
+Evaluation configuration file with:
+- Two evaluator agents (eval-1 and eval-2)
+- Both configured with the specified model and provider
+- Custom prompt paths: `../eval_system.md` and `../eval_user.md` (relative to problem directory)
+- Timeout set to 30000ms
+- Both agents enabled by default
+
+### 4. `examples/eval_system.md` (if not exists)
+Evaluation system prompt file (copied from `src/eval/prompts/system.md`).
+Created in the `examples/` directory so all problems can reference it via `../eval_system.md`.
+
+### 5. `examples/eval_user.md` (if not exists)
+Evaluation user prompt file (copied from `src/eval/prompts/user.md`).
+Created in the `examples/` directory so all problems can reference it via `../eval_user.md`.
+
+## Implementation Instructions
+
+When executing this command, follow these steps precisely:
+
+1. **Extract Problem Description**
+   - Extract the problem description from the fenced code block provided by the user
+   - Trim whitespace from the beginning and end
+   - Validate that the problem description is non-empty after trimming
+   - If empty, exit with an error message
+
+2. **Validate Problem Name**
+   - Check that `problem_name` is provided and non-empty
+   - Validate that `problem_name` doesn't start with underscore (test runner skips these)
+   - Check that `examples/{problem_name}` doesn't already exist (warn if it does, but proceed)
+   - Ensure `problem_name` is a valid directory name
+
+3. **Create Problem Directory Structure**
+   - Create directory `examples/{problem_name}/` if it doesn't exist
+   - Ensure parent directories exist
+
+4. **Create Problem Description File**
+   - Create `examples/{problem_name}/problem.md`
+   - Write the extracted problem description text to this file (UTF-8 encoding)
+   - Ensure file ends with a newline
+
+5. **Create Eval Prompt Files (if not exist)**
+   - Check if `examples/eval_system.md` exists
+   - If not, copy `src/eval/prompts/system.md` to `examples/eval_system.md`
+   - Check if `examples/eval_user.md` exists
+   - If not, copy `src/eval/prompts/user.md` to `examples/eval_user.md`
+   - These files are shared across all problems and referenced via `../eval_system.md` and `../eval_user.md`
+
+6. **Create Debate Config**
+   - Create `examples/{problem_name}/debate-config.json`
+   - Configure four agents: architect, performance, security, and kiss (all enabled, temperature 0.5)
+   - Configure judge: generalist role, temperature 0.5
+   - Set all agents and judge to use the specified model and provider
+   - Disable summarization by default: enabled false, threshold 10000, maxLength 5000, method "length-based"
+   - Set default debate settings: rounds 3, fixed termination, judge synthesis, includeFullHistory true, timeoutPerRound 300000
+   - Use agent IDs: `agent-architect`, `agent-performance`, `agent-security`, `agent-kiss`
+   - Use judge ID: `judge-main`
+
+7. **Create Evaluation Config**
+   - Create `examples/{problem_name}/eval_config.json`
+   - Configure two evaluator agents (eval-1 and eval-2)
+   - Set both to use the specified model and provider
+   - Set timeout to 30000ms
+   - Set systemPromptPath to `../eval_system.md` and userPromptPath to `../eval_user.md`
+   - Both agents enabled by default
+   - Use agent IDs: `eval-1`, `eval-2`
+
+8. **Path Handling**
+   - All paths should use forward slashes
+   - Use relative paths from project root
+   - Ensure paths are properly quoted in JSON files
+
+## Default Values
+
+If optional parameters are not provided, use these defaults:
+- `model`: `google/gemini-2.5-flash-lite`
+- `provider`: `openrouter`
+
+**Required parameters** (must be provided):
+- `problem_name`: The name of the problem directory to create
+- `problem_description`: The problem description text (in fenced code block)
+
+## Verification
+
+After generation:
+- All files should be created in the correct locations
+- JSON files should be valid JSON (verify with a JSON parser)
+- The problem directory structure should match the pattern used by existing problems (e.g., `kata1`, `kata2`, `kata3`)
+- The problem should be discoverable by `e2e-tests/run-tests.ts` script
+
+## Compatibility with e2e-tests/run-tests.ts
+
+The generated problem will work with `e2e-tests/run-tests.ts` because:
+- Problem directory is created in `examples/{problem_name}/` (not starting with underscore)
+- Required files are present: `problem.md`, `debate-config.json`, `eval_config.json`
+- The problem can be used with any test in the `e2e-tests/` directory
+
+## Example Usage
+
+Basic usage with required parameters:
+```
+Create problem named "rate_limiting" with problem description:
+
+```
+Design a rate limiting system that can handle 1000 requests per second per user.
+The system should support multiple rate limiting strategies and be horizontally scalable.
+```
+
+```
+
+With optional parameters:
+```
+Create problem named "auth_system" with:
+- model: gpt-4
+- provider: openai
+
+Problem description:
+
+```
+Design a secure authentication API with JWT tokens.
+The system should support refresh tokens and handle token revocation.
+```
+
+```
+
+## Output
+
+After successful execution:
+1. A new problem directory is created at `examples/{problem_name}/`
+2. The problem contains all required files:
+   - `problem.md` - Problem description
+   - `debate-config.json` - Debate configuration
+   - `eval_config.json` - Evaluation configuration
+3. Eval prompt files are created in `examples/` directory (if not already present)
+4. The problem can be used with any test using `e2e-tests/run-tests.ts`:
+   ```bash
+   npx ts-node e2e-tests/run-tests.ts <base_output_dir> --problems {problem_name}
+   ```
+
+The problem is ready to use with any test in the `e2e-tests/` directory.
