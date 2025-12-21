@@ -22,11 +22,14 @@ import {
 interface StartDebateDto {
   problem: string;
   clarificationsEnabled: boolean;
+  rounds?: number;
 }
 
 interface SubmitClarificationsDto {
   answers: Record<string, string>;
 }
+
+const DEFAULT_ROUNDS = 3;
 
 /**
  * WebSocket gateway for real-time debate communication.
@@ -45,6 +48,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private connectedClients: Set<string> = new Set();
   private currentRound = 0;
   private totalRounds = 0;
+  private configuredRounds = DEFAULT_ROUNDS;
 
   constructor(private readonly debateService: DebateService) {}
 
@@ -82,8 +86,17 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    // Validate rounds if provided
+    const rounds = dto.rounds ?? DEFAULT_ROUNDS;
+    if (rounds < 1) {
+      logWarning('Invalid rounds value');
+      client.emit('error', { message: 'Number of rounds must be >= 1' });
+      return;
+    }
+
     this.debateInProgress = true;
     this.currentProblem = dto.problem.trim();
+    this.configuredRounds = rounds;
     
     logInfo('Debate started');
     client.emit('debateStarted', { problem: this.currentProblem });
@@ -108,7 +121,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     // Run debate without clarifications
-    await this.runDebate(client);
+    await this.runDebate(client, undefined, rounds);
   }
 
   @SubscribeMessage('submitClarifications')
@@ -127,8 +140,8 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     
     client.emit('clarificationsSubmitted');
     
-    // Run debate with clarifications
-    await this.runDebate(client, clarificationsWithAnswers);
+    // Run debate with clarifications (use stored rounds from handleStartDebate)
+    await this.runDebate(client, clarificationsWithAnswers, this.configuredRounds);
   }
 
   @SubscribeMessage('cancelDebate')
@@ -155,14 +168,15 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /**
    * Runs the debate and emits progress events via WebSocket.
    */
-  private async runDebate(client: Socket, clarifications?: AgentClarifications[]) {
+  private async runDebate(client: Socket, clarifications?: AgentClarifications[], rounds?: number) {
     const hooks = this.createHooks(client);
 
     try {
       const result = await this.debateService.runDebate(
         this.currentProblem,
         hooks,
-        clarifications
+        clarifications,
+        rounds
       );
 
       logSuccess('Debate completed');
@@ -264,6 +278,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.pendingClarifications = [];
     this.currentRound = 0;
     this.totalRounds = 0;
+    this.configuredRounds = DEFAULT_ROUNDS;
   }
 
   /**

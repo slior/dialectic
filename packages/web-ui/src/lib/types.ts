@@ -71,6 +71,7 @@ export interface DebateState {
   status: 'idle' | 'collecting_clarifications' | 'awaiting_clarifications' | 'running' | 'completed' | 'error';
   problem: string;
   clarificationsEnabled: boolean;
+  rounds: number;
   clarificationQuestions?: AgentClarifications[];
   agents: AgentState[];
   currentRound: number;
@@ -90,6 +91,7 @@ export interface NotificationMessage {
 
 export type DebateAction =
   | { type: 'SET_PROBLEM'; payload: string }
+  | { type: 'SET_ROUNDS'; payload: number }
   | { type: 'TOGGLE_CLARIFICATIONS' }
   | { type: 'DEBATE_STARTED' }
   | { type: 'COLLECTING_CLARIFICATIONS' }

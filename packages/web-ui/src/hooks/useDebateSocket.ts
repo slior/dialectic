@@ -12,13 +12,40 @@ import {
   AgentClarifications,
 } from '@/lib/types';
 
+const DEFAULT_ROUNDS = 3;
+
+const ACTION_TYPES = {
+  SET_PROBLEM: 'SET_PROBLEM',
+  SET_ROUNDS: 'SET_ROUNDS',
+  TOGGLE_CLARIFICATIONS: 'TOGGLE_CLARIFICATIONS',
+  DEBATE_STARTED: 'DEBATE_STARTED',
+  COLLECTING_CLARIFICATIONS: 'COLLECTING_CLARIFICATIONS',
+  CLARIFICATIONS_REQUIRED: 'CLARIFICATIONS_REQUIRED',
+  CLARIFICATIONS_SUBMITTED: 'CLARIFICATIONS_SUBMITTED',
+  CONNECTION_ESTABLISHED: 'CONNECTION_ESTABLISHED',
+  ROUND_START: 'ROUND_START',
+  PHASE_START: 'PHASE_START',
+  AGENT_START: 'AGENT_START',
+  AGENT_COMPLETE: 'AGENT_COMPLETE',
+  PHASE_COMPLETE: 'PHASE_COMPLETE',
+  SYNTHESIS_START: 'SYNTHESIS_START',
+  SYNTHESIS_COMPLETE: 'SYNTHESIS_COMPLETE',
+  DEBATE_COMPLETE: 'DEBATE_COMPLETE',
+  ERROR: 'ERROR',
+  WARNING: 'WARNING',
+  DEBATE_CANCELLED: 'DEBATE_CANCELLED',
+  ADD_NOTIFICATION: 'ADD_NOTIFICATION',
+  CLEAR_NOTIFICATION: 'CLEAR_NOTIFICATION',
+} as const;
+
 const initialState: DebateState = {
   status: 'idle',
   problem: '',
   clarificationsEnabled: false,
+  rounds: DEFAULT_ROUNDS,
   agents: [],
   currentRound: 0,
-  totalRounds: 3,
+  totalRounds: DEFAULT_ROUNDS,
   notifications: [],
   isRunning: false,
 };
@@ -34,13 +61,16 @@ function createNotification(type: NotificationMessage['type'], message: string):
 
 function debateReducer(state: DebateState, action: DebateAction): DebateState {
   switch (action.type) {
-    case 'SET_PROBLEM':
+    case ACTION_TYPES.SET_PROBLEM:
       return { ...state, problem: action.payload };
 
-    case 'TOGGLE_CLARIFICATIONS':
+    case ACTION_TYPES.SET_ROUNDS:
+      return { ...state, rounds: action.payload };
+
+    case ACTION_TYPES.TOGGLE_CLARIFICATIONS:
       return { ...state, clarificationsEnabled: !state.clarificationsEnabled };
 
-    case 'CONNECTION_ESTABLISHED': {
+    case ACTION_TYPES.CONNECTION_ESTABLISHED: {
       const agents: AgentState[] = action.payload.agents.map((cfg: AgentConfig) => ({
         id: cfg.id,
         name: cfg.name,
@@ -57,7 +87,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       };
     }
 
-    case 'DEBATE_STARTED':
+    case ACTION_TYPES.DEBATE_STARTED:
       return {
         ...state,
         status: 'running',
@@ -71,7 +101,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'COLLECTING_CLARIFICATIONS':
+    case ACTION_TYPES.COLLECTING_CLARIFICATIONS:
       return {
         ...state,
         status: 'collecting_clarifications',
@@ -81,7 +111,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'CLARIFICATIONS_REQUIRED':
+    case ACTION_TYPES.CLARIFICATIONS_REQUIRED:
       return {
         ...state,
         status: 'awaiting_clarifications',
@@ -92,7 +122,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'CLARIFICATIONS_SUBMITTED':
+    case ACTION_TYPES.CLARIFICATIONS_SUBMITTED:
       return {
         ...state,
         status: 'running',
@@ -103,7 +133,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'ROUND_START':
+    case ACTION_TYPES.ROUND_START:
       return {
         ...state,
         currentRound: action.payload.round,
@@ -114,7 +144,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'PHASE_START':
+    case ACTION_TYPES.PHASE_START:
       return {
         ...state,
         currentPhase: action.payload.phase,
@@ -124,7 +154,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'AGENT_START':
+    case ACTION_TYPES.AGENT_START:
       return {
         ...state,
         agents: state.agents.map(a =>
@@ -134,7 +164,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ),
       };
 
-    case 'AGENT_COMPLETE': {
+    case ACTION_TYPES.AGENT_COMPLETE: {
       const { agentName, activity } = action.payload;
       return {
         ...state,
@@ -150,7 +180,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       };
     }
 
-    case 'PHASE_COMPLETE':
+    case ACTION_TYPES.PHASE_COMPLETE:
       return {
         ...state,
         currentPhase: undefined,
@@ -160,7 +190,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'SYNTHESIS_START':
+    case ACTION_TYPES.SYNTHESIS_START:
       return {
         ...state,
         notifications: [
@@ -169,7 +199,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'SYNTHESIS_COMPLETE':
+    case ACTION_TYPES.SYNTHESIS_COMPLETE:
       return {
         ...state,
         notifications: [
@@ -178,7 +208,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'DEBATE_COMPLETE': {
+    case ACTION_TYPES.DEBATE_COMPLETE: {
       const result = action.payload;
       // Update agents with contributions from result
       const updatedAgents = state.agents.map(agent => {
@@ -207,7 +237,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       };
     }
 
-    case 'ERROR':
+    case ACTION_TYPES.ERROR:
       return {
         ...state,
         status: 'error',
@@ -220,7 +250,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'WARNING':
+    case ACTION_TYPES.WARNING:
       return {
         ...state,
         notifications: [
@@ -229,7 +259,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'DEBATE_CANCELLED':
+    case ACTION_TYPES.DEBATE_CANCELLED:
       return {
         ...state,
         status: 'idle',
@@ -242,13 +272,13 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
-    case 'ADD_NOTIFICATION':
+    case ACTION_TYPES.ADD_NOTIFICATION:
       return {
         ...state,
         notifications: [...state.notifications, action.payload],
       };
 
-    case 'CLEAR_NOTIFICATION':
+    case ACTION_TYPES.CLEAR_NOTIFICATION:
       return {
         ...state,
         notifications: state.notifications.filter(n => n.id !== action.payload),
@@ -269,70 +299,70 @@ export function useDebateSocket() {
 
     // Connection events
     socket.on('connectionEstablished', (data) => {
-      dispatch({ type: 'CONNECTION_ESTABLISHED', payload: data });
+      dispatch({ type: ACTION_TYPES.CONNECTION_ESTABLISHED, payload: data });
     });
 
     // Debate lifecycle events
     socket.on('debateStarted', () => {
-      dispatch({ type: 'DEBATE_STARTED' });
+      dispatch({ type: ACTION_TYPES.DEBATE_STARTED });
     });
 
     socket.on('collectingClarifications', () => {
-      dispatch({ type: 'COLLECTING_CLARIFICATIONS' });
+      dispatch({ type: ACTION_TYPES.COLLECTING_CLARIFICATIONS });
     });
 
     socket.on('clarificationsRequired', (data) => {
-      dispatch({ type: 'CLARIFICATIONS_REQUIRED', payload: data });
+      dispatch({ type: ACTION_TYPES.CLARIFICATIONS_REQUIRED, payload: data });
     });
 
     socket.on('clarificationsSubmitted', () => {
-      dispatch({ type: 'CLARIFICATIONS_SUBMITTED' });
+      dispatch({ type: ACTION_TYPES.CLARIFICATIONS_SUBMITTED });
     });
 
     // Progress events
     socket.on('roundStart', (data) => {
-      dispatch({ type: 'ROUND_START', payload: data });
+      dispatch({ type: ACTION_TYPES.ROUND_START, payload: data });
     });
 
     socket.on('phaseStart', (data) => {
-      dispatch({ type: 'PHASE_START', payload: data });
+      dispatch({ type: ACTION_TYPES.PHASE_START, payload: data });
     });
 
     socket.on('agentStart', (data) => {
-      dispatch({ type: 'AGENT_START', payload: data });
+      dispatch({ type: ACTION_TYPES.AGENT_START, payload: data });
     });
 
     socket.on('agentComplete', (data) => {
-      dispatch({ type: 'AGENT_COMPLETE', payload: data });
+      dispatch({ type: ACTION_TYPES.AGENT_COMPLETE, payload: data });
     });
 
     socket.on('phaseComplete', (data) => {
-      dispatch({ type: 'PHASE_COMPLETE', payload: data });
+      dispatch({ type: ACTION_TYPES.PHASE_COMPLETE, payload: data });
     });
 
     socket.on('synthesisStart', () => {
-      dispatch({ type: 'SYNTHESIS_START' });
+      dispatch({ type: ACTION_TYPES.SYNTHESIS_START });
     });
 
     socket.on('synthesisComplete', () => {
-      dispatch({ type: 'SYNTHESIS_COMPLETE' });
+      dispatch({ type: ACTION_TYPES.SYNTHESIS_COMPLETE });
     });
 
     socket.on('debateComplete', (data) => {
-      dispatch({ type: 'DEBATE_COMPLETE', payload: data });
+      dispatch({ type: ACTION_TYPES.DEBATE_COMPLETE, payload: data });
     });
 
     // Error events
     socket.on('error', (data) => {
-      dispatch({ type: 'ERROR', payload: data });
+      dispatch({ type: ACTION_TYPES.ERROR, payload: data });
     });
 
     socket.on('warning', (data) => {
-      dispatch({ type: 'WARNING', payload: data });
+      dispatch({ type: ACTION_TYPES.WARNING, payload: data });
     });
 
     socket.on('debateCancelled', () => {
-      dispatch({ type: 'DEBATE_CANCELLED' });
+      dispatch({ type: ACTION_TYPES.DEBATE_CANCELLED });
     });
 
     return () => {
@@ -341,21 +371,26 @@ export function useDebateSocket() {
   }, []);
 
   const setProblem = useCallback((problem: string) => {
-    dispatch({ type: 'SET_PROBLEM', payload: problem });
+    dispatch({ type: ACTION_TYPES.SET_PROBLEM, payload: problem });
+  }, []);
+
+  const setRounds = useCallback((rounds: number) => {
+    dispatch({ type: ACTION_TYPES.SET_ROUNDS, payload: rounds });
   }, []);
 
   const toggleClarifications = useCallback(() => {
-    dispatch({ type: 'TOGGLE_CLARIFICATIONS' });
+    dispatch({ type: ACTION_TYPES.TOGGLE_CLARIFICATIONS });
   }, []);
 
   const startDebate = useCallback((problem: string) => {
     if (!problem.trim()) return;
-    dispatch({ type: 'SET_PROBLEM', payload: problem });
+    dispatch({ type: ACTION_TYPES.SET_PROBLEM, payload: problem });
     socketRef.current?.emit('startDebate', {
       problem: problem.trim(),
       clarificationsEnabled: state.clarificationsEnabled,
+      rounds: state.rounds,
     });
-  }, [state.clarificationsEnabled]);
+  }, [state.clarificationsEnabled, state.rounds]);
 
   const submitClarifications = useCallback((answers: Record<string, string>) => {
     socketRef.current?.emit('submitClarifications', { answers });
@@ -366,12 +401,13 @@ export function useDebateSocket() {
   }, []);
 
   const clearNotification = useCallback((id: string) => {
-    dispatch({ type: 'CLEAR_NOTIFICATION', payload: id });
+    dispatch({ type: ACTION_TYPES.CLEAR_NOTIFICATION, payload: id });
   }, []);
 
   return {
     state,
     setProblem,
+    setRounds,
     toggleClarifications,
     startDebate,
     submitClarifications,

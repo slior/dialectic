@@ -12,6 +12,7 @@ export default function Dashboard() {
   const {
     state,
     setProblem,
+    setRounds,
     toggleClarifications,
     startDebate,
     submitClarifications,
@@ -49,17 +50,38 @@ export default function Dashboard() {
               disabled={state.isRunning}
             />
 
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-text-secondary">Number of Rounds</label>
                 <input
-                  type="checkbox"
-                  checked={state.clarificationsEnabled}
-                  onChange={toggleClarifications}
+                  type="number"
+                  min="1"
+                  value={state.rounds}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value, 10);
+                    if (!isNaN(value) && value >= 1) {
+                      setRounds(value);
+                    }
+                  }}
                   disabled={state.isRunning}
-                  className="w-4 h-4 rounded border-border bg-tertiary checked:bg-accent-cyan"
+                  className="w-20 px-2 py-1 bg-tertiary border border-border rounded text-sm text-text-primary
+                    focus:border-accent-cyan focus:outline-none
+                    disabled:opacity-50 disabled:cursor-not-allowed"
                 />
-                Enable Clarifications
-              </label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={state.clarificationsEnabled}
+                    onChange={toggleClarifications}
+                    disabled={state.isRunning}
+                    className="w-4 h-4 rounded border-border bg-tertiary checked:bg-accent-cyan"
+                  />
+                  Enable Clarifications
+                </label>
+              </div>
             </div>
 
             {showClarifications && state.clarificationQuestions && (

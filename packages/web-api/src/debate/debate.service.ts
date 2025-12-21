@@ -139,17 +139,25 @@ export class DebateService {
   async runDebate(
     problem: string,
     hooks?: OrchestratorHooks,
-    clarifications?: AgentClarifications[]
+    clarifications?: AgentClarifications[],
+    rounds?: number
   ): Promise<DebateResult> {
     const config = this.getDefaultConfig();
-    const agents = this.buildAgents(config.agents, config.debate.summarization!);
-    const judge = this.buildJudge(config.judge, config.debate.summarization!);
+    
+    // Override rounds if provided
+    const debateConfig: DebateConfig = {
+      ...config.debate,
+      rounds: rounds ?? config.debate.rounds,
+    };
+    
+    const agents = this.buildAgents(config.agents, debateConfig.summarization!);
+    const judge = this.buildJudge(config.judge, debateConfig.summarization!);
 
     const orchestrator = new DebateOrchestrator(
       agents,
       judge,
       this.stateManager,
-      config.debate,
+      debateConfig,
       hooks
     );
 
