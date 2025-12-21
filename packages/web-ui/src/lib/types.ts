@@ -89,26 +89,50 @@ export interface NotificationMessage {
   timestamp: Date;
 }
 
+export const ACTION_TYPES = {
+  SET_PROBLEM: 'SET_PROBLEM',
+  SET_ROUNDS: 'SET_ROUNDS',
+  TOGGLE_CLARIFICATIONS: 'TOGGLE_CLARIFICATIONS',
+  DEBATE_STARTED: 'DEBATE_STARTED',
+  COLLECTING_CLARIFICATIONS: 'COLLECTING_CLARIFICATIONS',
+  CLARIFICATIONS_REQUIRED: 'CLARIFICATIONS_REQUIRED',
+  CLARIFICATIONS_SUBMITTED: 'CLARIFICATIONS_SUBMITTED',
+  CONNECTION_ESTABLISHED: 'CONNECTION_ESTABLISHED',
+  ROUND_START: 'ROUND_START',
+  PHASE_START: 'PHASE_START',
+  AGENT_START: 'AGENT_START',
+  AGENT_COMPLETE: 'AGENT_COMPLETE',
+  PHASE_COMPLETE: 'PHASE_COMPLETE',
+  SYNTHESIS_START: 'SYNTHESIS_START',
+  SYNTHESIS_COMPLETE: 'SYNTHESIS_COMPLETE',
+  DEBATE_COMPLETE: 'DEBATE_COMPLETE',
+  ERROR: 'ERROR',
+  WARNING: 'WARNING',
+  DEBATE_CANCELLED: 'DEBATE_CANCELLED',
+  ADD_NOTIFICATION: 'ADD_NOTIFICATION',
+  CLEAR_NOTIFICATION: 'CLEAR_NOTIFICATION',
+} as const;
+
 export type DebateAction =
-  | { type: 'SET_PROBLEM'; payload: string }
-  | { type: 'SET_ROUNDS'; payload: number }
-  | { type: 'TOGGLE_CLARIFICATIONS' }
-  | { type: 'DEBATE_STARTED' }
-  | { type: 'COLLECTING_CLARIFICATIONS' }
-  | { type: 'CLARIFICATIONS_REQUIRED'; payload: { questions: AgentClarifications[] } }
-  | { type: 'CLARIFICATIONS_SUBMITTED' }
-  | { type: 'CONNECTION_ESTABLISHED'; payload: { agents: AgentConfig[]; judge: AgentConfig } }
-  | { type: 'ROUND_START'; payload: { round: number; total: number } }
-  | { type: 'PHASE_START'; payload: { round: number; phase: ContributionType; expectedCount: number } }
-  | { type: 'AGENT_START'; payload: { agentName: string; activity: string } }
-  | { type: 'AGENT_COMPLETE'; payload: { agentName: string; activity: string } }
-  | { type: 'PHASE_COMPLETE'; payload: { round: number; phase: ContributionType } }
-  | { type: 'SYNTHESIS_START' }
-  | { type: 'SYNTHESIS_COMPLETE' }
-  | { type: 'DEBATE_COMPLETE'; payload: DebateResult }
-  | { type: 'ERROR'; payload: { message: string } }
-  | { type: 'WARNING'; payload: { message: string } }
-  | { type: 'DEBATE_CANCELLED' }
-  | { type: 'ADD_NOTIFICATION'; payload: NotificationMessage }
-  | { type: 'CLEAR_NOTIFICATION'; payload: string };
+  | { type: typeof ACTION_TYPES.SET_PROBLEM; payload: string }
+  | { type: typeof ACTION_TYPES.SET_ROUNDS; payload: number }
+  | { type: typeof ACTION_TYPES.TOGGLE_CLARIFICATIONS }
+  | { type: typeof ACTION_TYPES.DEBATE_STARTED }
+  | { type: typeof ACTION_TYPES.COLLECTING_CLARIFICATIONS }
+  | { type: typeof ACTION_TYPES.CLARIFICATIONS_REQUIRED; payload: { questions: AgentClarifications[] } }
+  | { type: typeof ACTION_TYPES.CLARIFICATIONS_SUBMITTED }
+  | { type: typeof ACTION_TYPES.CONNECTION_ESTABLISHED; payload: { agents: AgentConfig[]; judge: AgentConfig } }
+  | { type: typeof ACTION_TYPES.ROUND_START; payload: { round: number; total: number } }
+  | { type: typeof ACTION_TYPES.PHASE_START; payload: { round: number; phase: ContributionType; expectedCount: number } }
+  | { type: typeof ACTION_TYPES.AGENT_START; payload: { agentName: string; activity: string } }
+  | { type: typeof ACTION_TYPES.AGENT_COMPLETE; payload: { agentName: string; activity: string } }
+  | { type: typeof ACTION_TYPES.PHASE_COMPLETE; payload: { round: number; phase: ContributionType } }
+  | { type: typeof ACTION_TYPES.SYNTHESIS_START }
+  | { type: typeof ACTION_TYPES.SYNTHESIS_COMPLETE }
+  | { type: typeof ACTION_TYPES.DEBATE_COMPLETE; payload: DebateResult }
+  | { type: typeof ACTION_TYPES.ERROR; payload: { message: string } }
+  | { type: typeof ACTION_TYPES.WARNING; payload: { message: string } }
+  | { type: typeof ACTION_TYPES.DEBATE_CANCELLED }
+  | { type: typeof ACTION_TYPES.ADD_NOTIFICATION; payload: NotificationMessage }
+  | { type: typeof ACTION_TYPES.CLEAR_NOTIFICATION; payload: string };
 
