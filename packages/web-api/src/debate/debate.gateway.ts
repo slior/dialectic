@@ -8,7 +8,16 @@ import {
 } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
 import { DebateService, OrchestratorHooks } from './debate.service';
-import { AgentClarifications, DebateResult, ContributionType, Contribution } from '@dialectic/core';
+import {
+  AgentClarifications,
+  DebateResult,
+  ContributionType,
+  Contribution,
+  CONTRIBUTION_TYPES,
+  logInfo,
+  logSuccess,
+  logWarning,
+} from '@dialectic/core';
 
 interface StartDebateDto {
   problem: string;
@@ -34,6 +43,8 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private currentProblem = '';
   private pendingClarifications: AgentClarifications[] = [];
   private connectedClients: Set<string> = new Set();
+  private currentRound = 0;
+  private totalRounds = 0;
 
   constructor(private readonly debateService: DebateService) {}
 
@@ -60,11 +71,13 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket
   ) {
     if (this.debateInProgress) {
+      logWarning('A debate is already in progress');
       client.emit('error', { message: 'A debate is already in progress' });
       return;
     }
 
     if (!dto.problem || dto.problem.trim().length === 0) {
+      logWarning('Problem description is required');
       client.emit('error', { message: 'Problem description is required' });
       return;
     }
@@ -72,6 +85,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.debateInProgress = true;
     this.currentProblem = dto.problem.trim();
     
+    logInfo('Debate started');
     client.emit('debateStarted', { problem: this.currentProblem });
 
     // If clarifications enabled, collect questions first
@@ -87,6 +101,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
         // No questions generated, proceed with debate
       } catch (error: any) {
+        logWarning(`Failed to collect clarifications: ${error.message}`);
         client.emit('warning', { message: `Failed to collect clarifications: ${error.message}` });
         // Continue with debate without clarifications
       }
@@ -102,6 +117,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket
   ) {
     if (!this.debateInProgress) {
+      logWarning('No debate in progress');
       client.emit('error', { message: 'No debate in progress' });
       return;
     }
@@ -149,8 +165,10 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
         clarifications
       );
 
+      logSuccess('Debate completed');
       client.emit('debateComplete', this.formatDebateResult(result));
     } catch (error: any) {
+      logWarning(`Debate failed: ${error.message}`);
       client.emit('error', { message: `Debate failed: ${error.message}` });
     } finally {
       this.resetDebateState();
@@ -158,38 +176,59 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
-   * Creates orchestrator hooks that emit WebSocket events.
+   * Creates orchestrator hooks that emit WebSocket events and log to console.
    */
   private createHooks(client: Socket): OrchestratorHooks {
     return {
       onRoundStart: (round: number, total: number) => {
+        this.currentRound = round;
+        this.totalRounds = total;
+        logInfo(`Round ${round}/${total} starting`);
         client.emit('roundStart', { round, total });
       },
       onPhaseStart: (round: number, phase: ContributionType, count: number) => {
+        const phaseLabel = this.getPhaseLabel(phase);
+        const message = this.formatMessageWithRound(`${phaseLabel} phase starting`, round);
+        logInfo(message);
         client.emit('phaseStart', { round, phase, expectedCount: count });
       },
       onAgentStart: (agentName: string, activity: string) => {
+        const message = this.formatMessageWithRound(`${agentName} is ${activity}...`, this.currentRound);
+        logInfo(message);
         client.emit('agentStart', { agentName, activity });
       },
       onAgentComplete: (agentName: string, activity: string) => {
+        const message = this.formatMessageWithRound(`${agentName} completed ${activity}`, this.currentRound);
+        logSuccess(message);
         client.emit('agentComplete', { agentName, activity });
       },
       onPhaseComplete: (round: number, phase: ContributionType) => {
+        const phaseLabel = this.getPhaseLabel(phase);
+        const message = this.formatMessageWithRound(`${phaseLabel} phase completed`, round);
+        logSuccess(message);
         client.emit('phaseComplete', { round, phase });
       },
       onSynthesisStart: () => {
+        logInfo('Synthesis starting');
         client.emit('synthesisStart');
       },
       onSynthesisComplete: () => {
+        logSuccess('Synthesis completed');
         client.emit('synthesisComplete');
       },
       onSummarizationStart: (agentName: string) => {
+        const message = this.formatMessageWithRound(`${agentName} is summarizing context...`, this.currentRound);
+        logInfo(message);
         client.emit('summarizationStart', { agentName });
       },
       onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
+        const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
+        logSuccess(message);
         client.emit('summarizationComplete', { agentName, beforeChars, afterChars });
       },
       onSummarizationEnd: (agentName: string) => {
+        const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
+        logSuccess(message);
         client.emit('summarizationEnd', { agentName });
       },
     };
@@ -223,6 +262,30 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.debateInProgress = false;
     this.currentProblem = '';
     this.pendingClarifications = [];
+    this.currentRound = 0;
+    this.totalRounds = 0;
+  }
+
+  /**
+   * Maps contribution type to phase label.
+   */
+  private getPhaseLabel(phase: ContributionType): string {
+    const labels: Record<ContributionType, string> = {
+      [CONTRIBUTION_TYPES.PROPOSAL]: 'Proposals',
+      [CONTRIBUTION_TYPES.CRITIQUE]: 'Critiques',
+      [CONTRIBUTION_TYPES.REFINEMENT]: 'Refinements',
+    };
+    return labels[phase];
+  }
+
+  /**
+   * Formats a message with round prefix if inside an active round.
+   */
+  private formatMessageWithRound(message: string, round: number): string {
+    if (round > 0) {
+      return `[Round ${round}] ${message}`;
+    }
+    return message;
   }
 }
 

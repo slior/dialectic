@@ -49,7 +49,7 @@ const ICON_SPACING = '  '; // Two spaces after icon
 function formatMessage(message: string, type: MessageType): string {
   const format = MESSAGE_FORMATS[type];
   const coloredIcon = format.color(format.icon);
-  return `${coloredIcon}${ICON_SPACING}${message}\n`;
+  return `${coloredIcon}${ICON_SPACING}${message}`;
 }
 
 /**
@@ -60,7 +60,7 @@ function formatMessage(message: string, type: MessageType): string {
  */
 export function logInfo(message: string): void {
   const formatted = formatMessage(message, MessageType.INFO);
-  process.stderr.write(formatted);
+  console.error(formatted);
 }
 
 /**
@@ -71,7 +71,7 @@ export function logInfo(message: string): void {
  */
 export function logSuccess(message: string): void {
   const formatted = formatMessage(message, MessageType.SUCCESS);
-  process.stderr.write(formatted);
+  console.error(formatted);
 }
 
 /**
@@ -82,7 +82,7 @@ export function logSuccess(message: string): void {
  */
 export function logWarning(message: string): void {
   const formatted = formatMessage(message, MessageType.WARNING);
-  process.stderr.write(formatted);
+  console.error(formatted);
 }
 
 /**

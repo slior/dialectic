@@ -58,12 +58,14 @@ const mockedLoadEnvironmentFile = loadEnvironmentFile as jest.MockedFunction<typ
 
 describe('CLI debate command', () => {
   const originalEnv = process.env;
-  let stderrSpy: jest.SpyInstance;
+  let consoleErrorSpy: jest.SpyInstance;
+  let stderrWriteSpy: jest.SpyInstance;
   let stdoutSpy: jest.SpyInstance;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     mockedLoadEnvironmentFile.mockClear();
     mockedLoadEnvironmentFile.mockReturnValue(undefined);
@@ -71,14 +73,15 @@ describe('CLI debate command', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    stderrSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+    stderrWriteSpy.mockRestore();
     stdoutSpy.mockRestore();
   });
 
   it('exits with config error when OPENAI_API_KEY is missing', async () => {
     delete process.env.OPENAI_API_KEY;
     await expect(runCli(['debate', 'Design a system'])).rejects.toHaveProperty('code', EXIT_CONFIG_ERROR);
-    expect(stderrSpy).toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
   it('prints only minimal solution to stdout (non-verbose)', async () => {
@@ -124,7 +127,7 @@ describe('CLI debate command', () => {
     
     await expect(runCli(['debate']))
       .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
-    expect(stderrSpy).toHaveBeenCalledWith(
+    expect(stderrWriteSpy).toHaveBeenCalledWith(
       expect.stringContaining('Invalid arguments: problem is required (provide <problem> or --problemDescription)')
     );
   });
@@ -189,11 +192,11 @@ describe('Configuration loading', () => {
     }
     
     try {
-      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const cfg = await loadConfig(undefined);
       expect(cfg).toBeDefined();
-      expect(stderrSpy).toHaveBeenCalled();
-      stderrSpy.mockRestore();
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
     } finally {
       // Restore config file if it existed
       if (configExists && configBackup) {
@@ -215,7 +218,7 @@ describe('Summarization configuration loading', () => {
   });
 
   it('should load default summarization config when not specified', async () => {
-    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const cfg = await loadConfig(undefined);
     
     expect(cfg.debate?.summarization).toBeDefined();
@@ -224,7 +227,7 @@ describe('Summarization configuration loading', () => {
     expect(cfg.debate?.summarization?.maxLength).toBe(DEFAULT_SUMMARIZATION_MAX_LENGTH);
     expect(cfg.debate?.summarization?.method).toBe(DEFAULT_SUMMARIZATION_METHOD);
     
-    stderrSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 
   it('should load custom summarization config from file', async () => {
@@ -375,13 +378,13 @@ describe('Summarization configuration loading', () => {
 });
 
 describe('CLI clarifications phase', () => {
-  let stderrSpy: jest.SpyInstance;
+  let consoleErrorSpy: jest.SpyInstance;
   let stdoutSpy: jest.SpyInstance;
   const originalEnv = process.env;
 
   beforeEach(() => {
     process.env = { ...originalEnv, OPENAI_API_KEY: 'test' };
-    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true as any);
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true as any);
     mockedLoadEnvironmentFile.mockClear();
     mockedLoadEnvironmentFile.mockReturnValue(undefined);
@@ -389,7 +392,7 @@ describe('CLI clarifications phase', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    stderrSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
     stdoutSpy.mockRestore();
     jest.restoreAllMocks();
     jest.resetModules();
@@ -443,7 +446,7 @@ describe('CLI clarifications phase', () => {
 
     await runCli(['debate', 'Design W', '--clarify']);
     expect(spy).toHaveBeenCalled();
-    const stderr = (stderrSpy.mock.calls.map(args => String(args[0])).join(''));
+    const stderr = (consoleErrorSpy.mock.calls.map(args => String(args[0])).join(''));
     expect(stderr).toMatch(/limited to 5/);
   });
 });

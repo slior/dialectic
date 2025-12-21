@@ -494,18 +494,18 @@ describe('RoleBasedAgent - prepareContext()', () => {
       }]
     };
 
-    // Mock stderr.write to verify warning is logged (changed from console.warn)
-    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    // Mock console.error to verify warning is logged
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     const result = await agent.prepareContext(context, 1);
 
     expect(result.context).toEqual(context);
     expect(result.summary).toBeUndefined();
-    expect(stderrSpy).toHaveBeenCalledWith(
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Summarization failed')
     );
 
-    stderrSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 });
 

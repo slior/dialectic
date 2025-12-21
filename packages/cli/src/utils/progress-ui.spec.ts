@@ -1,15 +1,14 @@
 import { DebateProgressUI } from './progress-ui';
 import { MessageType, MESSAGE_ICONS, CONTRIBUTION_TYPES } from '@dialectic/core';
 
-// Mock process.stderr.write to capture output
+// Mock console.error to capture output
 let stderrOutput: string[] = [];
 
 beforeEach(() => {
   stderrOutput = [];
-  jest.spyOn(process.stderr, 'write').mockImplementation((...args: unknown[]) => {
+  jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
     const text = args[0] as string;
     stderrOutput.push(text);
-    return true;
   });
 });
 

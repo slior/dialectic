@@ -93,14 +93,14 @@ describe('buildToolRegistry', () => {
   });
 
   describe('Unrecognized Tools', () => {
-    let stderrSpy: jest.SpyInstance;
+    let consoleErrorSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     afterEach(() => {
-      stderrSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
     });
 
     it('should warn and skip tool with empty string name', () => {
@@ -113,7 +113,7 @@ describe('buildToolRegistry', () => {
       const registry = buildToolRegistry(agentConfig);
       
       expect(registry.hasTools()).toBe(false);
-      expect(stderrSpy).toHaveBeenCalledWith(
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Invalid tool name (empty string) configured for agent "test-agent". Skipping.')
       );
     });
@@ -129,7 +129,7 @@ describe('buildToolRegistry', () => {
       
       expect(registry.hasTools()).toBe(false);
       expect(registry.has('unknown_tool')).toBe(false);
-      expect(stderrSpy).toHaveBeenCalledWith(
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Unknown tool "unknown_tool" configured for agent "test-agent". Skipping.')
       );
     });
@@ -147,11 +147,11 @@ describe('buildToolRegistry', () => {
       const registry = buildToolRegistry(agentConfig);
       
       expect(registry.hasTools()).toBe(false);
-      expect(stderrSpy).toHaveBeenCalledTimes(2);
-      expect(stderrSpy).toHaveBeenCalledWith(
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Unknown tool "unknown_tool_1" configured for agent "test-agent". Skipping.')
       );
-      expect(stderrSpy).toHaveBeenCalledWith(
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Unknown tool "unknown_tool_2" configured for agent "test-agent". Skipping.')
       );
     });
@@ -171,7 +171,7 @@ describe('buildToolRegistry', () => {
       expect(registry.hasTools()).toBe(true);
       expect(registry.has('context_search')).toBe(true);
       expect(registry.has('unknown_tool')).toBe(false);
-      expect(stderrSpy).toHaveBeenCalledWith(
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Unknown tool "unknown_tool" configured for agent "test-agent". Skipping.')
       );
     });

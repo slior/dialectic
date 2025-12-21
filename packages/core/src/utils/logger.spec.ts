@@ -3,18 +3,18 @@ import { Logger } from '@dialectic/core';
 describe('Logger', () => {
   it('prints minimal messages in non-verbose mode', () => {
     const logger = new Logger(false);
-    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(((() => {}) as any));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     logger.info('hello');
-    expect(stderrSpy).toHaveBeenCalled();
-    stderrSpy.mockRestore();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 
   it('prints additional details in verbose mode', () => {
     const logger = new Logger(true);
-    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(((() => {}) as any));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     logger.debug('details');
-    expect(stderrSpy).toHaveBeenCalled();
-    stderrSpy.mockRestore();
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 });
 
