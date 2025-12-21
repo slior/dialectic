@@ -8,11 +8,30 @@ interface ClarificationsPanelProps {
   onSubmit: (answers: Record<string, string>) => void;
 }
 
+/**
+ * Creates a composite key from agent ID and item ID to ensure uniqueness
+ * across multiple agent groups.
+ */
+function getCompositeKey(agentId: string, itemId: string): string {
+  return `${agentId}-${itemId}`;
+}
+
 export default function ClarificationsPanel({ questions, onSubmit }: ClarificationsPanelProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   const handleSubmit = () => {
-    onSubmit(answers);
+    // Transform composite keys (agentId-itemId) back to simple itemId format
+    // that the backend expects
+    const transformedAnswers: Record<string, string> = {};
+    questions.forEach(group => {
+      group.items.forEach(item => {
+        const compositeKey = getCompositeKey(group.agentId, item.id);
+        if (answers[compositeKey] !== undefined) {
+          transformedAnswers[item.id] = answers[compositeKey];
+        }
+      });
+    });
+    onSubmit(transformedAnswers);
   };
 
   const hasQuestions = questions.some(group => group.items.length > 0);
@@ -43,21 +62,24 @@ export default function ClarificationsPanel({ questions, onSubmit }: Clarificati
               <div className="text-accent-blue text-sm font-medium">
                 [{group.agentName}] <span className="text-text-muted">({group.role})</span>
               </div>
-              {group.items.map((item) => (
-                <div key={item.id} className="ml-2 space-y-1">
-                  <div className="text-text-secondary text-sm">{item.question}</div>
-                  <input
-                    type="text"
-                    value={answers[item.id] || ''}
-                    onChange={(e) =>
-                      setAnswers({ ...answers, [item.id]: e.target.value })
-                    }
-                    placeholder="Your answer (or leave empty to skip)"
-                    className="w-full bg-tertiary border border-border rounded px-2 py-1 text-sm
-                      placeholder:text-text-muted focus:border-accent-cyan focus:outline-none"
-                  />
-                </div>
-              ))}
+              {group.items.map((item) => {
+                const compositeKey = getCompositeKey(group.agentId, item.id);
+                return (
+                  <div key={compositeKey} className="ml-2 space-y-1">
+                    <div className="text-text-secondary text-sm">{item.question}</div>
+                    <input
+                      type="text"
+                      value={answers[compositeKey] || ''}
+                      onChange={(e) =>
+                        setAnswers({ ...answers, [compositeKey]: e.target.value })
+                      }
+                      placeholder="Your answer (or leave empty to skip)"
+                      className="w-full bg-tertiary border border-border rounded px-2 py-1 text-sm
+                        placeholder:text-text-muted focus:border-accent-cyan focus:outline-none"
+                    />
+                  </div>
+                );
+              })}
             </div>
           );
         })}
