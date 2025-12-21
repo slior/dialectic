@@ -7,7 +7,10 @@
 - [Overview](#overview)
 - [Quickstart](#quickstart)
   - [Setup](#setup)
-  - [Basic Command](#basic-command)
+  - [Running a Debate](#running-a-debate)
+- [Interfaces](#interfaces)
+  - [Command-Line Interface (CLI)](#command-line-interface-cli)
+  - [Web User Interface](#web-user-interface)
 - [Commands](#commands)
   - [Debate Command](#debate-command)
   - [Evaluator Command](#evaluator-command)
@@ -16,7 +19,11 @@
 
 ## Overview
 
-Dialectic is a CLI tool that orchestrates multi-agent debates to solve software design problems. Multiple AI agents with different perspectives (architecture, performance, security) debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
+Dialectic is a multi-agent debate system that helps solve software design problems. Multiple AI agents with different perspectives (architecture, performance, security, simplicity) debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
+
+Dialectic can be used via:
+- **CLI**: Traditional command-line interface for scripting and automation
+- **Web UI**: Interactive dashboard with real-time debate visualization
 
 ## Quickstart
 
@@ -24,51 +31,106 @@ Dialectic is a CLI tool that orchestrates multi-agent debates to solve software 
 
 **Requirements:**
 - **Node.js** >= 18
-- **API Key**: Set `OPENAI_API_KEY` (for OpenAI) or `OPENROUTER_API_KEY` (for OpenRouter) in a `.env` file or as an environment variable
+- **API Key**: Set `OPENAI_API_KEY` (for OpenAI) or `OPENROUTER_API_KEY` (for OpenRouter) in a `.env` file
 
 **Installation:**
 
-For end users (when published to npm):
 ```bash
-npm install -g dialectic
-```
+# Clone the repository
+git clone https://github.com/slior/dialectic.git
+cd dialectic
 
-For local development:
-```bash
 # Install dependencies
 npm install
 
-# Build the project
+# Build all packages
 npm run build
-
-# Link the dialectic command globally
-npm link
 ```
 
 **API Key Setup:**
 
-Create a `.env` file in your project directory:
+Create a `.env` file in the project root:
 ```bash
 OPENAI_API_KEY=sk-your-key-here
 # OR
 OPENROUTER_API_KEY=sk-or-your-key-here
 ```
 
-### Basic Command
+### Running a Debate
 
-Run a debate with a problem statement:
+**Option 1: CLI (Command Line)**
+
 ```bash
-dialectic debate "Design a rate limiting system"
+# Development mode
+npm run dev:cli -- debate "Design a rate limiting system"
+
+# With options
+npm run dev:cli -- debate "Design a caching strategy" --rounds 3 --verbose
 ```
 
-Or use a problem description file:
+**Option 2: Web UI (Dashboard)**
+
 ```bash
-dialectic debate --problemDescription problem.txt
+# Start both API and UI servers
+npm run dev:web
+
+# Open http://localhost:3000 in your browser
 ```
+
+For detailed instructions on running the different packages, see [docs/operation.md](docs/operation.md).
+
+## Interfaces
+
+### Command-Line Interface (CLI)
+
+The CLI provides full control over debates through command-line options:
+
+```bash
+# Simple debate
+npm run dev:cli -- debate "Design a secure authentication system"
+
+# Debate with specific agents and output
+npm run dev:cli -- debate "Design a microservices architecture" \
+  --agents architect,performance,security \
+  --rounds 5 \
+  --output solution.txt \
+  --report report.md \
+  --verbose
+
+# From a problem file
+npm run dev:cli -- debate --problemDescription problem.txt
+
+# With interactive clarifications
+npm run dev:cli -- debate "Design a distributed cache" --clarify
+```
+
+### Web User Interface
+
+The Web UI provides an interactive dashboard for running debates:
+
+- **Real-time Updates**: Watch agents propose, critique, and refine in real-time
+- **Agent Cards**: See each agent's activity and outputs
+- **Status Tracking**: Monitor current round, phase, and progress
+- **Notifications**: View warnings, errors, and status messages
+- **Solution Panel**: Access the final synthesized solution
+
+Start the Web UI:
+```bash
+# Start both servers with one command
+npm run dev:web
+
+# Or start separately:
+npm run dev:api  # API server (port 3001)
+npm run dev:ui   # UI server (port 3000)
+```
+
+Then open http://localhost:3000 in your browser.
+
+For comprehensive details on running the web components, including production builds and configuration options, see [AGENTS.md](AGENTS.md#web-components).
 
 ## Commands
 
-Dialectic provides three main commands:
+Dialectic CLI provides three main commands:
 
 - **`debate`** - Orchestrate a multi-agent debate to solve a design problem
 - **`eval`** - Evaluate a completed debate using evaluator agents
@@ -78,15 +140,27 @@ For detailed command documentation, including all options and examples, see [doc
 
 ### Debate Command
 
-The `debate` command orchestrates a multi-agent debate to solve a software design problem. You provide a problem statement (either inline or from a file), and multiple AI agents with different perspectives debate the problem through structured rounds. Each round consists of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent. The command supports various options for customizing agent roles, number of rounds, output format, and includes features like interactive clarifications and detailed reporting.
+The `debate` command orchestrates a multi-agent debate to solve a software design problem. You provide a problem statement (either inline or from a file), and multiple AI agents with different perspectives debate the problem through structured rounds. Each round consists of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
+
+```bash
+npm run dev:cli -- debate "Design a rate limiting system" --rounds 3 --verbose
+```
 
 ### Evaluator Command
 
-The `eval` command evaluates a completed debate using evaluator agents. This allows you to assess the quality and effectiveness of a debate's outcome by running specialized evaluator agents that analyze the debate process and final solution. The evaluators provide structured feedback and scores across multiple dimensions, helping you understand the strengths and weaknesses of the debate outcome.
+The `eval` command evaluates a completed debate using evaluator agents. This allows you to assess the quality and effectiveness of a debate's outcome by running specialized evaluator agents that analyze the debate process and final solution.
+
+```bash
+npm run dev:cli -- eval --config eval-config.json --debate ./debates/my-debate.json
+```
 
 ### Report Command
 
-The `report` command generates a comprehensive markdown report from a saved debate state JSON file. This is useful when you want to create a detailed report from a previously completed debate without re-running it. The report includes the full debate transcript, agent contributions, clarifications (if any), and the final synthesis, formatted as a readable markdown document.
+The `report` command generates a comprehensive markdown report from a saved debate state JSON file. This is useful for creating detailed reports from previously completed debates.
+
+```bash
+npm run dev:cli -- report --debate ./debates/my-debate.json --output report.md
+```
 
 ## Configuration
 
@@ -96,7 +170,11 @@ Debate behavior is configured via a JSON file (default: `./debate-config.json`).
 - Agent and judge configuration (models, temperatures, custom prompts)
 - Debate settings (rounds, timeouts, synthesis methods)
 - Context summarization to manage debate history length
-- Tool configuration for agents to interact with external functionality during debates
-- Observability tracing via Langfuse (optional) - enables monitoring and analysis of agent behavior, LLM calls, and tool executions
+- Tool configuration for agents to interact with external functionality
+- Observability tracing via Langfuse (optional)
 
-For detailed configuration documentation, including all fields, validation rules, tracing setup, and examples, see [docs/configuration.md](docs/configuration.md). For information about available tools and how to configure them, see [docs/tools.md](docs/tools.md).
+For detailed configuration documentation, see [docs/configuration.md](docs/configuration.md).
+
+For information about available tools, see [docs/tools.md](docs/tools.md).
+
+For running and deployment instructions, see [docs/operation.md](docs/operation.md).

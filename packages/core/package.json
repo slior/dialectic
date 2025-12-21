@@ -1,0 +1,44 @@
+{
+  "name": "@dialectic/core",
+  "version": "0.4.0",
+  "description": "Core debate orchestration library for Dialectic",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "debate",
+    "multi-agent",
+    "llm",
+    "orchestration"
+  ],
+  "author": "Lior Schejter (https://github.com/slior)",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "langfuse": "^3.38.6",
+    "openai": "^4.52.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^24.6.2",
+    "jest": "^29.7.0",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  }
+}
+

@@ -1,25 +1,30 @@
 {
-  "name": "dialectic",
+  "name": "dialectic-monorepo",
   "version": "0.4.0",
-  "description": "",
-  "main": "dist/cli/index.js",
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+  "private": true,
+  "description": "Dialectic - Multi-agent debate system for software design",
+  "workspaces": [
+    "packages/*"
   ],
-  "bin": {
-    "dialectic": "./dist/cli/index.js"
-  },
   "scripts": {
-    "build": "tsc",
-    "dev": "ts-node src/cli/index.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "prepare": "npm run build"
+    "build": "nx run-many -t build",
+    "build:core": "npm run build -w @dialectic/core",
+    "build:cli": "npm run build -w dialectic",
+    "build:api": "npm run build -w @dialectic/web-api",
+    "build:ui": "npm run build -w @dialectic/web-ui",
+    "dev:cli": "npm run dev -w dialectic",
+    "dev:api": "npm run start:dev -w @dialectic/web-api",
+    "dev:ui": "npm run dev -w @dialectic/web-ui",
+    "dev:web": "concurrently \"npm run dev:api\" \"npm run dev:ui\"",
+    "test": "nx run-many -t test",
+    "test:coverage": "npm run test:coverage -w @dialectic/core && npm run test:coverage -w dialectic",
+    "test:core": "npm run test -w @dialectic/core",
+    "test:core:coverage": "npm run test:coverage -w @dialectic/core",
+    "test:cli": "npm run test -w dialectic",
+    "test:cli:coverage": "npm run test:coverage -w dialectic",
+    "lint": "nx run-many -t lint",
+    "clean:cache": "nx reset"
   },
-  "keywords": [],
   "repository": {
     "type": "git",
     "url": "https://github.com/slior/dialectic.git"
@@ -33,20 +38,8 @@
   "engines": {
     "node": ">=18"
   },
-  "dependencies": {
-    "chalk": "^4.1.2",
-    "commander": "^11.0.0",
-    "dotenv": "^16.3.1",
-    "langfuse": "^3.38.6",
-    "openai": "^4.52.0"
-  },
   "devDependencies": {
-    "@types/jest": "^29.5.12",
-    "@types/node": "^24.6.2",
-    "jest": "^29.7.0",
-    "nodemon": "^3.1.10",
-    "ts-jest": "^29.2.5",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "concurrently": "^8.2.2",
+    "nx": "^19.8.0"
   }
 }

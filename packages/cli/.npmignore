@@ -1,0 +1,49 @@
+# Source files (only dist should be published)
+src/
+tsconfig.json
+tsconfig.tsbuildinfo
+jest.config.ts
+project.json
+
+# Test files
+**/*.spec.ts
+**/*.spec.js
+**/*.spec.d.ts
+**/__fixtures__/
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Development files
+debates/
+*.log
+
+# Build artifacts that shouldn't be published
+*.map
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+
+# Git files
+.git/
+.gitignore
+
+# Documentation (only README.md should be published)
+docs/
+
+# Other monorepo files
+node_modules/
+package-lock.json
+

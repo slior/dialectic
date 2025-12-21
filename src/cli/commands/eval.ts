@@ -60,13 +60,19 @@ function buildClarificationsMarkdown(state: DebateState): string {
   if (!state.clarifications || state.clarifications.length === 0) return '``````\n``````';
   let out = '';
   for (const group of state.clarifications) {
+    if (!group || !group.agentName || !group.role || !group.items || group.items.length === 0) {
+      continue;
+    }
     out += `### ${group.agentName} (${group.role})\n`;
     for (const item of group.items) {
+      if (!item || !item.id || !item.question || item.answer === undefined) {
+        continue;
+      }
       out += `Question (${item.id}):\n\n\`\`\`text\n${item.question}\n\`\`\`\n\n`;
       out += `Answer:\n\n\`\`\`text\n${item.answer}\n\`\`\`\n\n`;
     }
   }
-  return out.trim();
+  return out.trim() || '``````\n``````';
 }
 
 /**

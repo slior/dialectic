@@ -913,7 +913,7 @@ Good code is:
 2. **Mocking:**
    - Mock external dependencies (LLM providers, file system)
    - Use Jest mocks for async operations
-   - Create mock factories for complex objects (see `tests/orchestrator.spec.ts`)
+   - Create mock factories for complex objects (see `packages/core/src/core/orchestrator.spec.ts`)
 
 3. **Test Coverage:**
    - Write tests for all public functions and methods
@@ -996,6 +996,90 @@ For integration tests that require actual API calls:
 - Mock LLM providers in unit tests
 - Use environment variables for test configuration
 - Clean up test artifacts (debate files) after tests
+
+## Web Components
+
+Dialectic includes web-based components for running debates through a browser interface. The web application consists of a NestJS API server and a Next.js frontend.
+
+### Web API
+
+The web API provides a REST API and WebSocket gateway for running debates and receiving real-time updates.
+
+**Development mode (with watch):**
+```bash
+npm run dev:api
+```
+
+**Development mode (from package directory):**
+```bash
+npm run start:dev -w @dialectic/web-api
+```
+
+**Production mode:**
+```bash
+npm run build:api
+npm run start:prod -w @dialectic/web-api
+```
+
+**Default configuration:**
+- **Port**: `3001` (configurable via `PORT` environment variable)
+- **CORS**: Enabled for `http://localhost:3000` and `http://127.0.0.1:3000`
+- **Environment**: Loads `.env` from workspace root or package directory
+
+**Access the API:**
+- API endpoint: `http://localhost:3001`
+- WebSocket endpoint: `ws://localhost:3001`
+
+### Web UI
+
+The web UI provides a browser-based interface for running debates with real-time progress updates.
+
+**Development mode:**
+```bash
+npm run dev:ui
+```
+
+**Development mode (from package directory):**
+```bash
+npm run dev -w @dialectic/web-ui
+```
+
+**Production mode:**
+```bash
+npm run build:ui
+npm run start -w @dialectic/web-ui
+```
+
+**Default configuration:**
+- **Port**: `3000` (Next.js default)
+- **API URL**: `http://localhost:3001` (configurable via `NEXT_PUBLIC_API_URL` environment variable)
+
+**Access the UI:**
+- Web interface: `http://localhost:3000`
+
+### Running Both Components
+
+**Run both API and UI concurrently:**
+```bash
+npm run dev:web
+```
+
+This command starts both the web API and web UI in development mode, allowing you to use the full web interface.
+
+**Prerequisites:**
+- Ensure `.env` file is configured with required API keys (`OPENAI_API_KEY` or `OPENROUTER_API_KEY`)
+- Both components must be running for the web UI to function properly
+- The API must start before or simultaneously with the UI
+
+**Building for production:**
+```bash
+# Build both components
+npm run build:api
+npm run build:ui
+
+# Or build all packages
+npm run build
+```
 
 ## Security Considerations
 

@@ -1,0 +1,55 @@
+{
+  "name": "dialectic",
+  "version": "0.4.0",
+  "description": "CLI tool for multi-agent debates to solve software design problems",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "dialectic": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "debate",
+    "multi-agent",
+    "llm",
+    "cli",
+    "software-design"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/slior/dialectic.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/slior/dialectic/issues"
+  },
+  "homepage": "https://github.com/slior/dialectic#readme",
+  "author": "Lior Schejter (https://github.com/slior)",
+  "license": "MIT",
+  "dependencies": {
+    "@dialectic/core": "^0.4.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^24.6.2",
+    "jest": "^29.7.0",
+    "rimraf": "^5.0.5",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
+

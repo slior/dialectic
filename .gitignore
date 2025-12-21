@@ -10,3 +10,48 @@ dist/
 
 # Environment variables (contains sensitive API keys)
 .env
+
+# TypeScript build info (for all packages)
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Build logs
+build.log
+**/build.log
+*.log
+
+# TypeScript compiler output
+tsc-output.txt
+**/tsc-output.txt
+
+# Compiled JavaScript files (should only be in dist/, not in src/)
+# These are build artifacts that shouldn't be in source control
+# Covers all packages: core, cli, web-api, etc.
+packages/*/src/**/*.js
+
+# TypeScript declaration files (generated when declaration: true)
+# These should be in dist/, but if incorrectly generated in src/, ignore them
+# Covers all packages: core, cli, web-api, etc.
+packages/*/src/**/*.d.ts
+
+# JavaScript source maps (generated when sourceMap: true)
+# These should be in dist/, but if incorrectly generated in src/, ignore them
+# Covers all packages: core, cli, web-api, etc.
+*.js.map
+**/*.js.map
+packages/*/src/**/*.js.map
+
+# TypeScript declaration source maps (generated when declarationMap: true)
+# Covers all packages: core, cli, web-api, etc.
+*.d.ts.map
+**/*.d.ts.map
+
+# Next.js (web-ui)
+.next/
+**/.next/
+next-env.d.ts
+**/next-env.d.ts
+
+# Nx cache and workspace data
+.nx/
+**/.nx/

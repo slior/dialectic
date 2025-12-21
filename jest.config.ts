@@ -3,14 +3,17 @@ import type { Config } from 'jest';
 const config: Config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/tests'],
+  roots: ['<rootDir>/packages'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
   clearMocks: true,
   collectCoverage: false,
   verbose: false,
-  moduleNameMapper: {
-    '^langfuse$': '<rootDir>/tests/__mocks__/langfuse.ts',
-  },
+  projects: ['<rootDir>/packages/core', '<rootDir>/packages/cli'],
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
+      tsconfig: 'tsconfig.json'
+    }]
+  }
 };
 
 export default config;
