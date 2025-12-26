@@ -28,8 +28,6 @@ packages/
             └── progress-ui.spec.ts         ← Test co-located with source
 ```
 
-**Note:** There is a legacy `tests/` directory at the project root containing older test files. New tests should **not** be added there. Existing tests in `tests/` are being gradually migrated to co-located structure.
-
 ### Import Patterns
 
 When writing tests, **always import from package sources**, never from the legacy root `src/` directory. The root `src/` directory is being phased out and will be removed in the future.
@@ -60,9 +58,6 @@ For CLI-specific functionality within the CLI package, use relative imports:
 import { runCli } from '../index';
 import { loadConfig } from './debate';  // Same directory
 import { DebateProgressUI } from '../utils/progress-ui';
-
-// From root tests/ directory (legacy)
-import { runCli } from '../packages/cli/src/index';
 
 ```
 

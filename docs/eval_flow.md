@@ -152,7 +152,7 @@ sequenceDiagram
 ### 1. CLI Entry Point
 
 **Function**: `runCli(argv: string[])`  
-**Location**: `src/cli/index.ts`
+**Location**: `packages/cli/src/index.ts`
 
 The entry point for the evaluation system. This function:
 - Creates a Commander program instance
@@ -169,7 +169,7 @@ The entry point for the evaluation system. This function:
 ### 2. Command Registration
 
 **Function**: `evalCommand(program: Command)`  
-**Location**: `src/cli/commands/eval.ts`
+**Location**: `packages/cli/src/commands/eval.ts`
 
 Registers the eval command and its action handler with Commander. Defines:
 - Command name: `eval`
@@ -182,7 +182,7 @@ Registers the eval command and its action handler with Commander. Defines:
 ### 3. Environment File Loading
 
 **Function**: `loadEnvironmentFile(envFilePath?: string, verbose?: boolean)`  
-**Location**: `src/utils/env-loader.ts`
+**Location**: `packages/core/src/utils/env-loader.ts`
 
 Loads environment variables from a .env file using the dotenv library.
 
@@ -199,7 +199,7 @@ Loads environment variables from a .env file using the dotenv library.
 ### 4. Evaluator Configuration Loading
 
 **Function**: `loadAndValidateEnabledAgents(configPath: string)`  
-**Location**: `src/cli/commands/eval.ts`
+**Location**: `packages/cli/src/commands/eval.ts`
 
 Loads evaluator configuration file, validates structure, and filters for enabled agents.
 
@@ -252,7 +252,7 @@ Loads evaluator configuration file, validates structure, and filters for enabled
 ### 5. Evaluator Agent Instantiation
 
 **Function**: `buildEvaluatorAgents(enabledAgents: EvaluatorConfig[], configDir: string, verbose: boolean)`  
-**Location**: `src/cli/commands/eval.ts`
+**Location**: `packages/cli/src/commands/eval.ts`
 
 Creates EvaluatorAgent instances from enabled evaluator configurations.
 
@@ -269,7 +269,7 @@ Creates EvaluatorAgent instances from enabled evaluator configurations.
 1. Loads built-in system prompt:
    - Calls `readBuiltInPrompt('eval/prompts/system.md', fallbackText)`
    - Attempts to read from `dist/eval/prompts/system.md` (runtime)
-   - Falls back to `src/eval/prompts/system.md` (tests)
+   - Falls back to `packages/core/src/eval/prompts/system.md` (tests)
    - Uses fallback text if file unavailable
 
 2. Loads built-in user prompt:
@@ -309,7 +309,7 @@ Creates EvaluatorAgent instances from enabled evaluator configurations.
 ### 6. Debate State Loading and Validation
 
 **Function**: `loadAndValidateDebateState(debatePath: string)`  
-**Location**: `src/cli/commands/eval.ts`
+**Location**: `packages/cli/src/commands/eval.ts`
 
 Loads and validates a debate state file, extracting required fields for evaluation.
 
@@ -353,7 +353,7 @@ Loads and validates a debate state file, extracting required fields for evaluati
 ### 7. Evaluation Execution
 
 **Method**: `evaluator.evaluate(inputs: EvaluatorInputs)`  
-**Location**: `src/eval/evaluator-agent.ts`
+**Location**: `packages/core/src/eval/evaluator-agent.ts`
 
 Performs the evaluation using the underlying LLM provider.
 
@@ -405,7 +405,7 @@ Performs the evaluation using the underlying LLM provider.
 
 ### 8. Parallel Evaluation Execution
 
-**Location**: `src/cli/commands/eval.ts` (action handler)
+**Location**: `packages/cli/src/commands/eval.ts` (action handler)
 
 Runs all evaluator agents in parallel and collects results.
 
@@ -438,7 +438,7 @@ Runs all evaluator agents in parallel and collects results.
 ### 9. Result Parsing and Validation
 
 **Function**: `validateAndParseEvaluatorResult(result: PromiseSettledResult<any>, agentId: string)`  
-**Location**: `src/cli/commands/eval.ts`
+**Location**: `packages/cli/src/commands/eval.ts`
 
 Validates and parses an evaluator agent's result from a Promise.allSettled outcome.
 
@@ -472,7 +472,7 @@ Validates and parses an evaluator agent's result from a Promise.allSettled outco
 
 ### 10. Score Aggregation
 
-**Location**: `src/cli/commands/eval.ts` (action handler)
+**Location**: `packages/cli/src/commands/eval.ts` (action handler)
 
 Aggregates scores from all evaluators and calculates averages.
 
@@ -528,7 +528,7 @@ For each parsed evaluation result:
 ### 11. Result Output
 
 **Function**: `writeEvaluationResults(aggregatedAverages, perAgentResults, outputPath, debatePath)`  
-**Location**: `src/cli/commands/eval.ts`
+**Location**: `packages/cli/src/commands/eval.ts`
 
 Writes evaluation results to a file or stdout in JSON, CSV, or Markdown format.
 
@@ -748,11 +748,11 @@ Complete JSON output format:
 ### Prompt File Loading
 
 **System Prompt**:
-- Default: `src/eval/prompts/system.md` (or `dist/eval/prompts/system.md` at runtime)
+- Default: `packages/core/src/eval/prompts/system.md` (or `packages/core/dist/eval/prompts/system.md` at runtime)
 - Custom: Path specified in `EvaluatorConfig.systemPromptPath`, resolved relative to config directory
 
 **User Prompt**:
-- Default: `src/eval/prompts/user.md` (or `dist/eval/prompts/user.md` at runtime)
+- Default: `packages/core/src/eval/prompts/user.md` (or `packages/core/dist/eval/prompts/user.md` at runtime)
 - Custom: Path specified in `EvaluatorConfig.userPromptPath`, resolved relative to config directory
 
 **Error Handling**:

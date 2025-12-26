@@ -61,8 +61,8 @@ Notes:
 
 ## Default Prompts
 Built-in prompts are bundled in the code and used if files are missing/invalid:
-- `src/eval/prompts/system.md`
-- `src/eval/prompts/user.md`
+- `packages/core/src/eval/prompts/system.md`
+- `packages/core/src/eval/prompts/user.md`
 
 ## Evaluator Output Contract
 Evaluators must return ONLY a JSON object with this structure:

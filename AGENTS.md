@@ -499,7 +499,7 @@ npm install
 npm run build
 ```
 
-This compiles TypeScript source files from `src/` to `dist/` with source maps and type declarations.
+This compiles TypeScript source files from `packages/*/src/` to `packages/*/dist/` with source maps and type declarations.
 
 **Development mode:**
 ```bash
@@ -515,7 +515,7 @@ Runs the CLI using `ts-node` for development without building.
 npm test
 ```
 
-Runs all test files in the `tests/` directory using Jest.
+Runs all test files in the `packages/*/src/` directories (co-located with source files) using Jest.
 
 **Run tests in watch mode:**
 ```bash
@@ -556,7 +556,7 @@ The project uses strict TypeScript settings defined in `tsconfig.json`:
 - **Strict Mode**: All strict type checking options are enabled
 - **Target**: ES2022
 - **Module**: CommonJS
-- **File Layout**: Source files in `src/`, compiled output in `dist/`
+- **File Layout**: Source files in `packages/*/src/`, compiled output in `packages/*/dist/`
 
 ### Code Style Rules
 
@@ -580,10 +580,10 @@ The project uses strict TypeScript settings defined in `tsconfig.json`:
 **Imports:**
 - Use ES6 import/export syntax
 - Group imports: external packages, then internal modules
-- Use absolute imports from `src/` when appropriate
+- Use package imports (`@dialectic/core`) or relative imports within packages when appropriate
 
 **Error Handling:**
-- Use custom error classes with exit codes (see `src/utils/exit-codes.ts`)
+- Use custom error classes with exit codes (see `packages/core/src/utils/exit-codes.ts`)
 - Include error codes in error objects: `err.code = EXIT_CONFIG_ERROR`
 - Provide clear, actionable error messages
 
@@ -886,7 +886,7 @@ Good code is:
 
 **Test Framework:** Jest with ts-jest preset
 
-**Test File Location:** Tests are located in the `tests/` directory
+**Test File Location:** Tests are co-located with source files in `packages/*/src/` directories
 
 **Test File Naming:** Test files should be named with `.spec.ts` suffix (e.g., `orchestrator.spec.ts`)
 

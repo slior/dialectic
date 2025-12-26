@@ -223,7 +223,7 @@ sequenceDiagram
 ### 1. CLI Entry Point
 
 **Function**: `runCli(argv: string[])`  
-**Location**: `src/cli/index.ts`
+**Location**: `packages/cli/src/index.ts`
 
 The entry point for the debate system. This function:
 - Creates a Commander program instance
@@ -240,7 +240,7 @@ The entry point for the debate system. This function:
 ### 2. Command Registration
 
 **Function**: `debateCommand(program: Command)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Registers the debate command and its action handler with Commander. Defines:
 - Command name and argument: `debate [problem]` (optional problem string)
@@ -253,7 +253,7 @@ Registers the debate command and its action handler with Commander. Defines:
 ### 3. Problem Resolution
 
 **Function**: `resolveProblemDescription(problem: string | undefined, options: any)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Resolves the problem description from either command line string or file path.
 
@@ -283,7 +283,7 @@ Resolves the problem description from either command line string or file path.
 ### 4. Context File Reading (Optional)
 
 **Function**: `readContextFile(contextPath: string)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Reads and validates an optional context file that provides additional context for the problem statement. The context is stored separately in `DebateState.context` and combined with the problem when building prompts.
 
@@ -317,7 +317,7 @@ If validation fails, throws an error with appropriate exit code (EXIT_CONFIG_ERR
 ### 6. Configuration Loading
 
 **Function**: `loadConfig(configPath?: string)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Loads system configuration from a JSON file or uses built-in defaults.
 
@@ -338,7 +338,7 @@ Loads system configuration from a JSON file or uses built-in defaults.
 ### 5. Debate Configuration Creation
 
 **Function**: `debateConfigFromSysConfig(sysConfig: SystemConfig, options: any)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Creates debate configuration by merging system config with CLI options.
 
@@ -358,7 +358,7 @@ Creates debate configuration by merging system config with CLI options.
 ### 6. Agent Configuration Filtering
 
 **Function**: `agentConfigsFromSysConfig(sysConfig: SystemConfig, options: any)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Filters agent configurations based on CLI options.
 
@@ -376,7 +376,7 @@ Filters agent configurations based on CLI options.
 ### 7. Provider Initialization
 
 **Factory Function**: `createProvider(providerType: string)`  
-**Location**: `src/providers/provider-factory.ts`
+**Location**: `packages/core/src/providers/provider-factory.ts`
 
 Creates LLM provider instances based on configuration.
 
@@ -416,7 +416,7 @@ Both providers make LLM completion requests with fallback strategy:
 ### 8. Agent Instantiation
 
 **Function**: `buildAgents(agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: { agents: AgentPromptMetadata[] })`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Creates concrete agent instances based on configurations using the `RoleBasedAgent` class.
 
@@ -434,13 +434,13 @@ Creates concrete agent instances based on configurations using the `RoleBasedAge
 The system uses a single `RoleBasedAgent` class for all roles (architect, performance, security, etc.) rather than separate agent classes. Each agent is created via `RoleBasedAgent.create(config, provider, resolvedSystemPrompt, promptSource)`.
 
 **Role-Based Prompt System**:
-- Prompts are organized in `src/agents/prompts/` with separate files per role (architect-prompts.ts, performance-prompts.ts, security-prompts.ts)
+- Prompts are organized in `packages/core/src/agents/prompts/` with separate files per role (architect-prompts.ts, performance-prompts.ts, security-prompts.ts)
 - Each prompt file exports a `RolePrompts` object containing:
   - `systemPrompt`: The agent's system instructions
   - `proposePrompt()`: Function to generate proposal user prompts
   - `critiquePrompt()`: Function to generate critique user prompts
   - `refinePrompt()`: Function to generate refinement user prompts
-- A central registry (`src/agents/prompts/index.ts`) maps roles to their prompt configurations
+- A central registry (`packages/core/src/agents/prompts/index.ts`) maps roles to their prompt configurations
 - Unknown roles default to architect prompts for backward compatibility
 
 **Prompt source resolution** occurs at initialization:
@@ -534,7 +534,7 @@ When an agent has tools available, `callLLM()` implements a tool calling loop:
 ### 9. Judge Instantiation
 
 **Class**: `JudgeAgent`  
-**Location**: `src/core/judge.ts`
+**Location**: `packages/core/src/core/judge.ts`
 
 Creates the judge agent responsible for synthesis.
 
@@ -556,7 +556,7 @@ Synthesizes final solution from debate history:
 ### 10. State Manager Initialization
 
 **Class**: `StateManager`  
-**Location**: `src/core/state-manager.ts`
+**Location**: `packages/core/src/core/state-manager.ts`
 
 Manages debate state persistence to disk.
 
@@ -610,7 +610,7 @@ Manages debate state persistence to disk.
 ### 10.1 Tracing Initialization (Optional)
 
 **Functions**: `validateLangfuseConfig()`, `createTracingContext()`  
-**Location**: `src/utils/tracing-factory.ts`
+**Location**: `packages/core/src/utils/tracing-factory.ts`
 
 If tracing is enabled in the debate configuration (`debate.trace === "langfuse"`), the system initializes Langfuse tracing before creating agents and judge.
 
@@ -647,7 +647,7 @@ For detailed tracing configuration and setup, see [docs/configuration.md](docs/c
 ### 11. Orchestrator Initialization
 
 **Class**: `DebateOrchestrator`  
-**Location**: `src/core/orchestrator.ts`
+**Location**: `packages/core/src/core/orchestrator.ts`
 
 Coordinates the multi-round debate flow, executing N complete rounds where each round consists of proposal, critique, and refinement phases.
 
@@ -680,7 +680,7 @@ The orchestrator supports optional hooks for receiving real-time progress notifi
 ### 11.1. Progress UI Integration
 
 **Class**: `DebateProgressUI`  
-**Location**: `src/utils/progress-ui.ts`
+**Location**: `packages/cli/src/utils/progress-ui.ts`
 
 Manages the real-time progress display for debate execution in the CLI.
 
@@ -693,7 +693,7 @@ Manages the real-time progress display for debate execution in the CLI.
 - Uses append-only log approach (messages are never cleared or redrawn)
 
 **Integration**:
-The CLI (`src/cli/commands/debate.ts`) creates a `DebateProgressUI` instance and connects it to the orchestrator via hooks:
+The CLI (`packages/cli/src/commands/debate.ts`) creates a `DebateProgressUI` instance and connects it to the orchestrator via hooks:
 1. Instantiate `DebateProgressUI` before debate execution
 2. Initialize with total rounds: `progressUI.initialize(totalRounds)`
 3. Create hook handlers that call progress UI methods
@@ -730,7 +730,7 @@ The CLI (`src/cli/commands/debate.ts`) creates a `DebateProgressUI` instance and
 ### 12. Clarifications Phase (Optional)
 
 **Function**: `collectAndAnswerClarifications(resolvedProblem: string, agents: Agent[], maxPerAgent: number)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 When the `--clarify` option is provided or `debate.interactiveClarifications` is enabled in configuration, the system runs a pre-debate clarifications phase where agents can ask clarifying questions about the problem statement.
 
@@ -779,7 +779,7 @@ When the `--clarify` option is provided or `debate.interactiveClarifications` is
 ### 13. Debate Execution
 
 **Method**: `orchestrator.runDebate(problem: string, context?: string, clarifications?: AgentClarifications[])`  
-**Location**: `src/core/orchestrator.ts`
+**Location**: `packages/core/src/core/orchestrator.ts`
 
 Main orchestration method that executes the complete debate workflow.
 
@@ -1057,7 +1057,7 @@ Judge synthesizes the final solution from all debate rounds, with optional summa
 
 #### 13.6 Tracing Flush (Optional)
 **Function**: `tracingContext.langfuse.flushAsync()`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 If tracing was enabled during initialization, the system flushes all traces and spans to Langfuse after the debate completes.
 
@@ -1085,7 +1085,7 @@ For detailed tracing configuration and setup, see [docs/configuration.md](docs/c
 ### 14. Result Output and Report Generation
 
 **Function**: `outputResults(result: DebateResult, stateManager: StateManager, options: any)`  
-**Location**: `src/cli/commands/debate.ts`
+**Location**: `packages/cli/src/commands/debate.ts`
 
 Handles output of debate results based on options.
 
@@ -1379,7 +1379,7 @@ The system is single-threaded (Node.js) but uses async/await patterns:
 
 The architecture supports extension through:
 
-1. **New Agent Roles**: Add new roles by creating a prompt file in `src/agents/prompts/` implementing the `RolePrompts` interface, then register it in the prompt registry. No new agent classes needed.
+1. **New Agent Roles**: Add new roles by creating a prompt file in `packages/core/src/agents/prompts/` implementing the `RolePrompts` interface, then register it in the prompt registry. No new agent classes needed.
 2. **New Providers**: Implement `LLMProvider` interface for other LLM services
 3. **Custom Synthesis**: Extend `JudgeAgent` or create alternative synthesis methods
 4. **Alternative Storage**: Replace `StateManager` for different persistence strategies

@@ -260,7 +260,7 @@ const judgeSummary = state.judgeSummary;
     └─────────────────────────┘
 ```
 
-### 1. Orchestrator (`src/core/orchestrator.ts`)
+### 1. Orchestrator (`packages/core/src/core/orchestrator.ts`)
 
 **Responsibilities**:
 - Coordinate debate flow across rounds
@@ -317,7 +317,7 @@ async synthesisPhase(state) {
 
 **Design Rationale**: The orchestrator doesn't make summarization decisions—it just coordinates the process. This keeps agent autonomy while ensuring consistent execution order.
 
-### 2. RoleBasedAgent (`src/agents/role-based-agent.ts`)
+### 2. RoleBasedAgent (`packages/core/src/agents/role-based-agent.ts`)
 
 **Responsibilities**:
 - Decide when to summarize based on threshold
@@ -385,7 +385,7 @@ async prepareContext(context, roundNumber) {
 
 **Design Rationale**: The agent encapsulates all summarization logic—the orchestrator just calls `prepareContext()` and handles the result. The context is not modified; summaries are stored separately and retrieved when needed for prompt formatting. This prevents data mixing between agents.
 
-### 3. JudgeAgent (`src/core/judge.ts`)
+### 3. JudgeAgent (`packages/core/src/core/judge.ts`)
 
 **Responsibilities**:
 - Decide when to summarize final round content for synthesis
@@ -461,7 +461,7 @@ async prepareContext(rounds) {
 
 **Design Rationale**: The judge uses the same summarization infrastructure as agents but focuses specifically on final round content. This provides a focused view of the most recent solution attempts for synthesis while maintaining consistency with the overall summarization architecture.
 
-### 4. ContextSummarizer (`src/utils/context-summarizer.ts`)
+### 4. ContextSummarizer (`packages/core/src/utils/context-summarizer.ts`)
 
 **Responsibilities**:
 - Define interface for summarization strategies
@@ -489,7 +489,7 @@ interface ContextSummarizer {
 
 **Design Rationale**: The interface separates "what to summarize" (agent's responsibility) from "how to summarize" (strategy's responsibility). This makes it easy to add new strategies.
 
-### 5. StateManager (`src/core/state-manager.ts`)
+### 5. StateManager (`packages/core/src/core/state-manager.ts`)
 
 **Responsibilities**:
 - Persist summaries to disk as part of debate state
@@ -529,7 +529,7 @@ async addJudgeSummary(debateId, summary) {
 
 **Design Rationale**: Storing summaries in rounds (not agents) provides a complete audit trail and enables debugging/analysis of summarization behavior over time. Keying by agent ID provides efficient, isolated access to each agent's summary.
 
-### 6. Context Formatter (`src/utils/context-formatter.ts`)
+### 6. Context Formatter (`packages/core/src/utils/context-formatter.ts`)
 
 **Responsibilities**:
 - Format debate context for inclusion in LLM prompts
@@ -643,7 +643,7 @@ interface SummarizationConfig {
 3. Fall back to role-specific built-in prompt
 4. If file read fails, warn user and use built-in prompt
 
-**Prompt Resolution**: Follows same pattern as `systemPromptPath` (see `src/utils/prompt-loader.ts`)
+**Prompt Resolution**: Follows same pattern as `systemPromptPath` (see `packages/core/src/utils/prompt-loader.ts`)
 
 ---
 
@@ -745,7 +745,7 @@ class MyCustomSummarizer implements ContextSummarizer {
 }
 ```
 
-2. **Update Agent Factory** (`RoleBasedAgent.create()`):
+2. **Update Agent Factory** (`packages/core/src/agents/role-based-agent.ts` - `RoleBasedAgent.create()`):
 ```typescript
 if (summaryConfig.enabled) {
   if (summaryConfig.method === 'length-based') {
@@ -760,7 +760,7 @@ if (summaryConfig.enabled) {
 
 3. **Add Configuration**:
 ```typescript
-// In src/types/debate.types.ts
+// In packages/core/src/types/debate.types.ts
 export const SUMMARIZATION_METHODS = {
   LENGTH_BASED: 'length-based',
   SEMANTIC: 'semantic',
@@ -971,13 +971,13 @@ if (!this.summarizer) {
 
 ### Code
 
-- **Orchestrator**: `src/core/orchestrator.ts` (lines 179-217: `summarizationPhase()`, lines 219-235: `synthesisPhase()`)
-- **Agent**: `src/agents/role-based-agent.ts` (lines 210-338: `shouldSummarize()`, `prepareContext()`)
-- **Judge**: `src/core/judge.ts` (lines 45-120: `shouldSummarize()`, `prepareContext()`, `getFinalRoundRelevantContent()`)
-- **Summarizer**: `src/utils/context-summarizer.ts` (lines 49-99: `LengthBasedSummarizer`)
-- **State Manager**: `src/core/state-manager.ts` (lines 261-275: `addSummary()`, lines 277-285: `addJudgeSummary()`)
-- **Judge Prompts**: `src/agents/prompts/judge-prompts.ts` (judge-specific summary prompts)
-- **CLI Integration**: `src/cli/commands/debate.ts` (lines 152-211: agent factory with summarization, judge creation with summarization)
+- **Orchestrator**: `packages/core/src/core/orchestrator.ts` (lines 179-217: `summarizationPhase()`, lines 219-235: `synthesisPhase()`)
+- **Agent**: `packages/core/src/agents/role-based-agent.ts` (lines 210-338: `shouldSummarize()`, `prepareContext()`)
+- **Judge**: `packages/core/src/core/judge.ts` (lines 45-120: `shouldSummarize()`, `prepareContext()`, `getFinalRoundRelevantContent()`)
+- **Summarizer**: `packages/core/src/utils/context-summarizer.ts` (lines 49-99: `LengthBasedSummarizer`)
+- **State Manager**: `packages/core/src/core/state-manager.ts` (lines 261-275: `addSummary()`, lines 277-285: `addJudgeSummary()`)
+- **Judge Prompts**: `packages/core/src/agents/prompts/judge-prompts.ts` (judge-specific summary prompts)
+- **CLI Integration**: `packages/cli/src/commands/debate.ts` (lines 152-211: agent factory with summarization, judge creation with summarization)
 
 ### Documentation
 
@@ -987,13 +987,13 @@ if (!this.summarizer) {
 
 ### Tests
 
-- **Summarizer Tests**: `tests/context-summarizer.spec.ts`
-- **Agent Tests**: `tests/role-based-agent-summary.spec.ts`
-- **Orchestrator Tests**: `tests/orchestrator-summary.spec.ts`
-- **State Tests**: `tests/state-manager.spec.ts` (summarization section)
-- **Config Tests**: `tests/config-loading.spec.ts` (summarization section)
-- **Prompt Tests**: `tests/summary-prompts.spec.ts`
-- **Judge Tests**: `tests/orchestrator.spec.ts` (updated with judge summarization)
+- **Summarizer Tests**: `packages/core/src/utils/context-summarizer.spec.ts`
+- **Agent Tests**: `packages/core/src/agents/role-based-agent.spec.ts` (summarization tests)
+- **Orchestrator Tests**: `packages/core/src/core/orchestrator.spec.ts` (summarization tests)
+- **State Tests**: `packages/core/src/core/state-manager.spec.ts` (summarization section)
+- **Config Tests**: `packages/cli/src/commands/debate.spec.ts` (summarization section)
+- **Prompt Tests**: `packages/core/src/agents/prompts/*.spec.ts` (summary prompt tests)
+- **Judge Tests**: `packages/core/src/core/orchestrator.spec.ts` (judge summarization tests)
 
 ---
 
