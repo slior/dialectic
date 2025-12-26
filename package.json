@@ -17,7 +17,7 @@
     "dev:ui": "npm run dev -w @dialectic/web-ui",
     "dev:web": "concurrently \"npm run dev:api\" \"npm run dev:ui\"",
     "test": "nx run-many -t test",
-    "test:coverage": "npm run test:coverage -w @dialectic/core && npm run test:coverage -w dialectic",
+    "test:coverage": "npm run test:coverage -w @dialectic/core && npm run test:coverage -w dialectic && npm run test:coverage -w @dialectic/web-api",
     "test:core": "npm run test -w @dialectic/core",
     "test:core:coverage": "npm run test:coverage -w @dialectic/core",
     "test:cli": "npm run test -w dialectic",
