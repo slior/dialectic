@@ -1,5 +1,12 @@
 import { TracingLLMProvider, LLMProvider, CompletionRequest, TracingContext } from '@dialectic/core';
 
+// Test constants
+const DEFAULT_TEMPERATURE = 0.5;
+const VERBOSE_TEMPERATURE = 0.7;
+const MOCK_INPUT_TOKENS = 50;
+const MOCK_OUTPUT_TOKENS = 50;
+const MOCK_TOTAL_TOKENS = 100;
+
 describe('TracingLLMProvider', () => {
   let mockProvider: jest.Mocked<LLMProvider>;
   let mockLangfuse: any;
@@ -14,9 +21,9 @@ describe('TracingLLMProvider', () => {
       complete: jest.fn().mockResolvedValue({
         text: 'test response',
         usage: {
-          inputTokens: 50,
-          outputTokens: 50,
-          totalTokens: 100,
+          inputTokens: MOCK_INPUT_TOKENS,
+          outputTokens: MOCK_OUTPUT_TOKENS,
+          totalTokens: MOCK_TOTAL_TOKENS,
         },
       }),
     } as any;
@@ -53,7 +60,7 @@ describe('TracingLLMProvider', () => {
     it('should create generation span and wrap provider call', async () => {
       const request: CompletionRequest = {
         model: 'gpt-4',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         systemPrompt: 'System prompt',
         userPrompt: 'User prompt',
       };
@@ -69,7 +76,7 @@ describe('TracingLLMProvider', () => {
     it('should capture input/output correctly', async () => {
       const request: CompletionRequest = {
         model: 'gpt-4',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         systemPrompt: 'System prompt',
         userPrompt: 'User prompt',
       };
@@ -90,7 +97,7 @@ describe('TracingLLMProvider', () => {
     it('should capture usage metadata', async () => {
       const request: CompletionRequest = {
         model: 'gpt-4',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         systemPrompt: 'System prompt',
         userPrompt: 'User prompt',
       };
@@ -113,7 +120,7 @@ describe('TracingLLMProvider', () => {
     it('should handle tool calling iterations correctly', async () => {
       const request: CompletionRequest = {
         model: 'gpt-4',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         systemPrompt: 'System prompt',
         userPrompt: 'User prompt',
         tools: [],
@@ -138,7 +145,7 @@ describe('TracingLLMProvider', () => {
 
       const request: CompletionRequest = {
         model: 'gpt-4',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         systemPrompt: 'System prompt',
         userPrompt: 'User prompt',
       };
@@ -153,7 +160,7 @@ describe('TracingLLMProvider', () => {
     it('should include correct metadata in generation tags', async () => {
       const request: CompletionRequest = {
         model: 'gpt-4',
-        temperature: 0.7,
+        temperature: VERBOSE_TEMPERATURE,
         systemPrompt: 'System prompt',
         userPrompt: 'User prompt',
       };
@@ -164,7 +171,7 @@ describe('TracingLLMProvider', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             model: 'gpt-4',
-            temperature: 0.7,
+            temperature: VERBOSE_TEMPERATURE,
           }),
         })
       );

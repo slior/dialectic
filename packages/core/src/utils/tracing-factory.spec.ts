@@ -1,5 +1,10 @@
 import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent, TRACE_OPTIONS, TraceMetadata, DebateConfig, LLMProvider, RoleBasedAgent, AgentConfig, AgentRole, AGENT_ROLES, LLM_PROVIDERS, SummarizationConfig } from '@dialectic/core';
 
+// Test constants
+const DEFAULT_TEMPERATURE = 0.5;
+const DEFAULT_TIMEOUT_MS = 300000;
+const EXPECTED_ROUNDS_COUNT = 3;
+
 describe('TracingFactory', () => {
   const originalEnv = process.env;
 
@@ -65,11 +70,11 @@ describe('TracingFactory', () => {
       verboseRun: false,
       configFileName: 'debate-config.json',
       debateConfig: {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
         trace: TRACE_OPTIONS.LANGFUSE,
       },
       agentConfigs: [
@@ -84,11 +89,11 @@ describe('TracingFactory', () => {
       process.env.LANGFUSE_PUBLIC_KEY = 'pk-test-public';
       
       const debateConfig: DebateConfig = {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
@@ -108,11 +113,11 @@ describe('TracingFactory', () => {
       process.env.LANGFUSE_PUBLIC_KEY = 'pk-test-public';
       
       const debateConfig: DebateConfig = {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
@@ -143,11 +148,11 @@ describe('TracingFactory', () => {
 
     it('should return undefined when tracing is not enabled', () => {
       const debateConfig: DebateConfig = {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
       };
       
       const traceMetadata = createMockTraceMetadata();
@@ -164,11 +169,11 @@ describe('TracingFactory', () => {
       delete process.env.LANGFUSE_PUBLIC_KEY;
       
       const debateConfig: DebateConfig = {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
@@ -186,11 +191,11 @@ describe('TracingFactory', () => {
       process.env.LANGFUSE_PUBLIC_KEY = 'pk-test-public';
       
       const debateConfig: DebateConfig = {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
@@ -217,11 +222,11 @@ describe('TracingFactory', () => {
       };
       
       const debateConfig: DebateConfig = {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
@@ -278,8 +283,8 @@ describe('TracingFactory', () => {
         role: AGENT_ROLES.ARCHITECT,
         model: 'gpt-4',
         provider: LLM_PROVIDERS.OPENAI,
-        temperature: 0.5,
-      };
+      temperature: DEFAULT_TEMPERATURE,
+    };
       
       const summaryConfig: SummarizationConfig = {
         enabled: false,
@@ -297,11 +302,11 @@ describe('TracingFactory', () => {
       );
       
       const debateConfig: DebateConfig = {
-        rounds: 3,
+        rounds: EXPECTED_ROUNDS_COUNT,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
         trace: TRACE_OPTIONS.LANGFUSE,
       };
       
@@ -343,8 +348,8 @@ describe('TracingFactory', () => {
         role: AGENT_ROLES.ARCHITECT,
         model: 'gpt-4',
         provider: LLM_PROVIDERS.OPENAI,
-        temperature: 0.5,
-      };
+      temperature: DEFAULT_TEMPERATURE,
+    };
       
       const summaryConfig: SummarizationConfig = {
         enabled: false,

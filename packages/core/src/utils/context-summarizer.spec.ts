@@ -1,5 +1,13 @@
 import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES } from '@dialectic/core';
 
+// Test constants
+const DEFAULT_SUMMARY_TEMPERATURE = 0.3;
+const CUSTOM_TEMPERATURE = 0.55;
+const MOCK_TOTAL_TOKENS = 100;
+const TEST_MAX_LENGTH = 2500;
+const TEST_THRESHOLD = 5000;
+const LONG_SUMMARY_LENGTH = 3000;
+
 // Mock LLM Provider
 class MockLLMProvider implements LLMProvider {
   private mockResponse: string;
@@ -16,7 +24,7 @@ class MockLLMProvider implements LLMProvider {
     }
     return {
       text: this.mockResponse,
-      usage: { totalTokens: 100 }
+      usage: { totalTokens: MOCK_TOTAL_TOKENS }
     };
   }
 }
@@ -24,14 +32,14 @@ class MockLLMProvider implements LLMProvider {
 describe('LengthBasedSummarizer', () => {
   const config: SummarizationConfig = {
     enabled: true,
-    threshold: 5000,
-    maxLength: 2500,
+    threshold: TEST_THRESHOLD,
+    maxLength: TEST_MAX_LENGTH,
     method: SUMMARIZATION_METHODS.LENGTH_BASED,
   };
 
   it('should return summary with correct metadata (configured values)', async () => {
     const provider = new MockLLMProvider('Test summary content');
-    const summarizer = new LengthBasedSummarizer(provider, { model: 'gpt-4o', temperature: 0.55, provider: 'openai' as any });
+    const summarizer = new LengthBasedSummarizer(provider, { model: 'gpt-4o', temperature: CUSTOM_TEMPERATURE, provider: 'openai' as any });
     
     const content = 'This is the debate history to summarize.';
     const role = AGENT_ROLES.ARCHITECT;
@@ -46,7 +54,7 @@ describe('LengthBasedSummarizer', () => {
     expect(result.metadata.method).toBe(SUMMARIZATION_METHODS.LENGTH_BASED);
     expect(result.metadata.timestamp).toBeInstanceOf(Date);
     expect(result.metadata.latencyMs).toBeGreaterThanOrEqual(0);
-    expect(result.metadata.tokensUsed).toBe(100);
+    expect(result.metadata.tokensUsed).toBe(MOCK_TOTAL_TOKENS);
     expect(result.metadata.model).toBe('gpt-4o');
     expect(result.metadata.temperature).toBe(0.55);
     expect(result.metadata.provider).toBe('openai');
@@ -65,14 +73,14 @@ describe('LengthBasedSummarizer', () => {
 
     expect(completeSpy).toHaveBeenCalledWith({
       model: 'gpt-4',
-      temperature: 0.3,
+      temperature: DEFAULT_SUMMARY_TEMPERATURE,
       systemPrompt: 'System prompt',
       userPrompt: 'Summary prompt',
     });
   });
 
   it('should truncate summary to maxLength if needed', async () => {
-    const longSummary = 'a'.repeat(3000);
+    const longSummary = 'a'.repeat(LONG_SUMMARY_LENGTH);
     const provider = new MockLLMProvider(longSummary);
     const summarizer = new LengthBasedSummarizer(provider);
     
@@ -107,7 +115,7 @@ describe('LengthBasedSummarizer', () => {
     
     const result = await summarizer.summarize('content', AGENT_ROLES.ARCHITECT, config, 'sys', 'sum');
 
-    expect(result.metadata.tokensUsed).toBe(100);
+    expect(result.metadata.tokensUsed).toBe(MOCK_TOTAL_TOKENS);
   });
 
   it('should handle missing token usage from LLM', async () => {

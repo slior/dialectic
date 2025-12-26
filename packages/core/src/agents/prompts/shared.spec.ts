@@ -8,6 +8,24 @@ import {
   getSharedSummarizationInstructions
 } from '@dialectic/core';
 
+// Test constants
+const PROMPT_TEST = 'test prompt';
+const PROMPT_EXPERT = 'You are an expert.';
+const PROMPT_SOLVE = 'Solve this problem.';
+const PROMPT_REVIEW = 'Review this proposal.';
+const PROMPT_REFINE = 'Refine your solution.';
+const PROMPT_SUMMARIZE = 'Summarize the debate.';
+const PROMPT_TEST_CONTENT = 'Test prompt content';
+const PROMPT_TEST_CONSISTENCY = 'Test prompt for consistency';
+const PROMPT_SAME_FOR_ALL = 'Same prompt for all types';
+const PROMPT_ORIGINAL_CONTENT = 'Original prompt content with special characters: !@#$%^&*()';
+const PROMPT_BASE_TESTING = 'Base prompt for testing';
+const INSTRUCTION_TYPE_SYSTEM = 'system';
+const INSTRUCTION_TYPE_PROPOSAL = 'proposal';
+const INSTRUCTION_TYPE_CRITIQUE = 'critique';
+const INSTRUCTION_TYPE_REFINEMENT = 'refinement';
+const INSTRUCTION_TYPE_SUMMARIZATION = 'summarization';
+
 describe('Shared Prompts', () => {
   describe('INSTRUCTION_TYPES constants', () => {
     it('should export all required instruction type constants', () => {
@@ -19,18 +37,18 @@ describe('Shared Prompts', () => {
     });
 
     it('should have correct string values', () => {
-      expect(INSTRUCTION_TYPES.SYSTEM).toBe('system');
-      expect(INSTRUCTION_TYPES.PROPOSAL).toBe('proposal');
-      expect(INSTRUCTION_TYPES.CRITIQUE).toBe('critique');
-      expect(INSTRUCTION_TYPES.REFINEMENT).toBe('refinement');
-      expect(INSTRUCTION_TYPES.SUMMARIZATION).toBe('summarization');
+      expect(INSTRUCTION_TYPES.SYSTEM).toBe(INSTRUCTION_TYPE_SYSTEM);
+      expect(INSTRUCTION_TYPES.PROPOSAL).toBe(INSTRUCTION_TYPE_PROPOSAL);
+      expect(INSTRUCTION_TYPES.CRITIQUE).toBe(INSTRUCTION_TYPE_CRITIQUE);
+      expect(INSTRUCTION_TYPES.REFINEMENT).toBe(INSTRUCTION_TYPE_REFINEMENT);
+      expect(INSTRUCTION_TYPES.SUMMARIZATION).toBe(INSTRUCTION_TYPE_SUMMARIZATION);
     });
 
     it('should be usable in function calls', () => {
-      const result = appendSharedInstructions('test prompt', INSTRUCTION_TYPES.SYSTEM);
+      const result = appendSharedInstructions(PROMPT_TEST, INSTRUCTION_TYPES.SYSTEM);
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
-      expect(result.length).toBeGreaterThan('test prompt'.length);
+      expect(result.length).toBeGreaterThan(PROMPT_TEST.length);
     });
   });
 
@@ -100,71 +118,66 @@ describe('Shared Prompts', () => {
 
   describe('appendSharedInstructions() - Basic functionality', () => {
     it('should append system instructions correctly', () => {
-      const prompt = 'You are an expert.';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.SYSTEM);
+      const result = appendSharedInstructions(PROMPT_EXPERT, INSTRUCTION_TYPES.SYSTEM);
       
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
-      expect(result).toContain(prompt);
-      expect(result.length).toBeGreaterThan(prompt.length);
+      expect(result).toContain(PROMPT_EXPERT);
+      expect(result.length).toBeGreaterThan(PROMPT_EXPERT.length);
     });
 
     it('should append proposal instructions correctly', () => {
-      const prompt = 'Solve this problem.';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.PROPOSAL);
+      const result = appendSharedInstructions(PROMPT_SOLVE, INSTRUCTION_TYPES.PROPOSAL);
       
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
-      expect(result).toContain(prompt);
-      expect(result.length).toBeGreaterThan(prompt.length);
+      expect(result).toContain(PROMPT_SOLVE);
+      expect(result.length).toBeGreaterThan(PROMPT_SOLVE.length);
     });
 
     it('should append critique instructions correctly', () => {
-      const prompt = 'Review this proposal.';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.CRITIQUE);
+      const result = appendSharedInstructions(PROMPT_REVIEW, INSTRUCTION_TYPES.CRITIQUE);
       
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
-      expect(result).toContain(prompt);
-      expect(result.length).toBeGreaterThan(prompt.length);
+      expect(result).toContain(PROMPT_REVIEW);
+      expect(result.length).toBeGreaterThan(PROMPT_REVIEW.length);
     });
 
     it('should append refinement instructions correctly', () => {
-      const prompt = 'Refine your solution.';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.REFINEMENT);
+      const result = appendSharedInstructions(PROMPT_REFINE, INSTRUCTION_TYPES.REFINEMENT);
       
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
-      expect(result).toContain(prompt);
-      expect(result.length).toBeGreaterThan(prompt.length);
+      expect(result).toContain(PROMPT_REFINE);
+      expect(result.length).toBeGreaterThan(PROMPT_REFINE.length);
     });
 
     it('should append summarization instructions correctly', () => {
-      const prompt = 'Summarize the debate.';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.SUMMARIZATION);
+      const result = appendSharedInstructions(PROMPT_SUMMARIZE, INSTRUCTION_TYPES.SUMMARIZATION);
       
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
-      expect(result).toContain(prompt);
-      expect(result.length).toBeGreaterThan(prompt.length);
+      expect(result).toContain(PROMPT_SUMMARIZE);
+      expect(result.length).toBeGreaterThan(PROMPT_SUMMARIZE.length);
     });
 
     it('should return original prompt plus appended instructions', () => {
-      const prompt = 'Test prompt content';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.SYSTEM);
+      const result = appendSharedInstructions(PROMPT_TEST_CONTENT, INSTRUCTION_TYPES.SYSTEM);
       
       // Should start with original prompt
-      expect(result.startsWith(prompt)).toBe(true);
+      expect(result.startsWith(PROMPT_TEST_CONTENT)).toBe(true);
       
       // Should be longer than original prompt
-      expect(result.length).toBeGreaterThan(prompt.length);
+      expect(result.length).toBeGreaterThan(PROMPT_TEST_CONTENT.length);
       
       // Should contain the original prompt exactly
-      expect(result.indexOf(prompt)).toBe(0);
+      expect(result.indexOf(PROMPT_TEST_CONTENT)).toBe(0);
     });
 
     it('should handle empty prompts', () => {
-      const result = appendSharedInstructions('', INSTRUCTION_TYPES.SYSTEM);
+      const emptyPrompt = '';
+      const result = appendSharedInstructions(emptyPrompt, INSTRUCTION_TYPES.SYSTEM);
       
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
@@ -172,13 +185,13 @@ describe('Shared Prompts', () => {
     });
 
     it('should handle prompts with existing content', () => {
-      const prompt = 'You are an expert software architect. Consider scalability and performance.';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.PROPOSAL);
+      const promptWithContent = 'You are an expert software architect. Consider scalability and performance.';
+      const result = appendSharedInstructions(promptWithContent, INSTRUCTION_TYPES.PROPOSAL);
       
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
-      expect(result).toContain(prompt);
-      expect(result.length).toBeGreaterThan(prompt.length);
+      expect(result).toContain(promptWithContent);
+      expect(result.length).toBeGreaterThan(promptWithContent.length);
     });
   });
 
@@ -202,28 +215,25 @@ describe('Shared Prompts', () => {
     });
 
     it('should be consistent across multiple calls', () => {
-      const prompt = 'Test prompt for consistency';
-      const result1 = appendSharedInstructions(prompt, INSTRUCTION_TYPES.CRITIQUE);
-      const result2 = appendSharedInstructions(prompt, INSTRUCTION_TYPES.CRITIQUE);
+      const result1 = appendSharedInstructions(PROMPT_TEST_CONSISTENCY, INSTRUCTION_TYPES.CRITIQUE);
+      const result2 = appendSharedInstructions(PROMPT_TEST_CONSISTENCY, INSTRUCTION_TYPES.CRITIQUE);
       
       expect(result1).toBe(result2);
     });
 
     it('should produce different results for different instruction types', () => {
-      const prompt = 'Same prompt for all types';
-      
-      const systemResult = appendSharedInstructions(prompt, INSTRUCTION_TYPES.SYSTEM);
-      const proposalResult = appendSharedInstructions(prompt, INSTRUCTION_TYPES.PROPOSAL);
-      const critiqueResult = appendSharedInstructions(prompt, INSTRUCTION_TYPES.CRITIQUE);
-      const refinementResult = appendSharedInstructions(prompt, INSTRUCTION_TYPES.REFINEMENT);
-      const summarizationResult = appendSharedInstructions(prompt, INSTRUCTION_TYPES.SUMMARIZATION);
+      const systemResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.SYSTEM);
+      const proposalResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.PROPOSAL);
+      const critiqueResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.CRITIQUE);
+      const refinementResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.REFINEMENT);
+      const summarizationResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.SUMMARIZATION);
 
       // All should contain the original prompt
-      expect(systemResult).toContain(prompt);
-      expect(proposalResult).toContain(prompt);
-      expect(critiqueResult).toContain(prompt);
-      expect(refinementResult).toContain(prompt);
-      expect(summarizationResult).toContain(prompt);
+      expect(systemResult).toContain(PROMPT_SAME_FOR_ALL);
+      expect(proposalResult).toContain(PROMPT_SAME_FOR_ALL);
+      expect(critiqueResult).toContain(PROMPT_SAME_FOR_ALL);
+      expect(refinementResult).toContain(PROMPT_SAME_FOR_ALL);
+      expect(summarizationResult).toContain(PROMPT_SAME_FOR_ALL);
 
       // But should be different from each other
       expect(systemResult).not.toBe(proposalResult);
@@ -242,14 +252,13 @@ describe('Shared Prompts', () => {
     });
 
     it('should preserve original prompt content exactly', () => {
-      const prompt = 'Original prompt content with special characters: !@#$%^&*()';
-      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.REFINEMENT);
+      const result = appendSharedInstructions(PROMPT_ORIGINAL_CONTENT, INSTRUCTION_TYPES.REFINEMENT);
       
       // Should start with exact original prompt
-      expect(result.startsWith(prompt)).toBe(true);
+      expect(result.startsWith(PROMPT_ORIGINAL_CONTENT)).toBe(true);
       
       // Should contain the exact original prompt at the beginning
-      expect(result.indexOf(prompt)).toBe(0);
+      expect(result.indexOf(PROMPT_ORIGINAL_CONTENT)).toBe(0);
     });
   });
 
@@ -285,13 +294,11 @@ Requirements:
     });
 
     it('should work correctly with all instruction types in sequence', () => {
-      const basePrompt = 'Base prompt for testing';
-      
-      const systemResult = appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.SYSTEM);
-      const proposalResult = appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.PROPOSAL);
-      const critiqueResult = appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.CRITIQUE);
-      const refinementResult = appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.REFINEMENT);
-      const summarizationResult = appendSharedInstructions(basePrompt, INSTRUCTION_TYPES.SUMMARIZATION);
+      const systemResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.SYSTEM);
+      const proposalResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.PROPOSAL);
+      const critiqueResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.CRITIQUE);
+      const refinementResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.REFINEMENT);
+      const summarizationResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.SUMMARIZATION);
 
       // All should work without errors
       expect(systemResult).toBeDefined();
@@ -301,18 +308,18 @@ Requirements:
       expect(summarizationResult).toBeDefined();
 
       // All should contain the base prompt
-      expect(systemResult).toContain(basePrompt);
-      expect(proposalResult).toContain(basePrompt);
-      expect(critiqueResult).toContain(basePrompt);
-      expect(refinementResult).toContain(basePrompt);
-      expect(summarizationResult).toContain(basePrompt);
+      expect(systemResult).toContain(PROMPT_BASE_TESTING);
+      expect(proposalResult).toContain(PROMPT_BASE_TESTING);
+      expect(critiqueResult).toContain(PROMPT_BASE_TESTING);
+      expect(refinementResult).toContain(PROMPT_BASE_TESTING);
+      expect(summarizationResult).toContain(PROMPT_BASE_TESTING);
 
       // All should be longer than the base prompt
-      expect(systemResult.length).toBeGreaterThan(basePrompt.length);
-      expect(proposalResult.length).toBeGreaterThan(basePrompt.length);
-      expect(critiqueResult.length).toBeGreaterThan(basePrompt.length);
-      expect(refinementResult.length).toBeGreaterThan(basePrompt.length);
-      expect(summarizationResult.length).toBeGreaterThan(basePrompt.length);
+      expect(systemResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
+      expect(proposalResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
+      expect(critiqueResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
+      expect(refinementResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
+      expect(summarizationResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
     });
   });
 });

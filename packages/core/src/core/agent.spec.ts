@@ -1,5 +1,13 @@
 import { Agent, ToolRegistry, ToolImplementation, ToolCall, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState } from '@dialectic/core';
 
+// Test constants
+const DEFAULT_TOOL_CALL_LIMIT = 10;
+const LIMITED_TOOL_CALL_LIMIT = 2;
+const SINGLE_TOOL_CALL_LIMIT = 1;
+const MOCK_INPUT_TOKENS = 100;
+const MOCK_OUTPUT_TOKENS = 50;
+const MOCK_TOTAL_TOKENS = 150;
+
 // Mock tool implementation
 class MockTool implements ToolImplementation {
   name = 'mock_tool';
@@ -41,9 +49,9 @@ class MockProviderWithTools implements LLMProvider {
       text: response.text,
       ...(response.toolCalls !== undefined && { toolCalls: response.toolCalls }),
       usage: {
-        inputTokens: 100,
-        outputTokens: 50,
-        totalTokens: 150,
+        inputTokens: MOCK_INPUT_TOKENS,
+        outputTokens: MOCK_OUTPUT_TOKENS,
+        totalTokens: MOCK_TOTAL_TOKENS,
       },
     };
   }
@@ -102,7 +110,7 @@ describe('Agent Tool Calling', () => {
       { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
       mockProvider,
       toolRegistry,
-      10
+      DEFAULT_TOOL_CALL_LIMIT
     );
 
     mockContext = {
@@ -246,7 +254,7 @@ describe('Agent Tool Calling', () => {
         { id: 'test', name: 'Test', model: 'gpt-4' },
         mockProvider,
         toolRegistry,
-        2 // Limit to 2 iterations
+        LIMITED_TOOL_CALL_LIMIT // Limit to 2 iterations
       );
 
       mockProvider.setResponses([
@@ -342,7 +350,7 @@ describe('Agent Tool Calling', () => {
         { id: 'test', name: 'Test', model: 'gpt-4' },
         mockProvider,
         toolRegistry,
-        2
+        LIMITED_TOOL_CALL_LIMIT
       );
 
       mockProvider.setResponses([
@@ -460,7 +468,7 @@ describe('Agent Tool Calling', () => {
         { id: 'test', name: 'Test', model: 'gpt-4' },
         mockProvider,
         toolRegistry,
-        1
+        SINGLE_TOOL_CALL_LIMIT
       );
 
       mockProvider.setResponses([
@@ -504,7 +512,7 @@ describe('Agent Tool Calling', () => {
         { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
         mockProvider,
         toolRegistry,
-        10,
+        DEFAULT_TOOL_CALL_LIMIT,
         logger
       );
 
@@ -590,7 +598,7 @@ describe('Agent Tool Calling', () => {
         { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
         mockProvider,
         toolRegistry,
-        10,
+        DEFAULT_TOOL_CALL_LIMIT,
         logger
       );
 
@@ -634,7 +642,7 @@ describe('Agent Tool Calling', () => {
         { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
         mockProvider,
         toolRegistry,
-        10,
+        DEFAULT_TOOL_CALL_LIMIT,
         logger
       );
 
@@ -716,7 +724,7 @@ describe('Agent Tool Calling', () => {
         { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
         mockProvider,
         toolRegistry,
-        10,
+        DEFAULT_TOOL_CALL_LIMIT,
         logger
       );
 

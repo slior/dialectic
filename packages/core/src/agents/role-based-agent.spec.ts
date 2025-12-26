@@ -1,5 +1,17 @@
 import { RoleBasedAgent, LLMProvider, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, ToolSchema, DebateContext, DebateState, CompletionRequest, CompletionResponse, ToolRegistry, ToolImplementation, ToolCall, CONTRIBUTION_TYPES, SUMMARIZATION_METHODS, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, createProvider } from '@dialectic/core';
 
+// Test constants
+const DEFAULT_TEMPERATURE = 0.5;
+const MOCK_TOTAL_TOKENS = 100;
+const MOCK_PROMPT_TOKENS = 50;
+const MOCK_COMPLETION_TOKENS = 50;
+const TEST_SUMMARY_THRESHOLD = 100;
+const TEST_MAX_LENGTH = 50;
+const LONG_CONTENT_LENGTH = 150;
+const CONTENT_SNIPPET_60 = 60;
+const CONTENT_SNIPPET_40 = 40;
+const CONTENT_SNIPPET_200 = 200;
+
 // Mock OpenAI SDK to avoid network calls during tests
 jest.mock('openai', () => {
   return {
@@ -9,7 +21,7 @@ jest.mock('openai', () => {
         completions: {
           create: async (_: any) => ({ 
             choices: [{ message: { content: 'Security solution text' } }],
-            usage: { total_tokens: 100, prompt_tokens: 50, completion_tokens: 50 }
+            usage: { total_tokens: MOCK_TOTAL_TOKENS, prompt_tokens: MOCK_PROMPT_TOKENS, completion_tokens: MOCK_COMPLETION_TOKENS }
           }),
         },
       };
@@ -32,7 +44,7 @@ class MockLLMProvider implements LLMProvider {
     this.currentIndex++;
     return {
       text: response,
-      usage: { totalTokens: 50 }
+      usage: { totalTokens: MOCK_COMPLETION_TOKENS }
     };
   }
 }
@@ -73,7 +85,7 @@ class MockProvider implements LLMProvider {
     return {
       text: response.text,
       ...(response.toolCalls !== undefined && { toolCalls: response.toolCalls }),
-      usage: { totalTokens: 100 },
+      usage: { totalTokens: MOCK_TOTAL_TOKENS },
     };
   }
 }
@@ -85,13 +97,13 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
     role: AGENT_ROLES.ARCHITECT,
     model: 'gpt-4',
     provider: LLM_PROVIDERS.OPENAI,
-    temperature: 0.5,
+    temperature: DEFAULT_TEMPERATURE,
   };
 
   const summaryConfig = {
     enabled: true,
-    threshold: 100, // Low threshold for testing
-    maxLength: 50,
+    threshold: TEST_SUMMARY_THRESHOLD, // Low threshold for testing
+    maxLength: TEST_MAX_LENGTH,
     method: SUMMARIZATION_METHODS.LENGTH_BASED,
   };
 
@@ -176,7 +188,7 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
       undefined
     );
 
-    const longContent = 'a'.repeat(150); // Above 100 char threshold
+    const longContent = 'a'.repeat(LONG_CONTENT_LENGTH); // Above 100 char threshold
 
     const context: DebateContext = {
       problem: 'Test problem',
@@ -220,7 +232,7 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
             agentId: 'test-agent',
             agentRole: AGENT_ROLES.ARCHITECT,
             type: CONTRIBUTION_TYPES.PROPOSAL,
-            content: 'a'.repeat(60),
+            content: 'a'.repeat(CONTENT_SNIPPET_60),
             metadata: {}
           },
           // Critique received by agent (should NOT count - critiques excluded)
@@ -228,7 +240,7 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
             agentId: 'other-agent',
             agentRole: AGENT_ROLES.PERFORMANCE,
             type: CONTRIBUTION_TYPES.CRITIQUE,
-            content: 'b'.repeat(40),
+            content: 'b'.repeat(CONTENT_SNIPPET_40),
             targetAgentId: 'test-agent',
             metadata: {}
           },
@@ -237,7 +249,7 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
             agentId: 'test-agent',
             agentRole: AGENT_ROLES.ARCHITECT,
             type: CONTRIBUTION_TYPES.REFINEMENT,
-            content: 'c'.repeat(60),
+            content: 'c'.repeat(CONTENT_SNIPPET_60),
             metadata: {}
           },
           // Critique of another agent (should NOT count)
@@ -245,7 +257,7 @@ describe('RoleBasedAgent - shouldSummarize()', () => {
             agentId: 'other-agent',
             agentRole: AGENT_ROLES.PERFORMANCE,
             type: CONTRIBUTION_TYPES.CRITIQUE,
-            content: 'd'.repeat(200), // Large but shouldn't count
+            content: 'd'.repeat(CONTENT_SNIPPET_200), // Large but shouldn't count
             targetAgentId: 'different-agent',
             metadata: {}
           }
@@ -265,12 +277,12 @@ describe('RoleBasedAgent - prepareContext()', () => {
     role: AGENT_ROLES.ARCHITECT,
     model: 'gpt-4',
     provider: LLM_PROVIDERS.OPENAI,
-    temperature: 0.5,
+    temperature: DEFAULT_TEMPERATURE,
   };
 
   const summaryConfig = {
     enabled: true,
-    threshold: 100,
+    threshold: TEST_SUMMARY_THRESHOLD,
     maxLength: 200,
     method: SUMMARIZATION_METHODS.LENGTH_BASED,
   };
@@ -341,7 +353,7 @@ describe('RoleBasedAgent - prepareContext()', () => {
       undefined
     );
 
-    const longContent = 'a'.repeat(150);
+    const longContent = 'a'.repeat(LONG_CONTENT_LENGTH);
     const context: DebateContext = {
       problem: 'Test problem',
       history: [{
@@ -391,14 +403,14 @@ describe('RoleBasedAgent - prepareContext()', () => {
             agentId: 'test-agent',
             agentRole: AGENT_ROLES.ARCHITECT,
             type: CONTRIBUTION_TYPES.PROPOSAL,
-            content: 'a'.repeat(60),
+            content: 'a'.repeat(CONTENT_SNIPPET_60),
             metadata: {}
           },
           {
             agentId: 'test-agent',
             agentRole: AGENT_ROLES.ARCHITECT,
             type: CONTRIBUTION_TYPES.REFINEMENT,
-            content: 'b'.repeat(60),
+            content: 'b'.repeat(CONTENT_SNIPPET_60),
             metadata: {}
           },
           {
@@ -430,7 +442,7 @@ describe('RoleBasedAgent - prepareContext()', () => {
       undefined
     );
 
-    const longContent = 'x'.repeat(150);
+    const longContent = 'x'.repeat(LONG_CONTENT_LENGTH);
     const context: DebateContext = {
       problem: 'Test problem',
       history: [{
@@ -478,7 +490,7 @@ describe('RoleBasedAgent - prepareContext()', () => {
       undefined
     );
 
-    const longContent = 'z'.repeat(150);
+    const longContent = 'z'.repeat(LONG_CONTENT_LENGTH);
     const context: DebateContext = {
       problem: 'Test problem',
       history: [{
@@ -543,7 +555,7 @@ describe('RoleBasedAgent Tool Calling', () => {
       role: AGENT_ROLES.ARCHITECT,
       model: 'gpt-4',
       provider: LLM_PROVIDERS.OPENAI,
-      temperature: 0.5,
+      temperature: DEFAULT_TEMPERATURE,
     };
 
     mockProvider = new MockProvider();
@@ -907,7 +919,7 @@ describe('RoleBasedAgent (Security Role)', () => {
   describe('propose()', () => {
     it('should call proposeImpl with security-focused prompts', async () => {
       const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt', undefined, defaultSummaryConfig, undefined);
-      const proposeImplSpy = jest.spyOn(agent, 'proposeImpl' as any);
+      const proposeImplSpy = jest.spyOn(agent, 'proposeImpl' as keyof typeof agent as any);
       
       const result = await agent.propose('Test problem', mockContext);
       
@@ -937,7 +949,7 @@ describe('RoleBasedAgent (Security Role)', () => {
   describe('critique()', () => {
     it('should call critiqueImpl with security-focused prompts', async () => {
       const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt', undefined, defaultSummaryConfig, undefined);
-      const critiqueImplSpy = jest.spyOn(agent, 'critiqueImpl' as any);
+      const critiqueImplSpy = jest.spyOn(agent, 'critiqueImpl' as keyof typeof agent as any);
       const mockProposal = {
         content: 'Test proposal content',
         metadata: { latencyMs: 100, model: 'gpt-4' }
@@ -971,7 +983,7 @@ describe('RoleBasedAgent (Security Role)', () => {
   describe('refine()', () => {
     it('should call refineImpl with security-focused prompts', async () => {
       const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt', undefined, defaultSummaryConfig, undefined);
-      const refineImplSpy = jest.spyOn(agent, 'refineImpl' as any);
+      const refineImplSpy = jest.spyOn(agent, 'refineImpl' as keyof typeof agent as any);
       const mockProposal = {
         content: 'Original proposal content',
         metadata: { latencyMs: 100, model: 'gpt-4' }

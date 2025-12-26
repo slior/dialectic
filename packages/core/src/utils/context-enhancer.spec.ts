@@ -1,57 +1,55 @@
 import { enhanceProblemWithContext } from '@dialectic/core';
 
+// Test constants
+const TEST_PROBLEM = 'Test problem';
+const EMPTY_PROBLEM = '';
+const CONTEXT_CONTENT = 'Context content';
+const CONTEXT_WHITESPACE_ONLY = '   \n\n  ';
+const CONTEXT_WITH_WHITESPACE = '  Context content  \n\n';
+const CONTEXT_UTF8 = 'Context with émojis 🎉 and 中文';
+const CONTEXT_SIMPLE = 'Context';
+const CONTEXT_HEADER = '# Extra Context';
+const EXPECTED_SEPARATOR = '\n\n';
+
 describe('enhanceProblemWithContext', () => {
   it('returns problem as-is when context is undefined', () => {
-    const problem = 'Test problem';
-    const result = enhanceProblemWithContext(problem, undefined);
-    expect(result).toBe(problem);
+    const result = enhanceProblemWithContext(TEST_PROBLEM, undefined);
+    expect(result).toBe(TEST_PROBLEM);
   });
 
   it('returns problem as-is when context is empty string', () => {
-    const problem = 'Test problem';
-    const result = enhanceProblemWithContext(problem, '');
-    expect(result).toBe(problem);
+    const result = enhanceProblemWithContext(TEST_PROBLEM, '');
+    expect(result).toBe(TEST_PROBLEM);
   });
 
   it('returns problem as-is when context is whitespace-only', () => {
-    const problem = 'Test problem';
-    const result = enhanceProblemWithContext(problem, '   \n\n  ');
-    expect(result).toBe(problem);
+    const result = enhanceProblemWithContext(TEST_PROBLEM, CONTEXT_WHITESPACE_ONLY);
+    expect(result).toBe(TEST_PROBLEM);
   });
 
   it('appends context when context is valid', () => {
-    const problem = 'Test problem';
-    const context = 'Context content';
-    const result = enhanceProblemWithContext(problem, context);
-    expect(result).toBe('Test problem\n\n# Extra Context\n\nContext content');
+    const result = enhanceProblemWithContext(TEST_PROBLEM, CONTEXT_CONTENT);
+    expect(result).toBe(`${TEST_PROBLEM}${EXPECTED_SEPARATOR}${CONTEXT_HEADER}${EXPECTED_SEPARATOR}${CONTEXT_CONTENT}`);
   });
 
   it('handles empty problem string', () => {
-    const problem = '';
-    const context = 'Context content';
-    const result = enhanceProblemWithContext(problem, context);
-    expect(result).toBe('\n\n# Extra Context\n\nContext content');
+    const result = enhanceProblemWithContext(EMPTY_PROBLEM, CONTEXT_CONTENT);
+    expect(result).toBe(`${EXPECTED_SEPARATOR}${CONTEXT_HEADER}${EXPECTED_SEPARATOR}${CONTEXT_CONTENT}`);
   });
 
   it('preserves UTF-8 encoding correctly', () => {
-    const problem = 'Test problem';
-    const context = 'Context with émojis 🎉 and 中文';
-    const result = enhanceProblemWithContext(problem, context);
-    expect(result).toBe('Test problem\n\n# Extra Context\n\nContext with émojis 🎉 and 中文');
+    const result = enhanceProblemWithContext(TEST_PROBLEM, CONTEXT_UTF8);
+    expect(result).toBe(`${TEST_PROBLEM}${EXPECTED_SEPARATOR}${CONTEXT_HEADER}${EXPECTED_SEPARATOR}${CONTEXT_UTF8}`);
   });
 
   it('handles markdown spacing correctly', () => {
-    const problem = 'Test problem';
-    const context = 'Context';
-    const result = enhanceProblemWithContext(problem, context);
-    expect(result).toBe('Test problem\n\n# Extra Context\n\nContext');
+    const result = enhanceProblemWithContext(TEST_PROBLEM, CONTEXT_SIMPLE);
+    expect(result).toBe(`${TEST_PROBLEM}${EXPECTED_SEPARATOR}${CONTEXT_HEADER}${EXPECTED_SEPARATOR}${CONTEXT_SIMPLE}`);
   });
 
   it('trims context before appending', () => {
-    const problem = 'Test problem';
-    const context = '  Context content  \n\n';
-    const result = enhanceProblemWithContext(problem, context);
-    expect(result).toBe('Test problem\n\n# Extra Context\n\nContext content');
+    const result = enhanceProblemWithContext(TEST_PROBLEM, CONTEXT_WITH_WHITESPACE);
+    expect(result).toBe(`${TEST_PROBLEM}${EXPECTED_SEPARATOR}${CONTEXT_HEADER}${EXPECTED_SEPARATOR}${CONTEXT_CONTENT}`);
   });
 });
 

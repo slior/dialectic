@@ -1,5 +1,9 @@
 import { TracingDecoratorAgent, RoleBasedAgent, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, Proposal, Critique, SummarizationConfig, DebateContext, DebateState, TracingContext, LLMProvider, ToolImplementation, ToolCall, ToolResult } from '@dialectic/core';
 
+// Test constants
+const DEFAULT_TEMPERATURE = 0.5;
+const MOCK_TOTAL_TOKENS = 100;
+
 /**
  * Test-only type that exposes protected methods for testing.
  * This allows us to test protected methods without using `any`.
@@ -31,7 +35,7 @@ describe('TracingDecoratorAgent', () => {
     mockProvider = {
       complete: jest.fn().mockResolvedValue({
         text: 'test response',
-        usage: { totalTokens: 100 },
+        usage: { totalTokens: MOCK_TOTAL_TOKENS },
       }),
     };
 
@@ -66,7 +70,7 @@ describe('TracingDecoratorAgent', () => {
       role: AGENT_ROLES.ARCHITECT,
       model: 'gpt-4',
       provider: LLM_PROVIDERS.OPENAI,
-      temperature: 0.5,
+      temperature: DEFAULT_TEMPERATURE,
     };
 
     summaryConfig = {

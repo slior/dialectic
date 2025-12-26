@@ -1,5 +1,12 @@
 import { OpenRouterProvider, CompletionRequest } from '@dialectic/core';
 
+// Test constants
+const DEFAULT_TEMPERATURE = 0.7;
+const DEFAULT_MAX_TOKENS = 100;
+const MOCK_INPUT_TOKENS = 10;
+const MOCK_OUTPUT_TOKENS = 8;
+const MOCK_TOTAL_TOKENS = 18;
+
 // Mock OpenAI SDK
 const mockResponsesCreate = jest.fn();
 const mockChatCompletionsCreate = jest.fn();
@@ -55,17 +62,17 @@ describe('OpenRouterProvider', () => {
       model: 'openai/gpt-4',
       systemPrompt: 'You are a helpful assistant.',
       userPrompt: 'Hello, world!',
-      temperature: 0.7,
-      maxTokens: 100,
+      temperature: DEFAULT_TEMPERATURE,
+      maxTokens: DEFAULT_MAX_TOKENS,
     };
 
     it('should use Responses API successfully', async () => {
       const mockResponse = {
         output_text: 'Hello! How can I help you?',
         usage: {
-          input_tokens: 10,
-          output_tokens: 8,
-          total_tokens: 18,
+        input_tokens: MOCK_INPUT_TOKENS,
+        output_tokens: MOCK_OUTPUT_TOKENS,
+        total_tokens: MOCK_TOTAL_TOKENS,
         },
       };
 
@@ -75,12 +82,12 @@ describe('OpenRouterProvider', () => {
 
       expect(mockResponsesCreate).toHaveBeenCalledWith({
         model: 'openai/gpt-4',
-        temperature: 0.7,
+        temperature: DEFAULT_TEMPERATURE,
         input: [
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'Hello, world!' },
         ],
-        max_output_tokens: 100,
+        max_output_tokens: DEFAULT_MAX_TOKENS,
       });
 
       expect(result).toEqual({
@@ -105,9 +112,9 @@ describe('OpenRouterProvider', () => {
           },
         ],
         usage: {
-          input_tokens: 10,
-          output_tokens: 8,
-          total_tokens: 18,
+        input_tokens: MOCK_INPUT_TOKENS,
+        output_tokens: MOCK_OUTPUT_TOKENS,
+        total_tokens: MOCK_TOTAL_TOKENS,
         },
       };
 
@@ -152,8 +159,8 @@ describe('OpenRouterProvider', () => {
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'Hello, world!' },
         ],
-        temperature: 0.7,
-        max_tokens: 100,
+        temperature: DEFAULT_TEMPERATURE,
+        max_tokens: DEFAULT_MAX_TOKENS,
       });
 
       expect(result).toEqual({
@@ -178,9 +185,9 @@ describe('OpenRouterProvider', () => {
       const mockResponse = {
         output_text: 'Hello! How can I help you?',
         usage: {
-          input_tokens: 10,
-          output_tokens: 8,
-          total_tokens: 18,
+        input_tokens: MOCK_INPUT_TOKENS,
+        output_tokens: MOCK_OUTPUT_TOKENS,
+        total_tokens: MOCK_TOTAL_TOKENS,
         },
       };
 
@@ -190,7 +197,7 @@ describe('OpenRouterProvider', () => {
 
       expect(mockResponsesCreate).toHaveBeenCalledWith({
         model: 'openai/gpt-4',
-        temperature: 0.7,
+        temperature: DEFAULT_TEMPERATURE,
         input: [
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'Hello, world!' },
@@ -207,9 +214,9 @@ describe('OpenRouterProvider', () => {
       const mockResponse = {
         output_text: 'Hello! How can I help you?',
         usage: {
-          input_tokens: 10,
-          output_tokens: 8,
-          total_tokens: 18,
+        input_tokens: MOCK_INPUT_TOKENS,
+        output_tokens: MOCK_OUTPUT_TOKENS,
+        total_tokens: MOCK_TOTAL_TOKENS,
         },
       };
 
@@ -219,12 +226,12 @@ describe('OpenRouterProvider', () => {
 
       expect(mockResponsesCreate).toHaveBeenCalledWith({
         model: 'openai/gpt-4',
-        temperature: 0.7,
+        temperature: DEFAULT_TEMPERATURE,
         input: [
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'Hello, world!' },
         ],
-        max_output_tokens: 100,
+        max_output_tokens: DEFAULT_MAX_TOKENS,
         stop: ['\n\n', 'Human:'],
       });
     });
@@ -252,9 +259,9 @@ describe('OpenRouterProvider', () => {
       const mockResponse = {
         output_text: 'Hello from Claude!',
         usage: {
-          input_tokens: 10,
-          output_tokens: 8,
-          total_tokens: 18,
+        input_tokens: MOCK_INPUT_TOKENS,
+        output_tokens: MOCK_OUTPUT_TOKENS,
+        total_tokens: MOCK_TOTAL_TOKENS,
         },
       };
 
@@ -264,12 +271,12 @@ describe('OpenRouterProvider', () => {
 
       expect(mockResponsesCreate).toHaveBeenCalledWith({
         model: 'anthropic/claude-3-sonnet',
-        temperature: 0.7,
+        temperature: DEFAULT_TEMPERATURE,
         input: [
           { role: 'system', content: 'You are a helpful assistant.' },
           { role: 'user', content: 'Hello, world!' },
         ],
-        max_output_tokens: 100,
+        max_output_tokens: DEFAULT_MAX_TOKENS,
       });
 
       expect(result.text).toBe('Hello from Claude!');

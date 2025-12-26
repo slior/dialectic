@@ -3,6 +3,16 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// Test constants
+const DEFAULT_TIMEOUT_MS = 300000;
+const DEFAULT_TEMPERATURE = 0.5;
+const DEFAULT_JUDGE_TEMPERATURE = 0.3;
+const MOCK_LATENCY_MS = 100;
+const MOCK_TOKENS_USED = 50;
+const EXPECTED_ROUNDS_COUNT = 3;
+const SINGLE_ROUND = 1;
+const TWO_ROUNDS = 2;
+
 function createMockAgent(id: string, role: any, withToolCalls = false): Agent {
   const baseMetadata = {};
   const toolMetadata = withToolCalls ? {
@@ -19,7 +29,7 @@ function createMockAgent(id: string, role: any, withToolCalls = false): Agent {
     shouldSummarize: () => false,
     prepareContext: async (context: any) => ({ context }),
     askClarifyingQuestions: async () => ({ questions: [] }),
-  } as any;
+  } as unknown as Agent;
 }
 
 function createMockAgentWithToolMetadata(id: string, role: any, toolCalls?: ToolCall[], toolResults?: ToolResult[], iterations?: number): Agent {
@@ -52,7 +62,7 @@ function createMockAgentWithToolMetadata(id: string, role: any, toolCalls?: Tool
     shouldSummarize: () => false,
     prepareContext: async (context: any) => ({ context }),
     askClarifyingQuestions: async () => ({ questions: [] }),
-  } as any;
+  } as unknown as Agent;
 }
 
 const mockJudge = {
@@ -64,7 +74,7 @@ const mockJudge = {
     synthesizedBy: 'judge',
   } as Solution),
   prepareContext: async (_rounds: DebateRound[]) => ({ context: { problem: '', history: [] } }),
-} as any;
+} as unknown as any;
 
 function createMockStateManager() {
   const state: DebateState = {
@@ -75,7 +85,7 @@ function createMockStateManager() {
     rounds: [],
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as any;
+  } as DebateState;
 
   return {
     createDebate: async (problem: string) => ({ ...state, problem }),
@@ -94,11 +104,11 @@ function createMockStateManager() {
     },
     completeDebate: async (_id: string, solution: Solution) => {
       state.status = 'completed';
-      (state as any).finalSolution = solution;
+      (state as DebateState & { finalSolution?: Solution }).finalSolution = solution;
       state.updatedAt = new Date();
     },
     getState: () => state,
-  } as any;
+  } as unknown as StateManager;
 }
 
 function createMockStateManagerWithToolSupport() {
@@ -110,7 +120,7 @@ function createMockStateManagerWithToolSupport() {
     rounds: [],
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as any;
+  } as DebateState;
 
   return {
     createDebate: async (problem: string) => ({ ...state, problem }),
@@ -141,7 +151,7 @@ function createMockStateManagerWithToolSupport() {
       state.updatedAt = new Date();
     },
     getDebate: async (_id: string) => state,
-  } as any;
+  } as unknown as StateManager;
 }
 
 // Mock Agent that supports summarization
@@ -160,15 +170,15 @@ class MockAgent extends Agent {
   }
 
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
-    return { content: 'Mock proposal', metadata: { latencyMs: 100 } };
+    return { content: 'Mock proposal', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
   async critique(_proposal: Proposal, _context: DebateContext): Promise<Critique> {
-    return { content: 'Mock critique', metadata: { latencyMs: 100 } };
+    return { content: 'Mock critique', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
   async refine(_originalProposal: Proposal, _critiques: Critique[], _context: DebateContext): Promise<Proposal> {
-    return { content: 'Mock refinement', metadata: { latencyMs: 100 } };
+    return { content: 'Mock refinement', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
   shouldSummarize(_context: DebateContext): boolean {
@@ -202,9 +212,9 @@ class MockJudge extends Agent {
       role: AGENT_ROLES.GENERALIST,
       model: 'gpt-4',
       provider: LLM_PROVIDERS.OPENAI,
-      temperature: 0.3
+      temperature: DEFAULT_JUDGE_TEMPERATURE
     };
-    super(config, {} as any);
+    super(config, {} as unknown as any);
   }
 
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
@@ -248,21 +258,21 @@ describe('DebateOrchestrator (Flow 1)', () => {
     const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
     const sm = createMockStateManager();
     const cfg: DebateConfig = {
-      rounds: 3,
+      rounds: EXPECTED_ROUNDS_COUNT,
       terminationCondition: { type: 'fixed' },
       synthesisMethod: 'judge',
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
     await expect(orchestrator.runDebate('Design a caching system')).resolves.toBeDefined();
 
-    const state = (sm as any).getState();
-    expect(state.rounds.length).toBe(3);
+    const state = (sm as unknown as { getState: () => DebateState }).getState();
+    expect(state.rounds.length).toBe(EXPECTED_ROUNDS_COUNT);
     // Each round should include refinement contributions
     state.rounds.forEach((round: DebateRound) => {
-      const hasRefinement = round.contributions.some((c: any) => c.type === 'refinement');
+      const hasRefinement = round.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
       expect(hasRefinement).toBe(true);
     });
   });
@@ -271,21 +281,21 @@ describe('DebateOrchestrator (Flow 1)', () => {
     const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
     const sm = createMockStateManager();
     const cfg: DebateConfig = {
-      rounds: 1,
+      rounds: SINGLE_ROUND,
       terminationCondition: { type: 'fixed' },
       synthesisMethod: 'judge',
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
     await expect(orchestrator.runDebate('Design a rate limiting system')).resolves.toBeDefined();
 
-    const state = (sm as any).getState();
-    expect(state.rounds.length).toBe(1);
-    const hasProposal = state.rounds[0].contributions.some((c: any) => c.type === 'proposal');
-    const hasCritique = state.rounds[0].contributions.some((c: any) => c.type === 'critique');
-    const hasRefinement = state.rounds[0].contributions.some((c: any) => c.type === 'refinement');
+    const state = (sm as unknown as { getState: () => DebateState }).getState();
+    expect(state.rounds.length).toBe(SINGLE_ROUND);
+    const hasProposal = state.rounds[0]?.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL) ?? false;
+    const hasCritique = state.rounds[0]?.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.CRITIQUE) ?? false;
+    const hasRefinement = state.rounds[0]?.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT) ?? false;
     expect(hasProposal && hasCritique && hasRefinement).toBe(true);
   });
 
@@ -293,28 +303,30 @@ describe('DebateOrchestrator (Flow 1)', () => {
     const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
     const sm = createMockStateManager();
     const cfg: DebateConfig = {
-      rounds: 2,
+      rounds: TWO_ROUNDS,
       terminationCondition: { type: 'fixed' },
       synthesisMethod: 'judge',
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
     await orchestrator.runDebate('Design X');
 
-    const state = (sm as any).getState();
-    expect(state.rounds.length).toBe(2);
+    const state = (sm as unknown as { getState: () => DebateState }).getState();
+    expect(state.rounds.length).toBe(TWO_ROUNDS);
 
     const r1 = state.rounds[0];
     const r2 = state.rounds[1];
+    expect(r1).toBeDefined();
+    expect(r2).toBeDefined();
 
     const r1RefByAgent: Record<string, string> = {};
-    r1.contributions.filter((c: any) => c.type === 'refinement').forEach((c: any) => {
+    r1!.contributions.filter((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT).forEach((c: any) => {
       r1RefByAgent[c.agentId] = c.content;
     });
 
-    const r2Props = r2.contributions.filter((c: any) => c.type === 'proposal');
+    const r2Props = r2!.contributions.filter((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
     expect(r2Props.length).toBe(agents.length);
 
     // Proposals in round 2 must equal refinements from round 1 per agent, with tokens/latency zero
@@ -352,33 +364,37 @@ describe('DebateOrchestrator (Flow 1)', () => {
         round.contributions.push(contrib);
         state.updatedAt = new Date();
       },
-      completeDebate: async (_id: string, solution: Solution) => { state.status = 'completed'; (state as any).finalSolution = solution; state.updatedAt = new Date(); },
+      completeDebate: async (_id: string, solution: Solution) => { 
+        state.status = 'completed'; 
+        (state as DebateState & { finalSolution?: Solution }).finalSolution = solution; 
+        state.updatedAt = new Date(); 
+      },
       getState: () => state,
-    } as any;
+    } as unknown as StateManager;
 
     // Spy on console.error warnings
     const warnSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     const cfg: DebateConfig = {
-      rounds: 2,
+      rounds: TWO_ROUNDS,
       terminationCondition: { type: 'fixed' },
       synthesisMethod: 'judge',
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
     await orchestrator.runDebate('Design Y');
 
     const r1 = state.rounds[0];
     const r2 = state.rounds[1];
 
     // a1 should be carried over; a2 should fall back to LLM proposal content
-    const r1RefA1 = r1.contributions.find((c: any) => c.type === 'refinement' && c.agentId === 'a1')?.content;
-    const r2PropA1 = r2.contributions.find((c: any) => c.type === 'proposal' && c.agentId === 'a1')?.content;
+    const r1RefA1 = r1.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT && c.agentId === 'a1')?.content;
+    const r2PropA1 = r2.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL && c.agentId === 'a1')?.content;
     expect(r2PropA1).toBe(r1RefA1);
 
-    const r2PropA2 = r2.contributions.find((c: any) => c.type === 'proposal' && c.agentId === 'a2')?.content;
+    const r2PropA2 = r2.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL && c.agentId === 'a2')?.content;
     expect(r2PropA2).toBe('performance proposal');
 
     expect(warnSpy).toHaveBeenCalled();
@@ -392,47 +408,47 @@ describe('DebateOrchestrator (Flow 1)', () => {
     const agents = [createMockAgent('a1', 'architect', true)];
     const sm = createMockStateManager();
     const cfg: DebateConfig = {
-      rounds: 1,
+      rounds: SINGLE_ROUND,
       terminationCondition: { type: 'fixed' },
       synthesisMethod: 'judge',
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
     await orchestrator.runDebate('Test problem');
 
-    const state = (sm as any).getState();
-    const proposal = state.rounds[0]?.contributions.find((c: any) => c.type === 'proposal');
+    const state = (sm as unknown as { getState: () => DebateState }).getState();
+    const proposal = state.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
     
     expect(proposal).toBeDefined();
-    expect(proposal.metadata.toolCalls).toBeDefined();
-    expect(proposal.metadata.toolCalls.length).toBe(1);
-    expect(proposal.metadata.toolResults).toBeDefined();
-    expect(proposal.metadata.toolCallIterations).toBe(1);
+    expect(proposal?.metadata.toolCalls).toBeDefined();
+    expect(proposal?.metadata.toolCalls?.length).toBe(1);
+    expect(proposal?.metadata.toolResults).toBeDefined();
+    expect(proposal?.metadata.toolCallIterations).toBe(1);
   });
 
   it('persists tool results in contribution metadata', async () => {
     const agents = [createMockAgent('a1', 'architect', true)];
     const sm = createMockStateManager();
     const cfg: DebateConfig = {
-      rounds: 1,
+      rounds: SINGLE_ROUND,
       terminationCondition: { type: 'fixed' },
       synthesisMethod: 'judge',
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents as any, mockJudge, sm as any, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
     await orchestrator.runDebate('Test problem');
 
-    const state = (sm as any).getState();
-    const proposal = state.rounds[0]?.contributions.find((c: any) => c.type === 'proposal');
+    const state = (sm as unknown as { getState: () => DebateState }).getState();
+    const proposal = state.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
     
-    expect(proposal.metadata.toolResults).toBeDefined();
-    expect(proposal.metadata.toolResults.length).toBe(1);
-    expect(proposal.metadata.toolResults[0].tool_call_id).toBe('call_1');
-    expect(proposal.metadata.toolResults[0].role).toBe('tool');
+    expect(proposal?.metadata.toolResults).toBeDefined();
+    expect(proposal?.metadata.toolResults?.length).toBe(1);
+    expect(proposal?.metadata.toolResults?.[0]?.tool_call_id).toBe('call_1');
+    expect(proposal?.metadata.toolResults?.[0]?.role).toBe('tool');
   });
 });
 
@@ -448,11 +464,11 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
   });
 
   const config: DebateConfig = {
-    rounds: 1,
+    rounds: SINGLE_ROUND,
     terminationCondition: { type: TERMINATION_TYPES.FIXED },
     synthesisMethod: SYNTHESIS_METHODS.JUDGE,
     includeFullHistory: true,
-    timeoutPerRound: 300000,
+    timeoutPerRound: DEFAULT_TIMEOUT_MS,
   };
 
   it('should call prepareContext for each agent', async () => {
@@ -482,12 +498,12 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
     const prepareContextSpy1 = jest.spyOn(agent1, 'prepareContext');
     const prepareContextSpy2 = jest.spyOn(agent2, 'prepareContext');
 
-    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as unknown as any, stateManager, config);
     
     const state = await stateManager.createDebate('Test problem');
     
     // Access private method via type assertion for testing
-    const result = await (orchestrator as any).summarizationPhase(state, 1);
+    const result = await (orchestrator as unknown as { summarizationPhase: (state: DebateState, roundNumber: number) => Promise<Map<string, DebateContext>> }).summarizationPhase(state, 1);
 
     expect(prepareContextSpy1).toHaveBeenCalledTimes(1);
     expect(prepareContextSpy2).toHaveBeenCalledTimes(1);
@@ -515,7 +531,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date(),
         latencyMs: 200,
-        tokensUsed: 50
+        tokensUsed: MOCK_TOKENS_USED
       }
     };
 
@@ -587,7 +603,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
       role: AGENT_ROLES.ARCHITECT,
       model: 'gpt-4',
       provider: LLM_PROVIDERS.OPENAI,
-      temperature: 0.5
+      temperature: DEFAULT_TEMPERATURE
     };
 
     const agent2Config: AgentConfig = {
@@ -596,7 +612,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
       role: AGENT_ROLES.PERFORMANCE,
       model: 'gpt-4',
       provider: LLM_PROVIDERS.OPENAI,
-      temperature: 0.5
+      temperature: DEFAULT_TEMPERATURE
     };
 
     const agent1 = new MockAgent(agent1Config);
@@ -604,15 +620,15 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
     const judge = new MockJudge();
     const stateManager = new StateManager(tmpDir);
 
-    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as unknown as any, stateManager, config);
     
     const state = await stateManager.createDebate('Test problem');
     
-    const result = await (orchestrator as any).summarizationPhase(state, 1);
+    const result = await (orchestrator as unknown as { summarizationPhase: (state: DebateState, roundNumber: number) => Promise<Map<string, DebateContext>> }).summarizationPhase(state, 1);
 
     expect(result.get('agent-1')).toBeDefined();
     expect(result.get('agent-2')).toBeDefined();
-    expect(result.get('agent-1').problem).toBe('Test problem');
+    expect(result.get('agent-1')?.problem).toBe('Test problem');
   });
 });
 
@@ -642,16 +658,16 @@ describe('DebateOrchestrator - runDebate integration with summarization', () => 
     const stateManager = new StateManager(tmpDir);
 
     const config: DebateConfig = {
-      rounds: 1,
+      rounds: SINGLE_ROUND,
       terminationCondition: { type: TERMINATION_TYPES.FIXED },
       synthesisMethod: SYNTHESIS_METHODS.JUDGE,
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
     const prepareContextSpy = jest.spyOn(agent, 'prepareContext');
 
-    const orchestrator = new DebateOrchestrator([agent], judge as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent], judge as unknown as any, stateManager, config);
     
     await orchestrator.runDebate('Test problem');
 
@@ -687,14 +703,14 @@ describe('DebateOrchestrator - runDebate integration with summarization', () => 
     const stateManager = new StateManager(tmpDir);
 
     const config: DebateConfig = {
-      rounds: 1,
+      rounds: SINGLE_ROUND,
       terminationCondition: { type: TERMINATION_TYPES.FIXED },
       synthesisMethod: SYNTHESIS_METHODS.JUDGE,
       includeFullHistory: true,
-      timeoutPerRound: 300000,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator([agent], judge as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent], judge as unknown as any, stateManager, config);
     
     const result = await orchestrator.runDebate('Test problem');
 
@@ -714,7 +730,7 @@ describe('DebateOrchestrator - runDebate integration with summarization', () => 
 
 describe('Orchestrator Tool Metadata', () => {
   let orchestrator: DebateOrchestrator;
-  let stateManager: any;
+  let stateManager: StateManager;
 
   beforeEach(() => {
     stateManager = createMockStateManagerWithToolSupport();
@@ -732,22 +748,23 @@ describe('Orchestrator Tool Metadata', () => {
 
       const agents = [createMockAgentWithToolMetadata('agent1', 'architect', toolCalls)];
       const cfg: DebateConfig = {
-        rounds: 1,
+        rounds: SINGLE_ROUND,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
       };
 
       orchestrator = new DebateOrchestrator(agents, mockJudge, stateManager, cfg);
       const result = await orchestrator.runDebate('Test problem');
 
       const debate = await stateManager.getDebate(result.debateId);
-      const contribution = debate.rounds[0]?.contributions[0];
+      expect(debate).toBeDefined();
+      const contribution = debate?.rounds[0]?.contributions[0];
 
       expect(contribution).toBeDefined();
-      expect(contribution.metadata.toolCalls).toBeDefined();
-      expect(contribution.metadata.toolCalls).toEqual(toolCalls);
+      expect(contribution?.metadata.toolCalls).toBeDefined();
+      expect(contribution?.metadata.toolCalls).toEqual(toolCalls);
     });
   });
 
@@ -763,23 +780,24 @@ describe('Orchestrator Tool Metadata', () => {
 
       const agents = [createMockAgentWithToolMetadata('agent1', 'architect', toolCalls)];
       const cfg: DebateConfig = {
-        rounds: 1,
+        rounds: SINGLE_ROUND,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
       };
 
       orchestrator = new DebateOrchestrator(agents, mockJudge, stateManager, cfg);
       await orchestrator.runDebate('Test problem');
 
       const debate = await stateManager.getDebate('deb-test');
-      const contribution = debate.rounds[0]?.contributions.find(
+      expect(debate).toBeDefined();
+      const contribution = debate?.rounds[0]?.contributions.find(
         (c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL
       );
 
-      expect(contribution.metadata.toolCalls).toBeDefined();
-      expect(contribution.metadata.toolCalls[0].name).toBe('context_search');
+      expect(contribution?.metadata.toolCalls).toBeDefined();
+      expect(contribution?.metadata.toolCalls?.[0]?.name).toBe('context_search');
     });
   });
 
@@ -795,23 +813,24 @@ describe('Orchestrator Tool Metadata', () => {
 
       const agents = [createMockAgentWithToolMetadata('agent1', 'architect', undefined, toolResults)];
       const cfg: DebateConfig = {
-        rounds: 1,
+        rounds: SINGLE_ROUND,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
       };
 
       orchestrator = new DebateOrchestrator(agents, mockJudge, stateManager, cfg);
       await orchestrator.runDebate('Test problem');
 
       const debate = await stateManager.getDebate('deb-test');
-      const contribution = debate.rounds[0]?.contributions.find(
+      expect(debate).toBeDefined();
+      const contribution = debate?.rounds[0]?.contributions.find(
         (c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL
       );
 
-      expect(contribution.metadata.toolResults).toBeDefined();
-      expect(contribution.metadata.toolResults[0].tool_call_id).toBe('call_1');
+      expect(contribution?.metadata.toolResults).toBeDefined();
+      expect(contribution?.metadata.toolResults?.[0]?.tool_call_id).toBe('call_1');
     });
   });
 
@@ -819,22 +838,23 @@ describe('Orchestrator Tool Metadata', () => {
     it('should store tool call iterations in contribution metadata', async () => {
       const agents = [createMockAgentWithToolMetadata('agent1', 'architect', undefined, undefined, 3)];
       const cfg: DebateConfig = {
-        rounds: 1,
+        rounds: SINGLE_ROUND,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
       };
 
       orchestrator = new DebateOrchestrator(agents, mockJudge, stateManager, cfg);
       await orchestrator.runDebate('Test problem');
 
       const debate = await stateManager.getDebate('deb-test');
-      const contribution = debate.rounds[0]?.contributions.find(
+      expect(debate).toBeDefined();
+      const contribution = debate?.rounds[0]?.contributions.find(
         (c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL
       );
 
-      expect(contribution.metadata.toolCallIterations).toBe(3);
+      expect(contribution?.metadata.toolCallIterations).toBe(3);
     });
   });
 
@@ -857,22 +877,23 @@ describe('Orchestrator Tool Metadata', () => {
 
       const agents = [createMockAgentWithToolMetadata('agent1', 'architect', toolCalls, toolResults, 1)];
       const cfg: DebateConfig = {
-        rounds: 1,
+        rounds: SINGLE_ROUND,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
       };
 
       orchestrator = new DebateOrchestrator(agents, mockJudge, stateManager, cfg);
       const result = await orchestrator.runDebate('Test problem');
 
       const debate = await stateManager.getDebate(result.debateId);
-      const contribution = debate.rounds[0]?.contributions[0];
+      expect(debate).toBeDefined();
+      const contribution = debate?.rounds[0]?.contributions[0];
 
-      expect(contribution.metadata.toolCalls).toBeDefined();
-      expect(contribution.metadata.toolResults).toBeDefined();
-      expect(contribution.metadata.toolCallIterations).toBe(1);
+      expect(contribution?.metadata.toolCalls).toBeDefined();
+      expect(contribution?.metadata.toolResults).toBeDefined();
+      expect(contribution?.metadata.toolCallIterations).toBe(1);
     });
 
     it('should persist tool metadata across all phases', async () => {
@@ -890,20 +911,21 @@ describe('Orchestrator Tool Metadata', () => {
         createMockAgentWithToolMetadata('agent2', 'performance', toolCalls),
       ];
       const cfg: DebateConfig = {
-        rounds: 1,
+        rounds: SINGLE_ROUND,
         terminationCondition: { type: 'fixed' },
         synthesisMethod: 'judge',
         includeFullHistory: true,
-        timeoutPerRound: 300000,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
       };
 
       orchestrator = new DebateOrchestrator(agents, mockJudge, stateManager, cfg);
       await orchestrator.runDebate('Test problem');
 
       const debate = await stateManager.getDebate('deb-test');
-      const proposal = debate.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
-      const critique = debate.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.CRITIQUE);
-      const refinement = debate.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
+      expect(debate).toBeDefined();
+      const proposal = debate?.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
+      const critique = debate?.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.CRITIQUE);
+      const refinement = debate?.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
 
       // All phases should have tool metadata if agent used tools
       expect(proposal?.metadata.toolCalls).toBeDefined();

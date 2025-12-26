@@ -1,21 +1,33 @@
 import { RoleBasedAgent, AGENT_ROLES, getPromptsForRole } from '@dialectic/core';
 
+// Test constants
+const TEST_CONTENT = 'test content';
+const HISTORY_CONTENT = 'history content';
+const CONTENT_SIMPLE = 'content';
+const CONTENT_SPECIFIC = 'This is specific debate history content';
+const MAX_LENGTH_1000 = 1000;
+const MAX_LENGTH_2500 = 2500;
+const MAX_LENGTH_3500 = 3500;
+const MAX_LENGTH_1000_STRING = '1000';
+const MAX_LENGTH_2500_STRING = '2500';
+const MAX_LENGTH_3500_STRING = '3500';
+
 describe('Summary Prompts', () => {
   describe('Role-specific summary prompts', () => {
     it('should provide summary prompt for architect role', () => {
       const prompts = getPromptsForRole(AGENT_ROLES.ARCHITECT);
-      const summaryPrompt = prompts.summarizePrompt('test content', 1000);
+      const summaryPrompt = prompts.summarizePrompt(TEST_CONTENT, MAX_LENGTH_1000);
 
       expect(summaryPrompt).toBeDefined();
       expect(typeof summaryPrompt).toBe('string');
       expect(summaryPrompt.length).toBeGreaterThan(0);
-      expect(summaryPrompt).toContain('test content');
-      expect(summaryPrompt).toContain('1000');
+      expect(summaryPrompt).toContain(TEST_CONTENT);
+      expect(summaryPrompt).toContain(MAX_LENGTH_1000_STRING);
     });
 
     it('should provide summary prompt for performance role', () => {
       const prompts = getPromptsForRole(AGENT_ROLES.PERFORMANCE);
-      const summaryPrompt = prompts.summarizePrompt('test content', 1000);
+      const summaryPrompt = prompts.summarizePrompt(TEST_CONTENT, MAX_LENGTH_1000);
 
       expect(summaryPrompt).toBeDefined();
       expect(typeof summaryPrompt).toBe('string');
@@ -24,7 +36,7 @@ describe('Summary Prompts', () => {
 
     it('should provide summary prompt for security role', () => {
       const prompts = getPromptsForRole(AGENT_ROLES.SECURITY);
-      const summaryPrompt = prompts.summarizePrompt('test content', 1000);
+      const summaryPrompt = prompts.summarizePrompt(TEST_CONTENT, MAX_LENGTH_1000);
 
       expect(summaryPrompt).toBeDefined();
       expect(typeof summaryPrompt).toBe('string');
@@ -33,7 +45,7 @@ describe('Summary Prompts', () => {
 
     it('should provide summary prompt for testing role', () => {
       const prompts = getPromptsForRole(AGENT_ROLES.TESTING);
-      const summaryPrompt = prompts.summarizePrompt('test content', 1000);
+      const summaryPrompt = prompts.summarizePrompt(TEST_CONTENT, MAX_LENGTH_1000);
 
       expect(summaryPrompt).toBeDefined();
       expect(typeof summaryPrompt).toBe('string');
@@ -42,7 +54,7 @@ describe('Summary Prompts', () => {
 
     it('should provide summary prompt for generalist role', () => {
       const prompts = getPromptsForRole(AGENT_ROLES.GENERALIST);
-      const summaryPrompt = prompts.summarizePrompt('test content', 1000);
+      const summaryPrompt = prompts.summarizePrompt(TEST_CONTENT, MAX_LENGTH_1000);
 
       expect(summaryPrompt).toBeDefined();
       expect(typeof summaryPrompt).toBe('string');
@@ -61,58 +73,57 @@ describe('Summary Prompts', () => {
       ];
 
       roles.forEach(role => {
-        const prompt = RoleBasedAgent.defaultSummaryPrompt(role, 'history content', 2500);
+        const prompt = RoleBasedAgent.defaultSummaryPrompt(role, HISTORY_CONTENT, MAX_LENGTH_2500);
         
         expect(prompt).toBeDefined();
         expect(typeof prompt).toBe('string');
         expect(prompt.length).toBeGreaterThan(0);
-        expect(prompt).toContain('history content');
-        expect(prompt).toContain('2500');
+        expect(prompt).toContain(HISTORY_CONTENT);
+        expect(prompt).toContain(MAX_LENGTH_2500_STRING);
       });
     });
 
     it('should include role-specific keywords in prompts', () => {
       const architectPrompt = RoleBasedAgent.defaultSummaryPrompt(
         AGENT_ROLES.ARCHITECT,
-        'content',
-        1000
+        CONTENT_SIMPLE,
+        MAX_LENGTH_1000
       );
       expect(architectPrompt.toLowerCase()).toMatch(/architect|design|component/);
 
       const perfPrompt = RoleBasedAgent.defaultSummaryPrompt(
         AGENT_ROLES.PERFORMANCE,
-        'content',
-        1000
+        CONTENT_SIMPLE,
+        MAX_LENGTH_1000
       );
       expect(perfPrompt.toLowerCase()).toMatch(/performance|optimization|latency|throughput/);
 
       const secPrompt = RoleBasedAgent.defaultSummaryPrompt(
         AGENT_ROLES.SECURITY,
-        'content',
-        1000
+        CONTENT_SIMPLE,
+        MAX_LENGTH_1000
       );
       expect(secPrompt.toLowerCase()).toMatch(/security|threat|vulnerability/);
     });
 
     it('should interpolate content into prompt', () => {
-      const content = 'This is specific debate history content';
       const prompt = RoleBasedAgent.defaultSummaryPrompt(
         AGENT_ROLES.ARCHITECT,
-        content,
-        1000
+        CONTENT_SPECIFIC,
+        MAX_LENGTH_1000
       );
 
-      expect(prompt).toContain(content);
+      expect(prompt).toContain(CONTENT_SPECIFIC);
     });
 
     it('should interpolate maxLength into prompt', () => {
       const prompt = RoleBasedAgent.defaultSummaryPrompt(
         AGENT_ROLES.ARCHITECT,
-        'content',
-        3500
+        CONTENT_SIMPLE,
+        MAX_LENGTH_3500
       );
 
-      expect(prompt).toContain('3500');
+      expect(prompt).toContain(MAX_LENGTH_3500_STRING);
     });
   });
 

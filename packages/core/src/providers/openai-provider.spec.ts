@@ -1,6 +1,9 @@
 import { OpenAIProvider, LLMProvider, ToolSchema } from '@dialectic/core';
 import OpenAI from 'openai';
 
+// Test constants
+const DEFAULT_TEMPERATURE = 0.5;
+
 // Mock OpenAI SDK
 const mockResponsesCreate = jest.fn();
 const mockChatCompletionsCreate = jest.fn();
@@ -32,7 +35,7 @@ describe('OpenAIProvider', () => {
 
   it('falls back to chat completions when Responses API is unavailable', async () => {
     const provider: LLMProvider = new OpenAIProvider('fake');
-    const res = await provider.complete({ model: 'gpt-4', systemPrompt: 'sys', userPrompt: 'hello', temperature: 0.5 });
+    const res = await provider.complete({ model: 'gpt-4', systemPrompt: 'sys', userPrompt: 'hello', temperature: DEFAULT_TEMPERATURE });
     expect(res.text).toBe('ok');
   });
 });
@@ -88,7 +91,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -108,7 +111,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -144,7 +147,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -184,7 +187,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -209,7 +212,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -251,7 +254,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -271,7 +274,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -292,7 +295,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
         tools: [mockToolSchema],
       });
 
@@ -310,7 +313,7 @@ describe('OpenAI Provider Tool Calling', () => {
         model: 'gpt-4',
         systemPrompt: 'System',
         userPrompt: 'User',
-        temperature: 0.5,
+        temperature: DEFAULT_TEMPERATURE,
       });
 
       expect(response.text).toBe('Response');

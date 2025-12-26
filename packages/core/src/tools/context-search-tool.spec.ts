@@ -1,6 +1,38 @@
 
 import { ContextSearchTool, DebateContext, DebateRound, Contribution, CONTRIBUTION_TYPES, DebateState, DEBATE_STATUS } from '@dialectic/core';
 
+// Test constants
+const TOOL_NAME_CONTEXT_SEARCH = 'context_search';
+const AGENT_ID_1 = 'agent1';
+const AGENT_ID_2 = 'agent2';
+const AGENT_ROLE_ARCHITECT = 'architect';
+const AGENT_ROLE_PERFORMANCE = 'performance';
+const PROBLEM_CACHING_SYSTEM = 'Design a caching system';
+const PROBLEM_TEST = 'Test problem';
+const PROBLEM_DESIGN_SYSTEM = 'Design a system';
+const CONTENT_PROPOSAL_CACHING = 'This is a proposal about caching systems';
+const CONTENT_CRITIQUE_OPTIMIZATION = 'The caching approach needs optimization';
+const CONTENT_REFINEMENT_CACHING = 'Refined proposal with better caching strategy';
+const CONTENT_PROPOSAL_AUTH = 'This proposal mentions authentication systems';
+const CONTENT_STATE_ROUNDS_DATABASE = 'State rounds content with database term';
+const CONTENT_CONTEXT_HISTORY_CACHING = 'Context history content with caching term';
+const SEARCH_TERM_CACHING = 'caching';
+const SEARCH_TERM_CACHING_UPPERCASE = 'CACHING';
+const SEARCH_TERM_CACH_SUBSTRING = 'cach';
+const SEARCH_TERM_NONEXISTENT = 'nonexistentterm12345';
+const SEARCH_TERM_TEST = 'test';
+const SEARCH_TERM_AUTHENTICATION = 'authentication';
+const SEARCH_TERM_DATABASE = 'database';
+const RESULT_STATUS_SUCCESS = 'success';
+const RESULT_STATUS_ERROR = 'error';
+const PARAM_TYPE_OBJECT = 'object';
+const PARAM_TYPE_STRING = 'string';
+const PARAM_NAME_TERM = 'term';
+const ROUND_NUMBER_1 = 1;
+const ROUND_NUMBER_2 = 2;
+const DEBATE_ID_TEST = 'test-debate';
+const DEBATE_ID_TEST_DEBATE = 'test-debate';
+
 describe('ContextSearchTool', () => {
   let tool: ContextSearchTool;
   let mockContext: DebateContext;
@@ -9,20 +41,20 @@ describe('ContextSearchTool', () => {
     tool = new ContextSearchTool();
     
     const round1: DebateRound = {
-      roundNumber: 1,
+      roundNumber: ROUND_NUMBER_1,
       contributions: [
         {
-          agentId: 'agent1',
-          agentRole: 'architect',
+          agentId: AGENT_ID_1,
+          agentRole: AGENT_ROLE_ARCHITECT,
           type: CONTRIBUTION_TYPES.PROPOSAL,
-          content: 'This is a proposal about caching systems',
+          content: CONTENT_PROPOSAL_CACHING,
           metadata: {},
         } as Contribution,
         {
-          agentId: 'agent2',
-          agentRole: 'performance',
+          agentId: AGENT_ID_2,
+          agentRole: AGENT_ROLE_PERFORMANCE,
           type: CONTRIBUTION_TYPES.CRITIQUE,
-          content: 'The caching approach needs optimization',
+          content: CONTENT_CRITIQUE_OPTIMIZATION,
           metadata: {},
         } as Contribution,
       ],
@@ -30,13 +62,13 @@ describe('ContextSearchTool', () => {
     };
 
     const round2: DebateRound = {
-      roundNumber: 2,
+      roundNumber: ROUND_NUMBER_2,
       contributions: [
         {
-          agentId: 'agent1',
-          agentRole: 'architect',
+          agentId: AGENT_ID_1,
+          agentRole: AGENT_ROLE_ARCHITECT,
           type: CONTRIBUTION_TYPES.REFINEMENT,
-          content: 'Refined proposal with better caching strategy',
+          content: CONTENT_REFINEMENT_CACHING,
           metadata: {},
         } as Contribution,
       ],
@@ -44,7 +76,7 @@ describe('ContextSearchTool', () => {
     };
 
     mockContext = {
-      problem: 'Design a caching system',
+      problem: PROBLEM_CACHING_SYSTEM,
       history: [round1, round2],
     };
   });
@@ -52,35 +84,35 @@ describe('ContextSearchTool', () => {
   describe('Tool Schema', () => {
     it('should match OpenAI function calling format', () => {
       const schema = tool.schema;
-      expect(schema.name).toBe('context_search');
+      expect(schema.name).toBe(TOOL_NAME_CONTEXT_SEARCH);
       expect(schema.description).toContain('Search');
-      expect(schema.parameters.type).toBe('object');
+      expect(schema.parameters.type).toBe(PARAM_TYPE_OBJECT);
       expect(schema.parameters.properties).toBeDefined();
-      expect(schema.parameters.properties?.term).toBeDefined();
-      expect(schema.parameters.properties?.term?.type).toBe('string');
+      expect(schema.parameters.properties?.[PARAM_NAME_TERM]).toBeDefined();
+      expect(schema.parameters.properties?.[PARAM_NAME_TERM]?.type).toBe(PARAM_TYPE_STRING);
     });
   });
 
   describe('Tool Execution', () => {
     it('should search for term in debate history (success case)', () => {
-      const result = tool.execute({ term: 'caching' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, mockContext);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('success');
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result).toBeDefined();
       expect(parsed.result.matches).toBeDefined();
       expect(Array.isArray(parsed.result.matches)).toBe(true);
     });
 
     it('should find multiple matches across rounds', () => {
-      const result = tool.execute({ term: 'caching' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, mockContext);
       const parsed = JSON.parse(result);
       
       expect(parsed.result.matches.length).toBeGreaterThan(1);
     });
 
     it('should return matches with correct metadata', () => {
-      const result = tool.execute({ term: 'caching' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, mockContext);
       const parsed = JSON.parse(result);
       
       const match = parsed.result.matches[0];
@@ -92,8 +124,8 @@ describe('ContextSearchTool', () => {
     });
 
     it('should perform case-insensitive search', () => {
-      const result1 = tool.execute({ term: 'CACHING' }, mockContext);
-      const result2 = tool.execute({ term: 'caching' }, mockContext);
+      const result1 = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING_UPPERCASE }, mockContext);
+      const result2 = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, mockContext);
       
       const parsed1 = JSON.parse(result1);
       const parsed2 = JSON.parse(result2);
@@ -102,39 +134,39 @@ describe('ContextSearchTool', () => {
     });
 
     it('should find substring matches', () => {
-      const result = tool.execute({ term: 'cach' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACH_SUBSTRING }, mockContext);
       const parsed = JSON.parse(result);
       
       expect(parsed.result.matches.length).toBeGreaterThan(0);
     });
 
     it('should return empty matches when no results found', () => {
-      const result = tool.execute({ term: 'nonexistentterm12345' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_NONEXISTENT }, mockContext);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('success');
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result.matches).toEqual([]);
     });
   });
 
   describe('Error Cases', () => {
     it('should handle missing context gracefully', () => {
-      const result = tool.execute({ term: 'test' }, undefined);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, undefined);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('error');
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
       expect(parsed.error).toBeDefined();
     });
 
     it('should handle context without history', () => {
       const contextWithoutHistory: DebateContext = {
-        problem: 'Test problem',
+        problem: PROBLEM_TEST,
       };
       
-      const result = tool.execute({ term: 'test' }, contextWithoutHistory);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, contextWithoutHistory);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('success');
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result.matches).toEqual([]);
     });
 
@@ -149,7 +181,7 @@ describe('ContextSearchTool', () => {
 
   describe('Result Formatting', () => {
     it('should return JSON string with status and result', () => {
-      const result = tool.execute({ term: 'caching' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, mockContext);
       
       expect(typeof result).toBe('string');
       const parsed = JSON.parse(result);
@@ -158,7 +190,7 @@ describe('ContextSearchTool', () => {
     });
 
     it('should include content snippets in matches', () => {
-      const result = tool.execute({ term: 'caching' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, mockContext);
       const parsed = JSON.parse(result);
       
       if (parsed.result.matches.length > 0) {
@@ -171,19 +203,19 @@ describe('ContextSearchTool', () => {
   describe('DebateState Support', () => {
     it('should search state.rounds when DebateState is provided', () => {
       const mockState: DebateState = {
-        id: 'test-debate',
-        problem: 'Design a system',
+        id: DEBATE_ID_TEST,
+        problem: PROBLEM_DESIGN_SYSTEM,
         status: DEBATE_STATUS.RUNNING,
-        currentRound: 2,
+        currentRound: ROUND_NUMBER_2,
         rounds: [
           {
-            roundNumber: 1,
+            roundNumber: ROUND_NUMBER_1,
             contributions: [
               {
-                agentId: 'agent1',
-                agentRole: 'architect',
+                agentId: AGENT_ID_1,
+                agentRole: AGENT_ROLE_ARCHITECT,
                 type: CONTRIBUTION_TYPES.PROPOSAL,
-                content: 'This proposal mentions authentication systems',
+                content: CONTENT_PROPOSAL_AUTH,
                 metadata: {},
               } as Contribution,
             ],
@@ -195,32 +227,32 @@ describe('ContextSearchTool', () => {
       };
 
       const contextWithoutHistory: DebateContext = {
-        problem: 'Design a system',
+        problem: PROBLEM_DESIGN_SYSTEM,
       };
 
-      const result = tool.execute({ term: 'authentication' }, contextWithoutHistory, mockState);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_AUTHENTICATION }, contextWithoutHistory, mockState);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('success');
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result.matches.length).toBeGreaterThan(0);
-      expect(parsed.result.matches[0].contentSnippet).toContain('authentication');
+      expect(parsed.result.matches[0].contentSnippet).toContain(SEARCH_TERM_AUTHENTICATION);
     });
 
     it('should prefer state.rounds over context.history when both provided', () => {
       const mockState: DebateState = {
-        id: 'test-debate',
-        problem: 'Design a system',
+        id: DEBATE_ID_TEST_DEBATE,
+        problem: PROBLEM_DESIGN_SYSTEM,
         status: DEBATE_STATUS.RUNNING,
-        currentRound: 1,
+        currentRound: ROUND_NUMBER_1,
         rounds: [
           {
-            roundNumber: 1,
+            roundNumber: ROUND_NUMBER_1,
             contributions: [
               {
-                agentId: 'agent1',
-                agentRole: 'architect',
+                agentId: AGENT_ID_1,
+                agentRole: AGENT_ROLE_ARCHITECT,
                 type: CONTRIBUTION_TYPES.PROPOSAL,
-                content: 'State rounds content with database term',
+                content: CONTENT_STATE_ROUNDS_DATABASE,
                 metadata: {},
               } as Contribution,
             ],
@@ -232,16 +264,16 @@ describe('ContextSearchTool', () => {
       };
 
       const contextWithDifferentHistory: DebateContext = {
-        problem: 'Design a system',
+        problem: PROBLEM_DESIGN_SYSTEM,
         history: [
           {
-            roundNumber: 1,
+            roundNumber: ROUND_NUMBER_1,
             contributions: [
               {
-                agentId: 'agent2',
-                agentRole: 'performance',
+                agentId: AGENT_ID_2,
+                agentRole: AGENT_ROLE_PERFORMANCE,
                 type: CONTRIBUTION_TYPES.PROPOSAL,
-                content: 'Context history content with caching term',
+                content: CONTENT_CONTEXT_HISTORY_CACHING,
                 metadata: {},
               } as Contribution,
             ],
@@ -250,33 +282,33 @@ describe('ContextSearchTool', () => {
         ],
       };
 
-      const result = tool.execute({ term: 'database' }, contextWithDifferentHistory, mockState);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_DATABASE }, contextWithDifferentHistory, mockState);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('success');
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result.matches.length).toBeGreaterThan(0);
-      expect(parsed.result.matches[0].contentSnippet).toContain('database');
-      expect(parsed.result.matches[0].contentSnippet).not.toContain('caching');
+      expect(parsed.result.matches[0].contentSnippet).toContain(SEARCH_TERM_DATABASE);
+      expect(parsed.result.matches[0].contentSnippet).not.toContain(SEARCH_TERM_CACHING);
     });
 
     it('should fall back to context.history when state not provided (backward compatibility)', () => {
-      const result = tool.execute({ term: 'caching' }, mockContext);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, mockContext);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('success');
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result.matches.length).toBeGreaterThan(0);
-      expect(parsed.result.matches[0].contentSnippet).toContain('caching');
+      expect(parsed.result.matches[0].contentSnippet).toContain(SEARCH_TERM_CACHING);
     });
 
     it('should return empty matches when neither state.rounds nor context.history available', () => {
       const contextWithoutHistory: DebateContext = {
-        problem: 'Test problem',
+        problem: PROBLEM_TEST,
       };
 
-      const result = tool.execute({ term: 'test' }, contextWithoutHistory);
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, contextWithoutHistory);
       const parsed = JSON.parse(result);
       
-      expect(parsed.status).toBe('success');
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result.matches).toEqual([]);
     });
   });

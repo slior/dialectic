@@ -3,6 +3,16 @@ import path from 'path';
 import os from 'os';
 import { StateManager, DEBATE_STATUS, DebateSummary, SUMMARIZATION_METHODS, AGENT_ROLES } from '@dialectic/core';
 
+// Test constants
+const MOCK_TOKENS_USED = 50;
+const MOCK_LATENCY_MS = 200;
+const BEFORE_CHARS_1000 = 1000;
+const AFTER_CHARS_500 = 500;
+const BEFORE_CHARS_2000 = 2000;
+const AFTER_CHARS_1000 = 1000;
+const BEFORE_CHARS_1500 = 1500;
+const AFTER_CHARS_750 = 750;
+
 describe('StateManager promptSources', () => {
   let tmpDir: string;
   beforeEach(() => {
@@ -84,8 +94,8 @@ describe('StateManager - addSummary()', () => {
       agentRole: AGENT_ROLES.ARCHITECT,
       summary: 'Test summary text',
       metadata: {
-        beforeChars: 1000,
-        afterChars: 500,
+        beforeChars: BEFORE_CHARS_1000,
+        afterChars: AFTER_CHARS_500,
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date()
       }
@@ -114,8 +124,8 @@ describe('StateManager - addSummary()', () => {
       agentRole: AGENT_ROLES.ARCHITECT,
       summary: 'First summary',
       metadata: {
-        beforeChars: 1000,
-        afterChars: 500,
+        beforeChars: BEFORE_CHARS_1000,
+        afterChars: AFTER_CHARS_500,
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date()
       }
@@ -141,8 +151,8 @@ describe('StateManager - addSummary()', () => {
       agentRole: AGENT_ROLES.ARCHITECT,
       summary: 'Summary 1',
       metadata: {
-        beforeChars: 1000,
-        afterChars: 500,
+        beforeChars: BEFORE_CHARS_1000,
+        afterChars: AFTER_CHARS_500,
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date()
       }
@@ -153,8 +163,8 @@ describe('StateManager - addSummary()', () => {
       agentRole: AGENT_ROLES.PERFORMANCE,
       summary: 'Summary 2',
       metadata: {
-        beforeChars: 2000,
-        afterChars: 1000,
+        beforeChars: BEFORE_CHARS_2000,
+        afterChars: AFTER_CHARS_1000,
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date()
       }
@@ -186,12 +196,12 @@ describe('StateManager - addSummary()', () => {
       agentRole: AGENT_ROLES.ARCHITECT,
       summary: 'Persisted summary',
       metadata: {
-        beforeChars: 1500,
-        afterChars: 750,
+        beforeChars: BEFORE_CHARS_1500,
+        afterChars: AFTER_CHARS_750,
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date(),
-        latencyMs: 200,
-        tokensUsed: 50
+        latencyMs: MOCK_LATENCY_MS,
+        tokensUsed: MOCK_TOKENS_USED
       }
     };
 
@@ -207,7 +217,7 @@ describe('StateManager - addSummary()', () => {
     expect(parsed.rounds[0].summaries['agent-1']).toBeDefined();
     expect(parsed.rounds[0].summaries['agent-1'].summary).toBe('Persisted summary');
     expect(parsed.rounds[0].summaries['agent-1'].metadata.latencyMs).toBe(200);
-    expect(parsed.rounds[0].summaries['agent-1'].metadata.tokensUsed).toBe(50);
+    expect(parsed.rounds[0].summaries['agent-1'].metadata.tokensUsed).toBe(MOCK_TOKENS_USED);
   });
 
   it('should throw error if no active round', async () => {
@@ -219,8 +229,8 @@ describe('StateManager - addSummary()', () => {
       agentRole: AGENT_ROLES.ARCHITECT,
       summary: 'Test summary',
       metadata: {
-        beforeChars: 1000,
-        afterChars: 500,
+        beforeChars: BEFORE_CHARS_1000,
+        afterChars: AFTER_CHARS_500,
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date()
       }
@@ -237,8 +247,8 @@ describe('StateManager - addSummary()', () => {
       agentRole: AGENT_ROLES.ARCHITECT,
       summary: 'Test summary',
       metadata: {
-        beforeChars: 1000,
-        afterChars: 500,
+        beforeChars: BEFORE_CHARS_1000,
+        afterChars: AFTER_CHARS_500,
         method: SUMMARIZATION_METHODS.LENGTH_BASED,
         timestamp: new Date()
       }
