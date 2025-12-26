@@ -20,6 +20,7 @@ import {
   PROMPT_SOURCES,
   buildToolRegistry,
   ContributionType,
+  Contribution,
 } from '@dialectic/core';
 
 // Default configuration constants
@@ -44,6 +45,7 @@ export interface OrchestratorHooks {
   onSummarizationStart?: (agentName: string) => void;
   onSummarizationComplete?: (agentName: string, beforeChars: number, afterChars: number) => void;
   onSummarizationEnd?: (agentName: string) => void;
+  onContributionCreated?: (contribution: Contribution, roundNumber: number) => void;
 }
 
 /**

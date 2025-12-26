@@ -245,6 +245,22 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
         logSuccess(message);
         client.emit('summarizationEnd', { agentName });
       },
+      onContributionCreated: (contribution: Contribution, roundNumber: number) => {
+        // Look up agent name from agent configs
+        const agentConfigs = this.debateService.getAgentConfigs();
+        const agentConfig = agentConfigs.find(a => a.id === contribution.agentId);
+        const agentName = agentConfig?.name || contribution.agentId;
+        
+        client.emit('contributionCreated', {
+          agentId: contribution.agentId,
+          agentName: agentName,
+          agentRole: contribution.agentRole,
+          type: contribution.type,
+          content: contribution.content,
+          round: roundNumber,
+          targetAgentId: contribution.targetAgentId,
+        });
+      },
     };
   }
 

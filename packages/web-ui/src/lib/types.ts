@@ -106,6 +106,7 @@ export const ACTION_TYPES = {
   SYNTHESIS_START: 'SYNTHESIS_START',
   SYNTHESIS_COMPLETE: 'SYNTHESIS_COMPLETE',
   DEBATE_COMPLETE: 'DEBATE_COMPLETE',
+  CONTRIBUTION_CREATED: 'CONTRIBUTION_CREATED',
   ERROR: 'ERROR',
   WARNING: 'WARNING',
   DEBATE_CANCELLED: 'DEBATE_CANCELLED',
@@ -130,6 +131,7 @@ export type DebateAction =
   | { type: typeof ACTION_TYPES.SYNTHESIS_START }
   | { type: typeof ACTION_TYPES.SYNTHESIS_COMPLETE }
   | { type: typeof ACTION_TYPES.DEBATE_COMPLETE; payload: DebateResult }
+  | { type: typeof ACTION_TYPES.CONTRIBUTION_CREATED; payload: { agentId: string; type: ContributionType; round: number; content: string } }
   | { type: typeof ACTION_TYPES.ERROR; payload: { message: string } }
   | { type: typeof ACTION_TYPES.WARNING; payload: { message: string } }
   | { type: typeof ACTION_TYPES.DEBATE_CANCELLED }

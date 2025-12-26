@@ -93,6 +93,12 @@ interface OrchestratorHooks {
    * allowing the UI to clear any pending activity.
    */
   onSummarizationEnd?: (agentName: string) => void;
+  /**
+   * Called when a contribution is created and added to the debate state.
+   * @param contribution - The contribution that was created.
+   * @param roundNumber - The round number in which the contribution was created (1-indexed).
+   */
+  onContributionCreated?: (contribution: Contribution, roundNumber: number) => void;
 }
 
 /**
@@ -337,6 +343,7 @@ export class DebateOrchestrator {
           }
         }
         await this.stateManager.addContribution(state.id, contribution);
+        this.hooks?.onContributionCreated?.(contribution, roundNumber);
         this.hooks?.onAgentComplete?.(agent.config.name, ACTIVITY_PROPOSING);
       })
     );
@@ -386,7 +393,10 @@ export class DebateOrchestrator {
     // Execute all tasks concurrently
     const results = await Promise.allSettled(tasks.map((task) => task()));
     const successfulContributions: Contribution[] = results.filter(isFulfilled).map((result) => result.value);
-    successfulContributions.forEach(async (contribution) => await this.stateManager.addContribution(state.id, contribution));
+    for (const contribution of successfulContributions) {
+      await this.stateManager.addContribution(state.id, contribution);
+      this.hooks?.onContributionCreated?.(contribution, roundNumber);
+    }
   }
 
   /**
@@ -418,6 +428,7 @@ export class DebateOrchestrator {
         const refined = await agent.refine({ content: original?.content || '', metadata: original?.metadata || {} }, critiques, ctx, state);
         const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.REFINEMENT, refined.content, refined.metadata, started );
         await this.stateManager.addContribution(state.id, contribution);
+        this.hooks?.onContributionCreated?.(contribution, roundNumber);
         this.hooks?.onAgentComplete?.(agent.config.name, ACTIVITY_REFINING);
       })
     );

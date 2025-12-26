@@ -10,6 +10,7 @@ import {
   AgentConfig,
   NotificationMessage,
   ACTION_TYPES,
+  ContributionType,
 } from '@/lib/types';
 
 const DEFAULT_ROUNDS = 3;
@@ -33,6 +34,10 @@ function createNotification(type: NotificationMessage['type'], message: string):
     message,
     timestamp: new Date(),
   };
+}
+
+function contributionKey(agentId: string, type: ContributionType, round: number, content: string): string {
+  return `${agentId}-${type}-${round}-${content.slice(0, 50)}`; // Use first 50 chars as content identifier
 }
 
 function debateReducer(state: DebateState, action: DebateAction): DebateState {
@@ -184,11 +189,42 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ],
       };
 
+    case ACTION_TYPES.CONTRIBUTION_CREATED: {
+      const { agentId, type, round, content } = action.payload;
+      return {
+        ...state,
+        agents: state.agents.map(a => {
+          if (a.id !== agentId) return a;
+          
+          // Check if contribution already exists
+          const key = contributionKey(agentId, type, round, content);
+          const existingKeys = new Set(
+            a.contributions.map(c => contributionKey(agentId, c.type, c.round, c.content))
+          );
+          
+          if (existingKeys.has(key)) {
+            return a; // Contribution already exists, don't add duplicate
+          }
+          
+          return {
+            ...a,
+            contributions: [...a.contributions, { type, round, content }],
+          };
+        }),
+      };
+    }
+
     case ACTION_TYPES.DEBATE_COMPLETE: {
       const result = action.payload;
-      // Update agents with contributions from result
+      // Merge contributions from result with existing contributions, avoiding duplicates
       const updatedAgents = state.agents.map(agent => {
-        const agentContributions = result.rounds.flatMap(round =>
+        // Get existing contribution keys
+        const existingKeys = new Set(
+          agent.contributions.map(c => contributionKey(agent.id, c.type, c.round, c.content))
+        );
+        
+        // Add any missing contributions from the result
+        const newContributions = result.rounds.flatMap(round =>
           round.contributions
             .filter(c => c.agentId === agent.id)
             .map(c => ({
@@ -196,10 +232,19 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
               round: round.roundNumber,
               content: c.content,
             }))
+            .filter(c => {
+              const key = contributionKey(agent.id, c.type, c.round, c.content);
+              return !existingKeys.has(key);
+            })
         );
-        return { ...agent, contributions: agentContributions, currentActivity: undefined };
+        
+        return { 
+          ...agent, 
+          contributions: [...agent.contributions, ...newContributions], 
+          currentActivity: undefined 
+        };
       });
-
+      
       return {
         ...state,
         status: 'completed',
@@ -326,6 +371,10 @@ export function useDebateSocket() {
 
     socket.on('debateComplete', (data) => {
       dispatch({ type: ACTION_TYPES.DEBATE_COMPLETE, payload: data });
+    });
+
+    socket.on('contributionCreated', (data) => {
+      dispatch({ type: ACTION_TYPES.CONTRIBUTION_CREATED, payload: data });
     });
 
     // Error events
