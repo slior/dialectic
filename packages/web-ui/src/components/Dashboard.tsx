@@ -33,12 +33,6 @@ export default function Dashboard() {
         phase={state.currentPhase}
       />
 
-      {/* Notifications */}
-      <NotificationArea
-        notifications={state.notifications}
-        onDismiss={clearNotification}
-      />
-
       {/* Main Content */}
       <div className="flex-1 flex min-h-0">
         {/* Left Panel: Problem Input + Clarifications + Controls */}
@@ -138,6 +132,12 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Notifications */}
+      <NotificationArea
+        notifications={state.notifications}
+        onDismiss={clearNotification}
+      />
     </div>
   );
 }

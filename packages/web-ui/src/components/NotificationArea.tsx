@@ -47,7 +47,7 @@ export default function NotificationArea({ notifications, onDismiss }: Notificat
   return (
     <div 
       ref={containerRef}
-      className="bg-secondary border-b border-border px-4 py-2 max-h-32 overflow-y-auto"
+      className="bg-secondary border-t border-b border-border px-4 py-2 max-h-32 overflow-y-auto"
     >
       <div className="space-y-1">
         {recentNotifications.map((notification) => {
