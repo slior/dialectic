@@ -150,6 +150,24 @@ const debateConfig = {
 
 ### Where to define constants
 
+**Function-level constants** - Use when a value is used multiple times within a single function:
+```typescript
+it('should write JSON output when --output ends with .json', async () => {
+  const EXPECTED_REASONING = 'Good';
+  const outputPath = path.join(tmpDir, 'results.json');
+  
+  // Use EXPECTED_REASONING in mock data
+  evalSpy.mockResolvedValueOnce({
+    rawText: JSON.stringify({
+      evaluation: { functional_completeness: { score: 8, reasoning: EXPECTED_REASONING } }
+    })
+  });
+  
+  // Use EXPECTED_REASONING in assertion
+  expect(content.agents.e1.evaluation.functional_completeness.reasoning).toBe(EXPECTED_REASONING);
+});
+```
+
 **File-level constants** - Use when only one file needs them:
 ```typescript
 // At top of file, after imports
@@ -374,7 +392,7 @@ When reviewing code, check:
 - [ ] **No hardcoded strings** - Especially for types, roles, statuses - use constants
 - [ ] **All public APIs documented** - JSDoc for functions, classes, complex methods
 - [ ] **Non-obvious choices explained** - Inline comments for "why" not "what"
-- [ ] **Constants properly scoped** - File-level for local, exported for shared
+- [ ] **Constants properly scoped** - Function-level for single-function use, file-level for local, exported for shared
 - [ ] **Template methods marked @final** - When they shouldn't be overridden
 - [ ] **Function extraction** - Large functions broken into smaller, focused ones
 - [ ] **Separation of concerns** - Each function has a single, clear purpose
@@ -388,6 +406,7 @@ When reviewing code, check:
 | Duplicate method logic | Template method pattern | `proposeImpl()` in base class |
 | Magic number `3` | Named constant | `DEFAULT_ROUNDS = 3` |
 | String `"architect"` | Constant object | `AGENT_ROLES.ARCHITECT` |
+| String used multiple times in one function | Function-level constant | `const EXPECTED_REASONING = 'Good'` |
 | Long complex function | Extract helper functions | `debateConfigFromSysConfig()` |
 | Unclear technical choice | Inline comment | `// Use stderr.write for unbuffered output` |
 | Public function | JSDoc with @param/@returns | See examples above |

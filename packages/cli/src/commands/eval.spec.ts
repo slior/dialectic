@@ -4,6 +4,27 @@ import os from 'os';
 import { runCli } from '../index';
 import { EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EvaluatorAgent, loadEnvironmentFile } from '@dialectic/core';
 
+// Test constants
+const TEST_PROBLEM = 'Test problem';
+const TEST_SOLUTION = 'Test solution';
+const TEST_PROBLEM_SHORT = 'Test';
+const TEST_SOLUTION_SHORT = 'Solution';
+const AGENT_ID_E1 = 'e1';
+const AGENT_ID_E2 = 'e2';
+const AGENT_ID_E3 = 'e3';
+const AGENT_NAME_E1 = 'E1';
+const AGENT_NAME_E2 = 'E2';
+const AGENT_NAME_E3 = 'E3';
+const AGENT_NAME_EVALUATOR = 'Evaluator';
+const MODEL_GPT4 = 'gpt-4';
+const MODEL_GPT35_TURBO = 'gpt-3.5-turbo';
+const PROVIDER_OPENAI = 'openai';
+const PROVIDER_OPENROUTER = 'openrouter';
+const CONFIG_FILE_NAME = 'config.json';
+const DEBATE_FILE_NAME = 'debate.json';
+const MOCK_LATENCY_MS = 100;
+const TEMP_DIR_PREFIX = 'eval-test-';
+
 // Create the mock function first
 const mockCreateProvider = jest.fn();
 
@@ -26,6 +47,93 @@ jest.mock('@dialectic/core', () => {
 const mockedLoadEnvironmentFile = loadEnvironmentFile as jest.MockedFunction<typeof loadEnvironmentFile>;
 const mockedCreateProvider = mockCreateProvider;
 
+/**
+ * Creates a mock provider for testing.
+ */
+function createMockProvider(): { complete: jest.Mock } {
+  return { complete: jest.fn() };
+}
+
+/**
+ * Creates a basic evaluator agent configuration.
+ */
+function createBasicAgentConfig(id: string = AGENT_ID_E1, name: string = AGENT_NAME_E1): {
+  id: string;
+  name: string;
+  model: string;
+  provider: string;
+} {
+  return {
+    id,
+    name,
+    model: MODEL_GPT4,
+    provider: PROVIDER_OPENAI
+  };
+}
+
+/**
+ * Creates a basic debate JSON structure.
+ */
+function createBasicDebateData(problem: string = TEST_PROBLEM, solution: string = TEST_SOLUTION): {
+  problem: string;
+  finalSolution: { description: string };
+} {
+  return {
+    problem,
+    finalSolution: { description: solution }
+  };
+}
+
+/**
+ * Creates a basic evaluation response JSON structure.
+ */
+function createBasicEvaluationResponse(fcScore: number = 8, overallScore: number = 8): string {
+  return JSON.stringify({
+    evaluation: { functional_completeness: { score: fcScore } },
+    overall_summary: { overall_score: overallScore }
+  });
+}
+
+/**
+ * Sets up mock provider and evaluator for a test.
+ */
+function setupMockProviderAndEvaluator(): void {
+  const mockProvider = createMockProvider();
+  mockedCreateProvider.mockReturnValue(mockProvider);
+}
+
+/**
+ * Creates a mock evaluation result.
+ */
+function createMockEvaluationResult(
+  id: string = AGENT_ID_E1,
+  rawText?: string,
+  latencyMs: number = MOCK_LATENCY_MS
+): {
+  id: string;
+  rawText: string;
+  latencyMs: number;
+} {
+  return {
+    id,
+    rawText: rawText ?? createBasicEvaluationResponse(),
+    latencyMs
+  };
+}
+
+/**
+ * Mocks EvaluatorAgent.prototype.evaluate to return a successful evaluation.
+ */
+function mockSuccessfulEvaluation(
+  id: string = AGENT_ID_E1,
+  fcScore: number = 8,
+  overallScore: number = 8
+): jest.SpyInstance {
+  return jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue(
+    createMockEvaluationResult(id, createBasicEvaluationResponse(fcScore, overallScore))
+  );
+}
+
 describe('CLI eval command', () => {
   const originalEnv = process.env;
   let stderrSpy: jest.SpyInstance;
@@ -44,7 +152,7 @@ describe('CLI eval command', () => {
     mockedLoadEnvironmentFile.mockReturnValue(undefined);
     mockedCreateProvider.mockClear();
     
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), TEMP_DIR_PREFIX));
   });
 
   afterEach(() => {
@@ -77,20 +185,17 @@ describe('CLI eval command', () => {
 
   describe('File existence validation', () => {
     it('should exit with invalid args when config file does not exist', async () => {
-      const debatePath = path.join(tmpDir, 'debate.json');
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
-        finalSolution: { description: 'Test solution' }
-      }));
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData()));
 
       await expect(runCli(['eval', '--config', 'nonexistent.json', '--debate', debatePath]))
         .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
     });
 
     it('should exit with invalid args when debate file does not exist', async () => {
-      const configPath = path.join(tmpDir, 'config.json');
+      const configPath = path.join(tmpDir, CONFIG_FILE_NAME);
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'Evaluator', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig(AGENT_ID_E1, AGENT_NAME_EVALUATOR)]
       }));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', 'nonexistent.json']))
@@ -100,14 +205,11 @@ describe('CLI eval command', () => {
 
   describe('Config validation', () => {
     it('should reject config without agents array', async () => {
-      const configPath = path.join(tmpDir, 'config.json');
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({ foo: 'bar' }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
-        finalSolution: { description: 'Test solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData()));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
         .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
@@ -117,47 +219,38 @@ describe('CLI eval command', () => {
     });
 
     it('should reject config with empty agents array', async () => {
-      const configPath = path.join(tmpDir, 'config.json');
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({ agents: [] }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
-        finalSolution: { description: 'Test solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData()));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
         .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
     });
 
     it('should reject config with malformed JSON', async () => {
-      const configPath = path.join(tmpDir, 'config.json');
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, '{ agents: [invalid json}');
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
-        finalSolution: { description: 'Test solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData()));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
         .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
     });
 
     it('should filter out disabled evaluators', async () => {
-      const configPath = path.join(tmpDir, 'config.json');
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
         agents: [
-          { id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai', enabled: false },
-          { id: 'e2', name: 'E2', model: 'gpt-4', provider: 'openai', enabled: false }
+          { ...createBasicAgentConfig(AGENT_ID_E1, AGENT_NAME_E1), enabled: false },
+          { ...createBasicAgentConfig(AGENT_ID_E2, AGENT_NAME_E2), enabled: false }
         ]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
-        finalSolution: { description: 'Test solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData()));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
         .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
@@ -171,16 +264,16 @@ describe('CLI eval command', () => {
     let configPath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'Evaluator', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig(AGENT_ID_E1, AGENT_NAME_EVALUATOR)]
       }));
     });
 
     it('should reject debate JSON without problem field', async () => {
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       fs.writeFileSync(debatePath, JSON.stringify({
-        finalSolution: { description: 'Test solution' }
+        finalSolution: { description: TEST_SOLUTION }
       }));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
@@ -191,10 +284,10 @@ describe('CLI eval command', () => {
     });
 
     it('should reject debate JSON with empty problem', async () => {
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       fs.writeFileSync(debatePath, JSON.stringify({
         problem: '   ',
-        finalSolution: { description: 'Test solution' }
+        finalSolution: { description: TEST_SOLUTION }
       }));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
@@ -202,9 +295,9 @@ describe('CLI eval command', () => {
     });
 
     it('should reject debate JSON without finalSolution', async () => {
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem'
+        problem: TEST_PROBLEM
       }));
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
@@ -215,9 +308,9 @@ describe('CLI eval command', () => {
     });
 
     it('should reject debate JSON with empty finalSolution.description', async () => {
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
+        problem: TEST_PROBLEM,
         finalSolution: { description: '' }
       }));
 
@@ -226,7 +319,7 @@ describe('CLI eval command', () => {
     });
 
     it('should reject debate JSON with malformed JSON', async () => {
-      const debatePath = path.join(tmpDir, 'debate.json');
+      const debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       fs.writeFileSync(debatePath, '{ problem: invalid }');
 
       await expect(runCli(['eval', '--config', configPath, '--debate', debatePath]))
@@ -235,29 +328,24 @@ describe('CLI eval command', () => {
   });
 
   describe('Environment file loading', () => {
+    const CUSTOM_ENV_FILE = 'custom.env';
+    const PROD_ENV_FILE = 'prod.env';
+
     let configPath: string;
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
-        finalSolution: { description: 'Test solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData()));
 
       // Mock provider and evaluator
-      const mockProvider = { complete: jest.fn() };
-      mockedCreateProvider.mockReturnValue(mockProvider as any);
-      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
-        id: 'e1',
-        rawText: '{"evaluation":{"functional_completeness":{"score":8}},"overall_summary":{"overall_score":8}}',
-        latencyMs: 100
-      });
+      setupMockProviderAndEvaluator();
+      mockSuccessfulEvaluation();
     });
 
     afterEach(() => {
@@ -270,8 +358,8 @@ describe('CLI eval command', () => {
     });
 
     it('should call loadEnvironmentFile with custom env file', async () => {
-      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--env-file', 'custom.env']);
-      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith('custom.env', undefined);
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--env-file', CUSTOM_ENV_FILE]);
+      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith(CUSTOM_ENV_FILE, undefined);
     });
 
     it('should call loadEnvironmentFile with verbose flag', async () => {
@@ -280,8 +368,8 @@ describe('CLI eval command', () => {
     });
 
     it('should call loadEnvironmentFile with both custom env file and verbose', async () => {
-      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--env-file', 'prod.env', '--verbose']);
-      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith('prod.env', true);
+      await runCli(['eval', '--config', configPath, '--debate', debatePath, '--env-file', PROD_ENV_FILE, '--verbose']);
+      expect(mockedLoadEnvironmentFile).toHaveBeenCalledWith(PROD_ENV_FILE, true);
     });
   });
 
@@ -290,13 +378,10 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test problem',
-        finalSolution: { description: 'Test solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData()));
       
       mockedCreateProvider.mockClear();
     });
@@ -304,29 +389,24 @@ describe('CLI eval command', () => {
     it('should call createProvider for each enabled agent', async () => {
       fs.writeFileSync(configPath, JSON.stringify({
         agents: [
-          { id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' },
-          { id: 'e2', name: 'E2', model: 'gpt-3.5-turbo', provider: 'openrouter' }
+          createBasicAgentConfig(AGENT_ID_E1, AGENT_NAME_E1),
+          { ...createBasicAgentConfig(AGENT_ID_E2, AGENT_NAME_E2), model: MODEL_GPT35_TURBO, provider: PROVIDER_OPENROUTER }
         ]
       }));
 
-      const mockProvider = { complete: jest.fn() };
-      mockedCreateProvider.mockReturnValue(mockProvider as any);
-      jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
-        id: 'e1',
-        rawText: '{"evaluation":{"functional_completeness":{"score":8}},"overall_summary":{"overall_score":8}}',
-        latencyMs: 100
-      });
+      setupMockProviderAndEvaluator();
+      mockSuccessfulEvaluation();
 
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);
 
       expect(mockedCreateProvider).toHaveBeenCalledTimes(2);
-      expect(mockedCreateProvider).toHaveBeenCalledWith('openai');
-      expect(mockedCreateProvider).toHaveBeenCalledWith('openrouter');
+      expect(mockedCreateProvider).toHaveBeenCalledWith(PROVIDER_OPENAI);
+      expect(mockedCreateProvider).toHaveBeenCalledWith(PROVIDER_OPENROUTER);
     });
 
     it('should propagate provider factory errors (missing API keys)', async () => {
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
 
       mockedCreateProvider.mockImplementation(() => {
@@ -348,22 +428,20 @@ describe('CLI eval command', () => {
   describe('Evaluator execution and result parsing', () => {
     let configPath: string;
     let debatePath: string;
-    let mockProvider: any;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
       fs.writeFileSync(debatePath, JSON.stringify({
         problem: 'Design a rate limiter',
         finalSolution: { description: 'Use token bucket algorithm' }
       }));
 
-      mockProvider = { complete: jest.fn() };
-      mockedCreateProvider.mockReturnValue(mockProvider);
+      setupMockProviderAndEvaluator();
     });
 
     it('should successfully parse valid JSON response', async () => {
@@ -447,30 +525,32 @@ describe('CLI eval command', () => {
   });
 
   describe('Score validation and clamping', () => {
+    const SCORE_BELOW_MIN_1 = -5;
+    const SCORE_BELOW_MIN_2 = 0.5;
+    const SCORE_ABOVE_MAX_1 = 15;
+    const SCORE_ABOVE_MAX_2 = 100;
+
     let configPath: string;
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should clamp score below 1 to 1 and warn', async () => {
       jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
         id: 'e1',
         rawText: JSON.stringify({
-          evaluation: { functional_completeness: { score: -5 } },
-          overall_summary: { overall_score: 0.5 }
+          evaluation: { functional_completeness: { score: SCORE_BELOW_MIN_1 } },
+          overall_summary: { overall_score: SCORE_BELOW_MIN_2 }
         }),
         latencyMs: 100
       });
@@ -478,10 +558,10 @@ describe('CLI eval command', () => {
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);
 
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('clamped to [1,10] from -5')
+        expect.stringContaining(`clamped to [1,10] from ${SCORE_BELOW_MIN_1}`)
       );
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('clamped to [1,10] from 0.5')
+        expect.stringContaining(`clamped to [1,10] from ${SCORE_BELOW_MIN_2}`)
       );
 
       const output = stdoutSpy.mock.calls.join('');
@@ -492,8 +572,8 @@ describe('CLI eval command', () => {
       jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
         id: 'e1',
         rawText: JSON.stringify({
-          evaluation: { functional_completeness: { score: 15 } },
-          overall_summary: { overall_score: 100 }
+          evaluation: { functional_completeness: { score: SCORE_ABOVE_MAX_1 } },
+          overall_summary: { overall_score: SCORE_ABOVE_MAX_2 }
         }),
         latencyMs: 100
       });
@@ -501,10 +581,10 @@ describe('CLI eval command', () => {
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);
 
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('clamped to [1,10] from 15')
+        expect.stringContaining(`clamped to [1,10] from ${SCORE_ABOVE_MAX_1}`)
       );
       expect(stderrSpy).toHaveBeenCalledWith(
-        expect.stringContaining('clamped to [1,10] from 100')
+        expect.stringContaining(`clamped to [1,10] from ${SCORE_ABOVE_MAX_2}`)
       );
 
       const output = stdoutSpy.mock.calls.join('');
@@ -555,22 +635,19 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
         agents: [
-          { id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' },
-          { id: 'e2', name: 'E2', model: 'gpt-4', provider: 'openai' },
-          { id: 'e3', name: 'E3', model: 'gpt-4', provider: 'openai' }
+          createBasicAgentConfig(AGENT_ID_E1, AGENT_NAME_E1),
+          createBasicAgentConfig(AGENT_ID_E2, AGENT_NAME_E2),
+          createBasicAgentConfig(AGENT_ID_E3, AGENT_NAME_E3)
         ]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should average scores from multiple agents', async () => {
@@ -683,20 +760,19 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should format clarifications with fenced code blocks', async () => {
       fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' },
+        ...createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT),
         clarifications: [
           {
             agentId: 'architect-1',
@@ -709,15 +785,7 @@ describe('CLI eval command', () => {
         ]
       }));
 
-      const evaluateSpy = jest.spyOn(EvaluatorAgent.prototype, 'evaluate');
-      evaluateSpy.mockResolvedValue({
-        id: 'e1',
-        rawText: JSON.stringify({
-          evaluation: { functional_completeness: { score: 8 } },
-          overall_summary: { overall_score: 8 }
-        }),
-        latencyMs: 100
-      });
+      const evaluateSpy = mockSuccessfulEvaluation();
 
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);
 
@@ -732,21 +800,9 @@ describe('CLI eval command', () => {
     });
 
     it('should handle debates without clarifications', async () => {
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-        // No clarifications field
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      const evaluateSpy = jest.spyOn(EvaluatorAgent.prototype, 'evaluate');
-      evaluateSpy.mockResolvedValue({
-        id: 'e1',
-        rawText: JSON.stringify({
-          evaluation: { functional_completeness: { score: 8 } },
-          overall_summary: { overall_score: 8 }
-        }),
-        latencyMs: 100
-      });
+      const evaluateSpy = mockSuccessfulEvaluation();
 
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);
 
@@ -759,8 +815,7 @@ describe('CLI eval command', () => {
 
     it('should preserve NA answers in clarifications', async () => {
       fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' },
+        ...createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT),
         clarifications: [
           {
             agentId: 'security-1',
@@ -773,15 +828,7 @@ describe('CLI eval command', () => {
         ]
       }));
 
-      const evaluateSpy = jest.spyOn(EvaluatorAgent.prototype, 'evaluate');
-      evaluateSpy.mockResolvedValue({
-        id: 'e1',
-        rawText: JSON.stringify({
-          evaluation: { functional_completeness: { score: 8 } },
-          overall_summary: { overall_score: 8 }
-        }),
-        latencyMs: 100
-      });
+      const evaluateSpy = mockSuccessfulEvaluation();
 
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);
 
@@ -796,18 +843,15 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should output markdown table to stdout by default', async () => {
@@ -893,31 +937,29 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
         agents: [
-          { id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' },
-          { id: 'e2', name: 'E2', model: 'gpt-4', provider: 'openai' }
+          createBasicAgentConfig(AGENT_ID_E1, AGENT_NAME_E1),
+          createBasicAgentConfig(AGENT_ID_E2, AGENT_NAME_E2)
         ]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should write JSON output when --output ends with .json', async () => {
+      const EXPECTED_REASONING = 'Good';
       const outputPath = path.join(tmpDir, 'results.json');
       
       const evalSpy = jest.spyOn(EvaluatorAgent.prototype, 'evaluate');
       evalSpy.mockResolvedValueOnce({
         id: 'e1',
         rawText: JSON.stringify({
-          evaluation: { functional_completeness: { score: 8, reasoning: 'Good' } },
+          evaluation: { functional_completeness: { score: 8, reasoning: EXPECTED_REASONING } },
           overall_summary: { overall_score: 8, strengths: 'Strong', weaknesses: 'Minor' }
         }),
         latencyMs: 100
@@ -949,7 +991,7 @@ describe('CLI eval command', () => {
       expect(content.agents).toHaveProperty('e1');
       expect(content.agents).toHaveProperty('e2');
       expect(content.agents.e1.evaluation.functional_completeness.score).toBe(8);
-      expect(content.agents.e1.evaluation.functional_completeness.reasoning).toBe('Good');
+      expect(content.agents.e1.evaluation.functional_completeness.reasoning).toBe(EXPECTED_REASONING);
     });
 
     it('should use null for N/A values in JSON output', async () => {
@@ -997,18 +1039,15 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should write CSV file with header when file does not exist', async () => {
@@ -1392,18 +1431,15 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should log provider and model info in verbose mode', async () => {
@@ -1468,17 +1504,14 @@ describe('CLI eval command', () => {
     let promptsDir: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       promptsDir = path.join(tmpDir, 'prompts');
       
       fs.mkdirSync(promptsDir);
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should use custom system prompt from file when specified', async () => {
@@ -1580,18 +1613,15 @@ describe('CLI eval command', () => {
     let debatePath: string;
 
     beforeEach(() => {
-      configPath = path.join(tmpDir, 'config.json');
-      debatePath = path.join(tmpDir, 'debate.json');
+      configPath = path.join(tmpDir, CONFIG_FILE_NAME);
+      debatePath = path.join(tmpDir, DEBATE_FILE_NAME);
       
       fs.writeFileSync(configPath, JSON.stringify({
-        agents: [{ id: 'e1', name: 'E1', model: 'gpt-4', provider: 'openai' }]
+        agents: [createBasicAgentConfig()]
       }));
-      fs.writeFileSync(debatePath, JSON.stringify({
-        problem: 'Test',
-        finalSolution: { description: 'Solution' }
-      }));
+      fs.writeFileSync(debatePath, JSON.stringify(createBasicDebateData(TEST_PROBLEM_SHORT, TEST_SOLUTION_SHORT)));
 
-      mockedCreateProvider.mockReturnValue({ complete: jest.fn() } as any);
+      setupMockProviderAndEvaluator();
     });
 
     it('should handle all score categories correctly', async () => {
