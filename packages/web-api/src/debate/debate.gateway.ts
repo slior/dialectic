@@ -19,17 +19,62 @@ import {
   logWarning,
 } from '@dialectic/core';
 
+/**
+ * DTO for starting a debate via WebSocket.
+ */
 interface StartDebateDto {
   problem: string;
   clarificationsEnabled: boolean;
   rounds?: number;
 }
 
+/**
+ * DTO for submitting clarification answers via WebSocket.
+ */
 interface SubmitClarificationsDto {
   answers: Record<string, string>;
 }
 
+// Configuration constants
 const DEFAULT_ROUNDS = 3;
+const MIN_ROUNDS = 1;
+const DEFAULT_MISSING_ANSWER = 'NA';
+
+// CORS configuration
+const CORS_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'] as const;
+
+// WebSocket event names
+const WS_EVENTS = {
+  CONNECTION_ESTABLISHED: 'connectionEstablished',
+  DEBATE_STARTED: 'debateStarted',
+  DEBATE_COMPLETE: 'debateComplete',
+  DEBATE_CANCELLED: 'debateCancelled',
+  COLLECTING_CLARIFICATIONS: 'collectingClarifications',
+  CLARIFICATIONS_REQUIRED: 'clarificationsRequired',
+  CLARIFICATIONS_SUBMITTED: 'clarificationsSubmitted',
+  ROUND_START: 'roundStart',
+  PHASE_START: 'phaseStart',
+  PHASE_COMPLETE: 'phaseComplete',
+  AGENT_START: 'agentStart',
+  AGENT_COMPLETE: 'agentComplete',
+  SYNTHESIS_START: 'synthesisStart',
+  SYNTHESIS_COMPLETE: 'synthesisComplete',
+  SUMMARIZATION_START: 'summarizationStart',
+  SUMMARIZATION_COMPLETE: 'summarizationComplete',
+  SUMMARIZATION_END: 'summarizationEnd',
+  CONTRIBUTION_CREATED: 'contributionCreated',
+  ERROR: 'error',
+  WARNING: 'warning',
+} as const;
+
+// Error messages
+const ERROR_MESSAGES = {
+  DEBATE_IN_PROGRESS: 'A debate is already in progress',
+  PROBLEM_REQUIRED: 'Problem description is required',
+  INVALID_ROUNDS: 'Number of rounds must be >= 1',
+  NO_DEBATE_IN_PROGRESS: 'No debate in progress',
+  DEBATE_FAILED: 'Debate failed',
+} as const;
 
 /**
  * WebSocket gateway for real-time debate communication.
@@ -37,7 +82,7 @@ const DEFAULT_ROUNDS = 3;
  */
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: CORS_ORIGINS,
     credentials: true,
   },
 })
@@ -52,45 +97,72 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly debateService: DebateService) {}
 
+  /**
+   * Writes a message directly to stderr for immediate console output.
+   * Ensures progress messages are visible in NestJS server console.
+   *
+   * @param message - The message to write to console.
+   */
+  private writeToConsole(message: string): void {
+    process.stderr.write(message + '\n');
+  }
+
+  /**
+   * Handles new WebSocket client connections.
+   * Sends current debate state to the newly connected client.
+   *
+   * @param client - The connected WebSocket client socket.
+   */
   handleConnection(client: Socket) {
     this.connectedClients.add(client.id);
-    console.log(`Client connected: ${client.id}`);
+    logInfo(`Client connected: ${client.id}`);
+    this.writeToConsole(`[INFO] Client connected: ${client.id}`);
     
     // Send current state to newly connected client
-    client.emit('connectionEstablished', {
+    client.emit(WS_EVENTS.CONNECTION_ESTABLISHED, {
       debateInProgress: this.debateInProgress,
       agents: this.debateService.getAgentConfigs(),
       judge: this.debateService.getJudgeConfig(),
     });
   }
 
+  /**
+   * Handles WebSocket client disconnections.
+   *
+   * @param client - The disconnected WebSocket client socket.
+   */
   handleDisconnect(client: Socket) {
     this.connectedClients.delete(client.id);
-    console.log(`Client disconnected: ${client.id}`);
+    logInfo(`Client disconnected: ${client.id}`);
+    this.writeToConsole(`[INFO] Client disconnected: ${client.id}`);
   }
 
+  /**
+   * Handles the startDebate WebSocket message.
+   * Validates input, collects clarifications if enabled, and starts the debate.
+   *
+   * @param dto - The debate start request data.
+   * @param client - The WebSocket client socket.
+   */
   @SubscribeMessage('startDebate')
   async handleStartDebate(
     @MessageBody() dto: StartDebateDto,
     @ConnectedSocket() client: Socket
   ) {
     if (this.debateInProgress) {
-      logWarning('A debate is already in progress');
-      client.emit('error', { message: 'A debate is already in progress' });
+      this.emitError(client, ERROR_MESSAGES.DEBATE_IN_PROGRESS);
       return;
     }
 
     if (!dto.problem || dto.problem.trim().length === 0) {
-      logWarning('Problem description is required');
-      client.emit('error', { message: 'Problem description is required' });
+      this.emitError(client, ERROR_MESSAGES.PROBLEM_REQUIRED);
       return;
     }
 
     // Validate rounds if provided
     const rounds = dto.rounds ?? DEFAULT_ROUNDS;
-    if (rounds < 1) {
-      logWarning('Invalid rounds value');
-      client.emit('error', { message: 'Number of rounds must be >= 1' });
+    if (rounds < MIN_ROUNDS) {
+      this.emitError(client, ERROR_MESSAGES.INVALID_ROUNDS);
       return;
     }
 
@@ -98,24 +170,26 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.currentProblem = dto.problem.trim();
     this.configuredRounds = rounds;
     
-    logInfo('Debate started');
-    client.emit('debateStarted', { problem: this.currentProblem });
+    const startMessage = 'Debate started';
+    logInfo(startMessage);
+    this.writeToConsole(`[INFO] ${startMessage}`);
+    client.emit(WS_EVENTS.DEBATE_STARTED, { problem: this.currentProblem });
 
     // If clarifications enabled, collect questions first
     if (dto.clarificationsEnabled) {
       try {
-        client.emit('collectingClarifications');
+        client.emit(WS_EVENTS.COLLECTING_CLARIFICATIONS);
         const questions = await this.debateService.collectClarifications(this.currentProblem);
         this.pendingClarifications = questions;
         
         if (questions.some(q => q.items.length > 0)) {
-          client.emit('clarificationsRequired', { questions });
+          client.emit(WS_EVENTS.CLARIFICATIONS_REQUIRED, { questions });
           return; // Wait for submitClarifications event
         }
         // No questions generated, proceed with debate
       } catch (error: any) {
         logWarning(`Failed to collect clarifications: ${error.message}`);
-        client.emit('warning', { message: `Failed to collect clarifications: ${error.message}` });
+        client.emit(WS_EVENTS.WARNING, { message: `Failed to collect clarifications: ${error.message}` });
         // Continue with debate without clarifications
       }
     }
@@ -124,49 +198,68 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     await this.runDebate(client, undefined, rounds);
   }
 
+  /**
+   * Handles the submitClarifications WebSocket message.
+   * Maps user answers to clarifications and starts the debate.
+   *
+   * @param dto - The clarification answers data.
+   * @param client - The WebSocket client socket.
+   */
   @SubscribeMessage('submitClarifications')
   async handleSubmitClarifications(
     @MessageBody() dto: SubmitClarificationsDto,
     @ConnectedSocket() client: Socket
   ) {
     if (!this.debateInProgress) {
-      logWarning('No debate in progress');
-      client.emit('error', { message: 'No debate in progress' });
+      this.emitError(client, ERROR_MESSAGES.NO_DEBATE_IN_PROGRESS);
       return;
     }
 
     // Map answers to clarifications structure
     const clarificationsWithAnswers = this.mapAnswersToClarifications(dto.answers);
     
-    client.emit('clarificationsSubmitted');
+    client.emit(WS_EVENTS.CLARIFICATIONS_SUBMITTED);
     
     // Run debate with clarifications (use stored rounds from handleStartDebate)
     await this.runDebate(client, clarificationsWithAnswers, this.configuredRounds);
   }
 
+  /**
+   * Handles the cancelDebate WebSocket message.
+   * Resets debate state and notifies the client.
+   *
+   * @param client - The WebSocket client socket.
+   */
   @SubscribeMessage('cancelDebate')
   handleCancelDebate(@ConnectedSocket() client: Socket) {
     if (this.debateInProgress) {
       this.resetDebateState();
-      client.emit('debateCancelled');
+      client.emit(WS_EVENTS.DEBATE_CANCELLED);
     }
   }
 
   /**
    * Maps user answers to the clarifications structure.
+   *
+   * @param answers - Record mapping clarification item IDs to user-provided answers.
+   * @returns Array of agent clarifications with answers populated.
    */
   private mapAnswersToClarifications(answers: Record<string, string>): AgentClarifications[] {
     return this.pendingClarifications.map(group => ({
       ...group,
       items: group.items.map(item => ({
         ...item,
-        answer: answers[item.id] || 'NA',
+        answer: answers[item.id] || DEFAULT_MISSING_ANSWER,
       })),
     }));
   }
 
   /**
    * Runs the debate and emits progress events via WebSocket.
+   *
+   * @param client - The WebSocket client socket.
+   * @param clarifications - Optional clarifications with answers.
+   * @param rounds - Optional number of debate rounds (uses configured rounds if not provided).
    */
   private async runDebate(client: Socket, clarifications?: AgentClarifications[], rounds?: number) {
     const hooks = this.createHooks(client);
@@ -179,11 +272,14 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
         rounds
       );
 
-      logSuccess('Debate completed');
-      client.emit('debateComplete', this.formatDebateResult(result));
+      const completionMessage = 'Debate completed';
+      logSuccess(completionMessage);
+      this.writeToConsole(`[SUCCESS] ${completionMessage}`);
+      client.emit(WS_EVENTS.DEBATE_COMPLETE, this.formatDebateResult(result));
     } catch (error: any) {
-      logWarning(`Debate failed: ${error.message}`);
-      client.emit('error', { message: `Debate failed: ${error.message}` });
+      const errorMessage = `${ERROR_MESSAGES.DEBATE_FAILED}: ${error.message}`;
+      logWarning(errorMessage);
+      this.emitError(client, errorMessage);
     } finally {
       this.resetDebateState();
     }
@@ -191,59 +287,75 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   /**
    * Creates orchestrator hooks that emit WebSocket events and log to console.
+   *
+   * @param client - The WebSocket client socket.
+   * @returns OrchestratorHooks implementation that emits events and logs progress.
    */
   private createHooks(client: Socket): OrchestratorHooks {
     return {
       onRoundStart: (round: number, total: number) => {
         this.currentRound = round;
         this.totalRounds = total;
-        logInfo(`Round ${round}/${total} starting`);
-        client.emit('roundStart', { round, total });
+        const message = `Round ${round}/${total} starting`;
+        logInfo(message);
+        this.writeToConsole(`[INFO] ${message}`);
+        client.emit(WS_EVENTS.ROUND_START, { round, total });
       },
       onPhaseStart: (round: number, phase: ContributionType, count: number) => {
         const phaseLabel = this.getPhaseLabel(phase);
         const message = this.formatMessageWithRound(`${phaseLabel} phase starting`, round);
         logInfo(message);
-        client.emit('phaseStart', { round, phase, expectedCount: count });
+        this.writeToConsole(`[INFO] ${message}`);
+        client.emit(WS_EVENTS.PHASE_START, { round, phase, expectedCount: count });
       },
       onAgentStart: (agentName: string, activity: string) => {
         const message = this.formatMessageWithRound(`${agentName} is ${activity}...`, this.currentRound);
         logInfo(message);
-        client.emit('agentStart', { agentName, activity });
+        this.writeToConsole(`[INFO] ${message}`);
+        client.emit(WS_EVENTS.AGENT_START, { agentName, activity });
       },
       onAgentComplete: (agentName: string, activity: string) => {
         const message = this.formatMessageWithRound(`${agentName} completed ${activity}`, this.currentRound);
         logSuccess(message);
-        client.emit('agentComplete', { agentName, activity });
+        this.writeToConsole(`[SUCCESS] ${message}`);
+        client.emit(WS_EVENTS.AGENT_COMPLETE, { agentName, activity });
       },
       onPhaseComplete: (round: number, phase: ContributionType) => {
         const phaseLabel = this.getPhaseLabel(phase);
         const message = this.formatMessageWithRound(`${phaseLabel} phase completed`, round);
         logSuccess(message);
-        client.emit('phaseComplete', { round, phase });
+        this.writeToConsole(`[SUCCESS] ${message}`);
+        client.emit(WS_EVENTS.PHASE_COMPLETE, { round, phase });
       },
       onSynthesisStart: () => {
-        logInfo('Synthesis starting');
-        client.emit('synthesisStart');
+        const message = 'Synthesis starting';
+        logInfo(message);
+        this.writeToConsole(`[INFO] ${message}`);
+        client.emit(WS_EVENTS.SYNTHESIS_START);
       },
       onSynthesisComplete: () => {
-        logSuccess('Synthesis completed');
-        client.emit('synthesisComplete');
+        const message = 'Synthesis completed';
+        logSuccess(message);
+        this.writeToConsole(`[SUCCESS] ${message}`);
+        client.emit(WS_EVENTS.SYNTHESIS_COMPLETE);
       },
       onSummarizationStart: (agentName: string) => {
         const message = this.formatMessageWithRound(`${agentName} is summarizing context...`, this.currentRound);
         logInfo(message);
-        client.emit('summarizationStart', { agentName });
+        this.writeToConsole(`[INFO] ${message}`);
+        client.emit(WS_EVENTS.SUMMARIZATION_START, { agentName });
       },
       onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
         const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
         logSuccess(message);
-        client.emit('summarizationComplete', { agentName, beforeChars, afterChars });
+        this.writeToConsole(`[SUCCESS] ${message}`);
+        client.emit(WS_EVENTS.SUMMARIZATION_COMPLETE, { agentName, beforeChars, afterChars });
       },
       onSummarizationEnd: (agentName: string) => {
         const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
         logSuccess(message);
-        client.emit('summarizationEnd', { agentName });
+        this.writeToConsole(`[SUCCESS] ${message}`);
+        client.emit(WS_EVENTS.SUMMARIZATION_END, { agentName });
       },
       onContributionCreated: (contribution: Contribution, roundNumber: number) => {
         // Look up agent name from agent configs
@@ -251,7 +363,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const agentConfig = agentConfigs.find(a => a.id === contribution.agentId);
         const agentName = agentConfig?.name || contribution.agentId;
         
-        client.emit('contributionCreated', {
+        client.emit(WS_EVENTS.CONTRIBUTION_CREATED, {
           agentId: contribution.agentId,
           agentName: agentName,
           agentRole: contribution.agentRole,
@@ -265,7 +377,21 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * Emits an error event to the client and logs a warning.
+   *
+   * @param client - The WebSocket client socket.
+   * @param message - The error message to send.
+   */
+  private emitError(client: Socket, message: string): void {
+    logWarning(message);
+    client.emit(WS_EVENTS.ERROR, { message });
+  }
+
+  /**
    * Formats the debate result for client consumption.
+   *
+   * @param result - The debate result from the orchestrator.
+   * @returns Formatted result object suitable for WebSocket transmission.
    */
   private formatDebateResult(result: DebateResult) {
     return {
@@ -298,7 +424,10 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
-   * Maps contribution type to phase label.
+   * Maps contribution type to a human-readable phase label.
+   *
+   * @param phase - The contribution type to map.
+   * @returns Human-readable label for the phase.
    */
   private getPhaseLabel(phase: ContributionType): string {
     const labels: Record<ContributionType, string> = {
@@ -311,6 +440,10 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   /**
    * Formats a message with round prefix if inside an active round.
+   *
+   * @param message - The message to format.
+   * @param round - The current round number (0 if not in a round).
+   * @returns Formatted message with optional round prefix.
    */
   private formatMessageWithRound(message: string, round: number): string {
     if (round > 0) {

@@ -347,7 +347,7 @@ describe('DebateGateway', () => {
         mockSocket
       );
 
-      expect(logWarning).toHaveBeenCalledWith('Invalid rounds value');
+      expect(logWarning).toHaveBeenCalledWith('Number of rounds must be >= 1');
       expect(mockSocket.emit).toHaveBeenCalledWith('error', {
         message: 'Number of rounds must be >= 1',
       });

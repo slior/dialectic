@@ -21,6 +21,7 @@ import {
   buildToolRegistry,
   ContributionType,
   Contribution,
+  logWarning,
 } from '@dialectic/core';
 
 // Default configuration constants
@@ -30,6 +31,26 @@ const DEFAULT_AGENT_TEMPERATURE = 0.5;
 const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 const DEFAULT_TIMEOUT_PER_ROUND = 300000;
 const DEFAULT_MAX_CLARIFICATIONS_PER_AGENT = 5;
+
+// Summarization configuration constants
+const DEFAULT_SUMMARIZATION_THRESHOLD = 5000;
+const DEFAULT_SUMMARIZATION_MAX_LENGTH = 2500;
+const DEFAULT_SUMMARIZATION_METHOD = 'length-based';
+
+// Agent configuration constants
+const AGENT_IDS = {
+  ARCHITECT: 'agent-architect',
+  PERFORMANCE: 'agent-performance',
+  KISS: 'agent-kiss',
+  JUDGE: 'judge-main',
+} as const;
+
+const AGENT_NAMES = {
+  ARCHITECT: 'System Architect',
+  PERFORMANCE: 'Performance Engineer',
+  KISS: 'Simplicity Advocate',
+  JUDGE: 'Technical Judge',
+} as const;
 
 /**
  * Orchestrator hooks interface for real-time progress notifications.
@@ -62,12 +83,14 @@ export class DebateService {
 
   /**
    * Returns the default system configuration for debates.
+   *
+   * @returns Object containing default agent configurations, judge configuration, and debate configuration.
    */
   getDefaultConfig(): { agents: AgentConfig[]; judge: AgentConfig; debate: DebateConfig } {
     const defaultAgents: AgentConfig[] = [
       {
-        id: 'agent-architect',
-        name: 'System Architect',
+        id: AGENT_IDS.ARCHITECT,
+        name: AGENT_NAMES.ARCHITECT,
         role: AGENT_ROLES.ARCHITECT,
         model: DEFAULT_LLM_MODEL,
         provider: LLM_PROVIDERS.OPENROUTER,
@@ -75,8 +98,8 @@ export class DebateService {
         enabled: true,
       },
       {
-        id: 'agent-performance',
-        name: 'Performance Engineer',
+        id: AGENT_IDS.PERFORMANCE,
+        name: AGENT_NAMES.PERFORMANCE,
         role: AGENT_ROLES.PERFORMANCE,
         model: DEFAULT_LLM_MODEL,
         provider: LLM_PROVIDERS.OPENROUTER,
@@ -84,8 +107,8 @@ export class DebateService {
         enabled: true,
       },
       {
-        id: 'agent-kiss',
-        name: 'Simplicity Advocate',
+        id: AGENT_IDS.KISS,
+        name: AGENT_NAMES.KISS,
         role: AGENT_ROLES.KISS,
         model: DEFAULT_LLM_MODEL,
         provider: LLM_PROVIDERS.OPENROUTER,
@@ -95,8 +118,8 @@ export class DebateService {
     ];
 
     const judge: AgentConfig = {
-      id: 'judge-main',
-      name: 'Technical Judge',
+      id: AGENT_IDS.JUDGE,
+      name: AGENT_NAMES.JUDGE,
       role: AGENT_ROLES.GENERALIST,
       model: DEFAULT_LLM_MODEL,
       provider: LLM_PROVIDERS.OPENROUTER,
@@ -111,9 +134,9 @@ export class DebateService {
       timeoutPerRound: DEFAULT_TIMEOUT_PER_ROUND,
       summarization: {
         enabled: true,
-        threshold: 5000,
-        maxLength: 2500,
-        method: 'length-based',
+        threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+        maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+        method: DEFAULT_SUMMARIZATION_METHOD,
       },
     };
 
@@ -122,6 +145,9 @@ export class DebateService {
 
   /**
    * Collects clarifying questions from all agents.
+   *
+   * @param problem - The problem statement to collect clarifications for.
+   * @returns Promise resolving to an array of agent clarifications with questions.
    */
   async collectClarifications(problem: string): Promise<AgentClarifications[]> {
     const config = this.getDefaultConfig();
@@ -131,12 +157,18 @@ export class DebateService {
       problem,
       agents,
       DEFAULT_MAX_CLARIFICATIONS_PER_AGENT,
-      (msg) => console.warn(msg)
+      (msg) => logWarning(msg)
     );
   }
 
   /**
    * Runs a full debate with the given problem and optional clarifications.
+   *
+   * @param problem - The problem statement to debate.
+   * @param hooks - Optional orchestrator hooks for progress notifications.
+   * @param clarifications - Optional clarifications with answers from agents.
+   * @param rounds - Optional number of debate rounds (overrides default if provided).
+   * @returns Promise resolving to the debate result.
    */
   async runDebate(
     problem: string,
@@ -168,6 +200,10 @@ export class DebateService {
 
   /**
    * Builds agent instances from configurations.
+   *
+   * @param configs - Array of agent configurations to build.
+   * @param summaryConfig - Summarization configuration for context management.
+   * @returns Array of constructed agent instances.
    */
   private buildAgents(configs: AgentConfig[], summaryConfig: SummarizationConfig): Agent[] {
     return configs.map((cfg) => {
@@ -197,6 +233,10 @@ export class DebateService {
 
   /**
    * Builds the judge agent from configuration.
+   *
+   * @param config - Judge agent configuration.
+   * @param summaryConfig - Summarization configuration for context management.
+   * @returns Constructed judge agent instance.
    */
   private buildJudge(config: AgentConfig, summaryConfig: SummarizationConfig): JudgeAgent {
     const provider = createProvider(config.provider);
@@ -220,6 +260,8 @@ export class DebateService {
 
   /**
    * Returns the agent configurations (for UI display).
+   *
+   * @returns Array of agent configurations.
    */
   getAgentConfigs(): AgentConfig[] {
     return this.getDefaultConfig().agents;
@@ -227,6 +269,8 @@ export class DebateService {
 
   /**
    * Returns the judge configuration (for UI display).
+   *
+   * @returns Judge agent configuration.
    */
   getJudgeConfig(): AgentConfig {
     return this.getDefaultConfig().judge;
