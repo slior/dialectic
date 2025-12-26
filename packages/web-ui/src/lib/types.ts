@@ -14,6 +14,15 @@ export interface AgentConfig {
   temperature: number;
 }
 
+export interface AgentConfigInput {
+  id: string;
+  name: string;
+  role: string; // AgentRole from core
+  model: string;
+  provider: string; // LLM_PROVIDERS from core
+  temperature: number;
+}
+
 export interface Contribution {
   agentId: string;
   agentRole: string;
@@ -74,6 +83,8 @@ export interface DebateState {
   rounds: number;
   clarificationQuestions?: AgentClarifications[];
   agents: AgentState[];
+  agentConfigs: AgentConfigInput[];
+  configPanelCollapsed: boolean;
   currentRound: number;
   totalRounds: number;
   currentPhase?: ContributionType;
@@ -112,6 +123,11 @@ export const ACTION_TYPES = {
   DEBATE_CANCELLED: 'DEBATE_CANCELLED',
   ADD_NOTIFICATION: 'ADD_NOTIFICATION',
   CLEAR_NOTIFICATION: 'CLEAR_NOTIFICATION',
+  SET_AGENT_CONFIGS: 'SET_AGENT_CONFIGS',
+  UPDATE_AGENT_CONFIG: 'UPDATE_AGENT_CONFIG',
+  ADD_AGENT_CONFIG: 'ADD_AGENT_CONFIG',
+  REMOVE_AGENT_CONFIG: 'REMOVE_AGENT_CONFIG',
+  SET_CONFIG_PANEL_COLLAPSED: 'SET_CONFIG_PANEL_COLLAPSED',
 } as const;
 
 export type DebateAction =
@@ -136,5 +152,10 @@ export type DebateAction =
   | { type: typeof ACTION_TYPES.WARNING; payload: { message: string } }
   | { type: typeof ACTION_TYPES.DEBATE_CANCELLED }
   | { type: typeof ACTION_TYPES.ADD_NOTIFICATION; payload: NotificationMessage }
-  | { type: typeof ACTION_TYPES.CLEAR_NOTIFICATION; payload: string };
+  | { type: typeof ACTION_TYPES.CLEAR_NOTIFICATION; payload: string }
+  | { type: typeof ACTION_TYPES.SET_AGENT_CONFIGS; payload: AgentConfigInput[] }
+  | { type: typeof ACTION_TYPES.UPDATE_AGENT_CONFIG; payload: { index: number; agent: AgentConfigInput } }
+  | { type: typeof ACTION_TYPES.ADD_AGENT_CONFIG; payload: AgentConfigInput }
+  | { type: typeof ACTION_TYPES.REMOVE_AGENT_CONFIG; payload: number }
+  | { type: typeof ACTION_TYPES.SET_CONFIG_PANEL_COLLAPSED; payload: boolean };
 

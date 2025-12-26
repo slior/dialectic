@@ -55,6 +55,30 @@ const TEST_TOTAL_ROUNDS = 3;
 const TEST_EXPECTED_COUNT = 3;
 
 /**
+ * Creates mock agent configuration inputs for testing.
+ */
+function createMockAgentConfigInputs() {
+  return [
+    {
+      id: TEST_AGENT_ID_ARCHITECT,
+      name: TEST_AGENT_NAME_ARCHITECT,
+      role: TEST_AGENT_ROLE_ARCHITECT,
+      model: 'google/gemini-2.5-flash-lite',
+      provider: 'openrouter',
+      temperature: 0.5,
+    },
+    {
+      id: 'agent-performance',
+      name: TEST_AGENT_NAME_PERFORMANCE,
+      role: 'performance',
+      model: 'google/gemini-2.5-flash-lite',
+      provider: 'openrouter',
+      temperature: 0.5,
+    },
+  ];
+}
+
+/**
  * Creates a mock Socket.IO client.
  */
 function createMockSocket(id: string = TEST_CLIENT_ID): jest.Mocked<Socket> {
@@ -226,7 +250,7 @@ describe('DebateGateway', () => {
 
       // Start a debate (don't await it yet)
       const debatePromiseStarted = gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -276,7 +300,7 @@ describe('DebateGateway', () => {
 
       // Start first debate (don't await it yet)
       const debatePromiseStarted = gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -286,7 +310,7 @@ describe('DebateGateway', () => {
       // Try to start second debate while first is still running
       const secondSocket = createMockSocket(TEST_CLIENT_ID_2);
       await gateway.handleStartDebate(
-        { problem: 'Another problem', clarificationsEnabled: false },
+        { problem: 'Another problem', clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         secondSocket
       );
 
@@ -302,7 +326,7 @@ describe('DebateGateway', () => {
 
     it('should reject empty problem string', async () => {
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM_EMPTY, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM_EMPTY, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -314,7 +338,7 @@ describe('DebateGateway', () => {
 
     it('should reject whitespace-only problem', async () => {
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM_WHITESPACE, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM_WHITESPACE, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -329,7 +353,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockResolvedValue(mockResult);
 
       await gateway.handleStartDebate(
-        { problem: `  ${TEST_PROBLEM}  `, clarificationsEnabled: false },
+        { problem: `  ${TEST_PROBLEM}  `, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -337,13 +361,14 @@ describe('DebateGateway', () => {
         TEST_PROBLEM_TRIMMED,
         expect.any(Object),
         undefined,
-        DEFAULT_ROUNDS
+        DEFAULT_ROUNDS,
+        expect.any(Array)
       );
     });
 
     it('should reject invalid rounds (< 1)', async () => {
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false, rounds: TEST_ROUNDS_INVALID },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, rounds: TEST_ROUNDS_INVALID, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -358,7 +383,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockResolvedValue(mockResult);
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false, rounds: TEST_ROUNDS_OVERRIDE },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, rounds: TEST_ROUNDS_OVERRIDE, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -366,7 +391,8 @@ describe('DebateGateway', () => {
         TEST_PROBLEM_TRIMMED,
         expect.any(Object),
         undefined,
-        TEST_ROUNDS_OVERRIDE
+        TEST_ROUNDS_OVERRIDE,
+        expect.any(Array)
       );
     });
 
@@ -375,7 +401,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockResolvedValue(mockResult);
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -391,12 +417,12 @@ describe('DebateGateway', () => {
       mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: true },
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
       expect(mockSocket.emit).toHaveBeenCalledWith('collectingClarifications');
-      expect(mockDebateService.collectClarifications).toHaveBeenCalledWith(TEST_PROBLEM_TRIMMED);
+      expect(mockDebateService.collectClarifications).toHaveBeenCalledWith(TEST_PROBLEM_TRIMMED, expect.any(Array));
       expect(mockSocket.emit).toHaveBeenCalledWith('clarificationsRequired', {
         questions: mockClarifications,
       });
@@ -409,7 +435,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockResolvedValue(mockResult);
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: true },
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -423,7 +449,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockResolvedValue(mockResult);
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: true },
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -439,7 +465,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockResolvedValue(mockResult);
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -447,8 +473,119 @@ describe('DebateGateway', () => {
         TEST_PROBLEM_TRIMMED,
         expect.any(Object),
         undefined,
-        DEFAULT_ROUNDS
+        DEFAULT_ROUNDS,
+        expect.any(Array)
       );
+    });
+
+    it('should reject when no agents provided', async () => {
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: [] },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith('No agents configured');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'No agents configured',
+      });
+    });
+
+    it('should reject when agents array is missing', async () => {
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false } as any,
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith('No agents configured');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'No agents configured',
+      });
+    });
+
+    it('should reject duplicate agent IDs', async () => {
+      const duplicateAgents = [
+        ...createMockAgentConfigInputs(),
+        {
+          id: TEST_AGENT_ID_ARCHITECT, // Duplicate ID
+          name: 'Another Agent',
+          role: 'security',
+          model: 'gpt-4',
+          provider: 'openai',
+          temperature: 0.5,
+        },
+      ];
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: duplicateAgents },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith(expect.stringContaining('Duplicate agent ID'));
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: expect.stringContaining('Duplicate agent ID'),
+      });
+    });
+
+    it('should reject duplicate agent names', async () => {
+      const duplicateAgents = [
+        ...createMockAgentConfigInputs(),
+        {
+          id: 'agent-security',
+          name: TEST_AGENT_NAME_ARCHITECT, // Duplicate name
+          role: 'security',
+          model: 'gpt-4',
+          provider: 'openai',
+          temperature: 0.5,
+        },
+      ];
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: duplicateAgents },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith(expect.stringContaining('Duplicate agent name'));
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: expect.stringContaining('Duplicate agent name'),
+      });
+    });
+
+    it('should reject invalid temperature (< 0.0)', async () => {
+      const invalidAgents = [
+        {
+          ...createMockAgentConfigInputs()[0],
+          temperature: -0.1,
+        },
+      ];
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith(expect.stringContaining('Temperature must be between'));
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: expect.stringContaining('Temperature must be between'),
+      });
+    });
+
+    it('should reject invalid temperature (> 1.0)', async () => {
+      const invalidAgents = [
+        {
+          ...createMockAgentConfigInputs()[0],
+          temperature: 1.1,
+        },
+      ];
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith(expect.stringContaining('Temperature must be between'));
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: expect.stringContaining('Temperature must be between'),
+      });
     });
   });
 
@@ -469,7 +606,7 @@ describe('DebateGateway', () => {
       // Start debate with clarifications enabled
       mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: true },
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -494,7 +631,8 @@ describe('DebateGateway', () => {
             ]),
           }),
         ]),
-        DEFAULT_ROUNDS
+        DEFAULT_ROUNDS,
+        expect.any(Array)
       );
     });
 
@@ -504,7 +642,7 @@ describe('DebateGateway', () => {
       
       mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: true },
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -523,7 +661,8 @@ describe('DebateGateway', () => {
             ]),
           }),
         ]),
-        DEFAULT_ROUNDS
+        DEFAULT_ROUNDS,
+        expect.any(Array)
       );
     });
 
@@ -533,7 +672,7 @@ describe('DebateGateway', () => {
       
       mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: true, rounds: TEST_ROUNDS_OVERRIDE },
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, rounds: TEST_ROUNDS_OVERRIDE, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -544,7 +683,8 @@ describe('DebateGateway', () => {
         TEST_PROBLEM_TRIMMED,
         expect.any(Object),
         expect.any(Array),
-        TEST_ROUNDS_OVERRIDE
+        TEST_ROUNDS_OVERRIDE,
+        expect.any(Array)
       );
     });
   });
@@ -556,7 +696,7 @@ describe('DebateGateway', () => {
 
       // Start debate
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -587,7 +727,7 @@ describe('DebateGateway', () => {
       });
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
     });
@@ -726,7 +866,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockResolvedValue(mockResult);
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -758,7 +898,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockRejectedValue(new Error(errorMessage));
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
@@ -773,7 +913,7 @@ describe('DebateGateway', () => {
       mockDebateService.runDebate.mockRejectedValue(new Error(errorMessage));
 
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false },
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 

@@ -8,6 +8,7 @@ import {
   DebateAction,
   AgentState,
   AgentConfig,
+  AgentConfigInput,
   NotificationMessage,
   ACTION_TYPES,
   ContributionType,
@@ -21,6 +22,8 @@ const initialState: DebateState = {
   clarificationsEnabled: false,
   rounds: DEFAULT_ROUNDS,
   agents: [],
+  agentConfigs: [],
+  configPanelCollapsed: false,
   currentRound: 0,
   totalRounds: DEFAULT_ROUNDS,
   notifications: [],
@@ -40,6 +43,27 @@ function contributionKey(agentId: string, type: ContributionType, round: number,
   return `${agentId}-${type}-${round}-${content.slice(0, 50)}`; // Use first 50 chars as content identifier
 }
 
+function agentConfigToInput(cfg: AgentConfig): AgentConfigInput {
+  return {
+    id: cfg.id,
+    name: cfg.name,
+    role: cfg.role,
+    model: cfg.model,
+    provider: cfg.provider,
+    temperature: cfg.temperature,
+  };
+}
+
+function syncAgentsFromConfigs(configs: AgentConfigInput[]): AgentState[] {
+  return configs.map(cfg => ({
+    id: cfg.id,
+    name: cfg.name,
+    role: cfg.role,
+    contributions: [],
+    currentActivity: undefined,
+  }));
+}
+
 function debateReducer(state: DebateState, action: DebateAction): DebateState {
   switch (action.type) {
     case ACTION_TYPES.SET_PROBLEM:
@@ -52,15 +76,13 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       return { ...state, clarificationsEnabled: !state.clarificationsEnabled };
 
     case ACTION_TYPES.CONNECTION_ESTABLISHED: {
-      const agents: AgentState[] = action.payload.agents.map((cfg: AgentConfig) => ({
-        id: cfg.id,
-        name: cfg.name,
-        role: cfg.role,
-        contributions: [],
-      }));
+      const agentConfigs: AgentConfigInput[] = action.payload.agents.map(agentConfigToInput);
+      const agents: AgentState[] = syncAgentsFromConfigs(agentConfigs);
       return {
         ...state,
+        agentConfigs,
         agents,
+        configPanelCollapsed: false,
         notifications: [
           ...state.notifications,
           createNotification('success', 'Connected to debate server'),
@@ -68,19 +90,23 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       };
     }
 
-    case ACTION_TYPES.DEBATE_STARTED:
+    case ACTION_TYPES.DEBATE_STARTED: {
+      // Sync agents from agentConfigs to ensure grid shows configured agents
+      const syncedAgents = syncAgentsFromConfigs(state.agentConfigs);
       return {
         ...state,
         status: 'running',
         isRunning: true,
         solution: undefined,
         currentRound: 0,
-        agents: state.agents.map(a => ({ ...a, contributions: [], currentActivity: undefined })),
+        agents: syncedAgents,
+        configPanelCollapsed: true,
         notifications: [
           ...state.notifications,
           createNotification('info', 'Debate started'),
         ],
       };
+    }
 
     case ACTION_TYPES.COLLECTING_CLARIFICATIONS:
       return {
@@ -249,6 +275,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         ...state,
         status: 'completed',
         isRunning: false,
+        configPanelCollapsed: false,
         solution: result.solution,
         agents: updatedAgents,
         notifications: [
@@ -286,6 +313,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         status: 'idle',
         isRunning: false,
         clarificationQuestions: undefined,
+        configPanelCollapsed: false,
         agents: state.agents.map(a => ({ ...a, currentActivity: undefined })),
         notifications: [
           ...state.notifications,
@@ -303,6 +331,39 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       return {
         ...state,
         notifications: state.notifications.filter(n => n.id !== action.payload),
+      };
+
+    case ACTION_TYPES.SET_AGENT_CONFIGS:
+      return {
+        ...state,
+        agentConfigs: action.payload,
+      };
+
+    case ACTION_TYPES.UPDATE_AGENT_CONFIG: {
+      const updated = [...state.agentConfigs];
+      updated[action.payload.index] = action.payload.agent;
+      return {
+        ...state,
+        agentConfigs: updated,
+      };
+    }
+
+    case ACTION_TYPES.ADD_AGENT_CONFIG:
+      return {
+        ...state,
+        agentConfigs: [...state.agentConfigs, action.payload],
+      };
+
+    case ACTION_TYPES.REMOVE_AGENT_CONFIG:
+      return {
+        ...state,
+        agentConfigs: state.agentConfigs.filter((_, i) => i !== action.payload),
+      };
+
+    case ACTION_TYPES.SET_CONFIG_PANEL_COLLAPSED:
+      return {
+        ...state,
+        configPanelCollapsed: action.payload,
       };
 
     default:
@@ -409,13 +470,21 @@ export function useDebateSocket() {
 
   const startDebate = useCallback((problem: string) => {
     if (!problem.trim()) return;
+    if (state.agentConfigs.length === 0) {
+      dispatch({
+        type: ACTION_TYPES.ERROR,
+        payload: { message: 'No agents configured. Please add at least one agent.' },
+      });
+      return;
+    }
     dispatch({ type: ACTION_TYPES.SET_PROBLEM, payload: problem });
     socketRef.current?.emit('startDebate', {
       problem: problem.trim(),
       clarificationsEnabled: state.clarificationsEnabled,
       rounds: state.rounds,
+      agents: state.agentConfigs,
     });
-  }, [state.clarificationsEnabled, state.rounds]);
+  }, [state.clarificationsEnabled, state.rounds, state.agentConfigs]);
 
   const submitClarifications = useCallback((answers: Record<string, string>) => {
     socketRef.current?.emit('submitClarifications', { answers });
@@ -429,6 +498,22 @@ export function useDebateSocket() {
     dispatch({ type: ACTION_TYPES.CLEAR_NOTIFICATION, payload: id });
   }, []);
 
+  const setAgentConfigs = useCallback((configs: AgentConfigInput[]) => {
+    dispatch({ type: ACTION_TYPES.SET_AGENT_CONFIGS, payload: configs });
+  }, []);
+
+  const updateAgentConfig = useCallback((index: number, agent: AgentConfigInput) => {
+    dispatch({ type: ACTION_TYPES.UPDATE_AGENT_CONFIG, payload: { index, agent } });
+  }, []);
+
+  const addAgentConfig = useCallback((agent: AgentConfigInput) => {
+    dispatch({ type: ACTION_TYPES.ADD_AGENT_CONFIG, payload: agent });
+  }, []);
+
+  const removeAgentConfig = useCallback((index: number) => {
+    dispatch({ type: ACTION_TYPES.REMOVE_AGENT_CONFIG, payload: index });
+  }, []);
+
   return {
     state,
     setProblem,
@@ -438,6 +523,10 @@ export function useDebateSocket() {
     submitClarifications,
     cancelDebate,
     clearNotification,
+    setAgentConfigs,
+    updateAgentConfig,
+    addAgentConfig,
+    removeAgentConfig,
   };
 }
 

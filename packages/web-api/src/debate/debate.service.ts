@@ -32,6 +32,11 @@ const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 const DEFAULT_TIMEOUT_PER_ROUND = 300000;
 const DEFAULT_MAX_CLARIFICATIONS_PER_AGENT = 5;
 
+// Error messages
+const ERROR_MESSAGES = {
+  NO_AGENTS_CONFIGURED: 'No agents configured',
+} as const;
+
 // Summarization configuration constants
 const DEFAULT_SUMMARIZATION_THRESHOLD = 5000;
 const DEFAULT_SUMMARIZATION_MAX_LENGTH = 2500;
@@ -147,15 +152,24 @@ export class DebateService {
    * Collects clarifying questions from all agents.
    *
    * @param problem - The problem statement to collect clarifications for.
+   * @param agents - Array of agent configurations (required, no fallback).
    * @returns Promise resolving to an array of agent clarifications with questions.
+   * @throws {Error} If agents array is empty or invalid.
    */
-  async collectClarifications(problem: string): Promise<AgentClarifications[]> {
+  async collectClarifications(problem: string, agents: AgentConfig[]): Promise<AgentClarifications[]> {
+    if (!agents || agents.length === 0) {
+      throw new Error(ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
+    }
+
     const config = this.getDefaultConfig();
-    const agents = this.buildAgents(config.agents, config.debate.summarization!);
+    if (!config.debate.summarization) {
+      throw new Error('Summarization configuration is required');
+    }
+    const agentInstances = this.buildAgents(agents, config.debate.summarization);
     
     return await collectClarifications(
       problem,
-      agents,
+      agentInstances,
       DEFAULT_MAX_CLARIFICATIONS_PER_AGENT,
       (msg) => logWarning(msg)
     );
@@ -168,14 +182,21 @@ export class DebateService {
    * @param hooks - Optional orchestrator hooks for progress notifications.
    * @param clarifications - Optional clarifications with answers from agents.
    * @param rounds - Optional number of debate rounds (overrides default if provided).
+   * @param agents - Array of agent configurations (required, no fallback).
    * @returns Promise resolving to the debate result.
+   * @throws {Error} If agents array is empty or invalid.
    */
   async runDebate(
     problem: string,
     hooks?: OrchestratorHooks,
     clarifications?: AgentClarifications[],
-    rounds?: number
+    rounds?: number,
+    agents: AgentConfig[] = []
   ): Promise<DebateResult> {
+    if (!agents || agents.length === 0) {
+      throw new Error(ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
+    }
+
     const config = this.getDefaultConfig();
     
     // Override rounds if provided
@@ -184,11 +205,13 @@ export class DebateService {
       rounds: rounds ?? config.debate.rounds,
     };
     
-    const agents = this.buildAgents(config.agents, debateConfig.summarization!);
-    const judge = this.buildJudge(config.judge, debateConfig.summarization!);
+    // Use summarization from default config (always defined)
+    const summarizationConfig = config.debate.summarization!;
+    const agentInstances = this.buildAgents(agents, summarizationConfig);
+    const judge = this.buildJudge(config.judge, summarizationConfig);
 
     const orchestrator = new DebateOrchestrator(
-      agents,
+      agentInstances,
       judge,
       this.stateManager,
       debateConfig,

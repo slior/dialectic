@@ -62,6 +62,32 @@ const MOCK_SYSTEM_PROMPT = 'Mock system prompt';
 const MOCK_PROVIDER = {} as any;
 
 /**
+ * Creates mock agent configurations for testing.
+ */
+function createMockAgentConfigs(): AgentConfig[] {
+  return [
+    {
+      id: TEST_AGENT_ID_ARCHITECT,
+      name: TEST_AGENT_NAME_ARCHITECT,
+      role: AGENT_ROLES.ARCHITECT,
+      model: DEFAULT_LLM_MODEL,
+      provider: LLM_PROVIDERS.OPENROUTER,
+      temperature: DEFAULT_AGENT_TEMPERATURE,
+      enabled: true,
+    },
+    {
+      id: TEST_AGENT_ID_PERFORMANCE,
+      name: TEST_AGENT_NAME_PERFORMANCE,
+      role: AGENT_ROLES.PERFORMANCE,
+      model: DEFAULT_LLM_MODEL,
+      provider: LLM_PROVIDERS.OPENROUTER,
+      temperature: DEFAULT_AGENT_TEMPERATURE,
+      enabled: true,
+    },
+  ];
+}
+
+/**
  * Creates a mock StateManager instance.
  */
 function createMockStateManager(): jest.Mocked<StateManager> {
@@ -270,9 +296,10 @@ describe('DebateService', () => {
   describe('collectClarifications', () => {
     it('should successfully collect clarifications', async () => {
       const mockClarifications = createMockAgentClarifications();
+      const mockAgents = createMockAgentConfigs();
       (collectClarifications as jest.Mock).mockResolvedValue(mockClarifications);
 
-      const result = await service.collectClarifications(TEST_PROBLEM);
+      const result = await service.collectClarifications(TEST_PROBLEM, mockAgents);
 
       expect(collectClarifications).toHaveBeenCalledWith(
         TEST_PROBLEM,
@@ -285,30 +312,37 @@ describe('DebateService', () => {
 
     it('should handle errors when collecting clarifications', async () => {
       const errorMessage = 'Failed to collect clarifications';
+      const mockAgents = createMockAgentConfigs();
       (collectClarifications as jest.Mock).mockRejectedValue(new Error(errorMessage));
 
-      await expect(service.collectClarifications(TEST_PROBLEM)).rejects.toThrow(errorMessage);
+      await expect(service.collectClarifications(TEST_PROBLEM, mockAgents)).rejects.toThrow(errorMessage);
     });
 
     it('should build agents correctly before collecting clarifications', async () => {
       const mockClarifications = createMockAgentClarifications();
+      const mockAgents = createMockAgentConfigs();
       (collectClarifications as jest.Mock).mockResolvedValue(mockClarifications);
 
-      await service.collectClarifications(TEST_PROBLEM);
+      await service.collectClarifications(TEST_PROBLEM, mockAgents);
 
       expect(RoleBasedAgent.defaultSystemPrompt).toHaveBeenCalled();
       expect(createProvider).toHaveBeenCalled();
       expect(resolvePrompt).toHaveBeenCalled();
       expect(buildToolRegistry).toHaveBeenCalled();
     });
+
+    it('should throw error when no agents provided', async () => {
+      await expect(service.collectClarifications(TEST_PROBLEM, [])).rejects.toThrow('No agents configured');
+    });
   });
 
   describe('runDebate', () => {
     it('should run debate successfully without hooks or clarifications', async () => {
       const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
       mockOrchestrator.runDebate.mockResolvedValue(mockResult);
 
-      const result = await service.runDebate(TEST_PROBLEM);
+      const result = await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
 
       expect(DebateOrchestrator).toHaveBeenCalledWith(
         expect.any(Array),
@@ -325,13 +359,14 @@ describe('DebateService', () => {
 
     it('should run debate with hooks', async () => {
       const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
       const hooks = {
         onRoundStart: jest.fn(),
         onPhaseStart: jest.fn(),
       };
       mockOrchestrator.runDebate.mockResolvedValue(mockResult);
 
-      const result = await service.runDebate(TEST_PROBLEM, hooks);
+      const result = await service.runDebate(TEST_PROBLEM, hooks, undefined, undefined, mockAgents);
 
       expect(DebateOrchestrator).toHaveBeenCalledWith(
         expect.any(Array),
@@ -345,10 +380,11 @@ describe('DebateService', () => {
 
     it('should run debate with clarifications', async () => {
       const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
       const clarifications = createMockAgentClarifications();
       mockOrchestrator.runDebate.mockResolvedValue(mockResult);
 
-      const result = await service.runDebate(TEST_PROBLEM, undefined, clarifications);
+      const result = await service.runDebate(TEST_PROBLEM, undefined, clarifications, undefined, mockAgents);
 
       expect(mockOrchestrator.runDebate).toHaveBeenCalledWith(
         TEST_PROBLEM,
@@ -360,9 +396,10 @@ describe('DebateService', () => {
 
     it('should override rounds when provided', async () => {
       const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
       mockOrchestrator.runDebate.mockResolvedValue(mockResult);
 
-      await service.runDebate(TEST_PROBLEM, undefined, undefined, TEST_ROUNDS_OVERRIDE);
+      await service.runDebate(TEST_PROBLEM, undefined, undefined, TEST_ROUNDS_OVERRIDE, mockAgents);
 
       expect(DebateOrchestrator).toHaveBeenCalledWith(
         expect.any(Array),
@@ -377,9 +414,10 @@ describe('DebateService', () => {
 
     it('should use default rounds when rounds not provided', async () => {
       const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
       mockOrchestrator.runDebate.mockResolvedValue(mockResult);
 
-      await service.runDebate(TEST_PROBLEM);
+      await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
 
       expect(DebateOrchestrator).toHaveBeenCalledWith(
         expect.any(Array),
@@ -394,16 +432,18 @@ describe('DebateService', () => {
 
     it('should handle debate failures', async () => {
       const errorMessage = 'Debate orchestration failed';
+      const mockAgents = createMockAgentConfigs();
       mockOrchestrator.runDebate.mockRejectedValue(new Error(errorMessage));
 
-      await expect(service.runDebate(TEST_PROBLEM)).rejects.toThrow(errorMessage);
+      await expect(service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents)).rejects.toThrow(errorMessage);
     });
 
     it('should build agents and judge correctly', async () => {
       const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
       mockOrchestrator.runDebate.mockResolvedValue(mockResult);
 
-      await service.runDebate(TEST_PROBLEM);
+      await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
 
       expect(RoleBasedAgent.defaultSystemPrompt).toHaveBeenCalled();
       expect(createProvider).toHaveBeenCalled();
