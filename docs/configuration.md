@@ -1260,6 +1260,23 @@ If summarization fails due to LLM errors:
   - macOS/Linux bash/zsh: `export LANGFUSE_BASE_URL="https://your-langfuse-instance.com"`
 - **Example**: For self-hosted instances: `"https://langfuse.yourcompany.com"`
 
+### `NEXT_PUBLIC_API_URL`
+- **Type**: String
+- **Required**: No
+- **Description**: Base URL for the Web API server that the Web UI connects to via WebSocket. This is used by the Next.js frontend to establish Socket.IO connections for real-time debate updates.
+- **Default**: `"http://localhost:3001"` (default NestJS API server port)
+- **How to Set**:
+  - Windows PowerShell: `$Env:NEXT_PUBLIC_API_URL = "http://localhost:3001"`
+  - macOS/Linux bash/zsh: `export NEXT_PUBLIC_API_URL="http://localhost:3001"`
+  - In `.env` file: `NEXT_PUBLIC_API_URL=http://localhost:3001`
+- **Location**: Set this in the project root `.env` file or in `packages/web-ui/.env.local` for Next.js to pick it up
+- **Note**: The `NEXT_PUBLIC_` prefix is required for Next.js to expose this variable to client-side code. Changes require restarting the dev server or rebuilding the application.
+- **Examples**:
+  - Development (default): `http://localhost:3001`
+  - Custom port: `http://localhost:8080`
+  - Production: `https://api.yourdomain.com`
+  - Self-hosted: `https://your-api-server.com`
+
 ## Command Line Options
 
 The CLI accepts the following options that can override configuration file settings:

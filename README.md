@@ -54,7 +54,12 @@ Create a `.env` file in the project root:
 OPENAI_API_KEY=sk-your-key-here
 # OR
 OPENROUTER_API_KEY=sk-or-your-key-here
+
+# Optional: Configure Web UI API URL (defaults to http://localhost:3001)
+# NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
+
+See `.env.example` for a complete example of all available environment variables.
 
 ### Running a Debate
 
@@ -125,6 +130,17 @@ npm run dev:ui   # UI server (port 3000)
 ```
 
 Then open http://localhost:3000 in your browser.
+
+**Configuration:**
+
+The Web UI connects to the API server via WebSocket. By default, it connects to `http://localhost:3001`. To configure a different API URL, set the `NEXT_PUBLIC_API_URL` environment variable:
+
+```bash
+# In .env file or environment
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
+
+For production deployments, set this to your API server's URL (e.g., `https://api.yourdomain.com`).
 
 For comprehensive details on running the web components, including production builds and configuration options, see [AGENTS.md](AGENTS.md#web-components).
 
