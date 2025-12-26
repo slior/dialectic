@@ -39,7 +39,7 @@ When writing tests, **always import from package sources**, never from the legac
 For core functionality (agents, providers, tools, types, utilities), import from `@dialectic/core`:
 
 ```typescript
-// ✅ CORRECT - Import from @dialectic/core
+// Import from @dialectic/core
 import { 
   DebateOrchestrator, 
   RoleBasedAgent, 
@@ -49,9 +49,6 @@ import {
   CONTRIBUTION_TYPES 
 } from '@dialectic/core';
 
-// ❌ INCORRECT - Don't import from root src/
-import { DebateOrchestrator } from '../src/core/orchestrator';
-import { CONTRIBUTION_TYPES } from '../src/types/debate.types';
 ```
 
 #### CLI-Specific Functionality
@@ -59,17 +56,14 @@ import { CONTRIBUTION_TYPES } from '../src/types/debate.types';
 For CLI-specific functionality within the CLI package, use relative imports:
 
 ```typescript
-// ✅ CORRECT - Relative imports within CLI package
+// Relative imports within CLI package
 import { runCli } from '../index';
 import { loadConfig } from './debate';  // Same directory
 import { DebateProgressUI } from '../utils/progress-ui';
 
-// ✅ CORRECT - From root tests/ directory (legacy)
+// From root tests/ directory (legacy)
 import { runCli } from '../packages/cli/src/index';
 
-// ❌ INCORRECT - Don't import from root src/
-import { runCli } from '../src/cli/index';
-import { DebateProgressUI } from '../src/utils/progress-ui';
 ```
 
 ### What to Import from Where

@@ -894,7 +894,10 @@ Good code is:
 
 1. **Test Structure:**
    ```typescript
-   import { Component } from '../src/component';
+   // Import from package (preferred)
+   import { DebateOrchestrator } from '@dialectic/core';
+   // Or import from package src for testing
+   import { Component } from '../packages/core/src/core/component';
    
    describe('Component', () => {
      it('should do something specific', async () => {
