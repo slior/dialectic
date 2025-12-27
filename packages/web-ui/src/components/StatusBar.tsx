@@ -1,12 +1,13 @@
 'use client'
 
-import { ContributionType, DEBATE_STATUS } from '@/lib/types';
+import { ContributionType, DEBATE_STATUS, CONNECTION_STATUS, ConnectionStatus } from '@/lib/types';
 
 interface StatusBarProps {
   status: string;
   round: number;
   totalRounds: number;
   phase?: ContributionType;
+  connectionStatus: ConnectionStatus;
 }
 
 const statusLabels: Record<string, { label: string; color: string }> = {
@@ -24,8 +25,20 @@ const phaseLabels: Record<ContributionType, string> = {
   refinement: 'Refinements',
 };
 
-export default function StatusBar({ status, round, totalRounds, phase }: StatusBarProps) {
+const connectionLabels: Record<ConnectionStatus, { label: string; color: string }> = {
+  [CONNECTION_STATUS.CONNECTING]: { label: 'Connecting', color: 'text-accent-yellow' },
+  [CONNECTION_STATUS.CONNECTED]: { label: '', color: '' }, // Use debate status when connected
+  [CONNECTION_STATUS.DISCONNECTED]: { label: 'Disconnected', color: 'text-accent-red' },
+};
+
+export default function StatusBar({ status, round, totalRounds, phase, connectionStatus }: StatusBarProps) {
   const statusInfo = statusLabels[status] || { label: status, color: 'text-text-primary' };
+  
+  // Determine what to show on the right side
+  const showConnectionStatus = connectionStatus === CONNECTION_STATUS.CONNECTING || connectionStatus === CONNECTION_STATUS.DISCONNECTED;
+  const displayInfo = showConnectionStatus 
+    ? connectionLabels[connectionStatus]
+    : statusInfo;
 
   return (
     <div className="bg-tertiary border-b border-border px-4 py-2 flex items-center justify-between">
@@ -64,11 +77,13 @@ export default function StatusBar({ status, round, totalRounds, phase }: StatusB
       {/* Right: Connection Status */}
       <div className="flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full ${
+          connectionStatus === CONNECTION_STATUS.CONNECTING ? 'bg-accent-yellow animate-pulse-dot' :
+          connectionStatus === CONNECTION_STATUS.DISCONNECTED ? 'bg-accent-red' :
           status === DEBATE_STATUS.RUNNING ? 'bg-accent-green animate-pulse-dot' : 
           status === DEBATE_STATUS.ERROR ? 'bg-accent-red' : 'bg-text-muted'
         }`} />
-        <span className={`text-sm ${statusInfo.color}`}>
-          {statusInfo.label}
+        <span className={`text-sm ${displayInfo.color}`}>
+          {displayInfo.label}
         </span>
       </div>
     </div>

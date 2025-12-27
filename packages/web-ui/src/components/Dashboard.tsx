@@ -163,6 +163,7 @@ export default function Dashboard() {
         round={state.currentRound}
         totalRounds={state.totalRounds}
         phase={state.currentPhase}
+        connectionStatus={state.connectionStatus}
       />
 
       {/* Main Content */}

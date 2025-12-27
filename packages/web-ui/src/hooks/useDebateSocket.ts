@@ -13,12 +13,14 @@ import {
   ACTION_TYPES,
   ContributionType,
   DEBATE_STATUS,
+  CONNECTION_STATUS,
 } from '@/lib/types';
 
 const DEFAULT_ROUNDS = 3;
 
 const initialState: DebateState = {
   status: DEBATE_STATUS.IDLE,
+  connectionStatus: CONNECTION_STATUS.CONNECTING,
   problem: '',
   clarificationsEnabled: false,
   rounds: DEFAULT_ROUNDS,
@@ -367,6 +369,12 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         configPanelCollapsed: action.payload,
       };
 
+    case ACTION_TYPES.SET_CONNECTION_STATUS:
+      return {
+        ...state,
+        connectionStatus: action.payload,
+      };
+
     default:
       return state;
   }
@@ -380,6 +388,17 @@ export function useDebateSocket() {
     const socket = getSocket();
     socketRef.current = socket;
 
+    // Check initial socket state
+    // If socket is not connected and not explicitly disconnected, it's connecting
+    if (socket.connected) {
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.CONNECTED });
+    } else if (socket.disconnected) {
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.DISCONNECTED });
+    } else {
+      // Socket is in connecting state (not connected but not explicitly disconnected)
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.CONNECTING });
+    }
+
     // Connection events
     socket.on('connectionEstablished', (data) => {
       dispatch({ type: ACTION_TYPES.CONNECTION_ESTABLISHED, payload: data });
@@ -387,7 +406,30 @@ export function useDebateSocket() {
 
     // Handle socket connection (including reconnections)
     socket.on('connect', () => {
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.CONNECTED });
       // The server should automatically emit 'connectionEstablished' via handleConnection
+    });
+
+    socket.on('disconnect', () => {
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.DISCONNECTED });
+    });
+
+    socket.on('connect_error', () => {
+      // Keep as CONNECTING since socket.io will retry
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.CONNECTING });
+    });
+
+    socket.on('reconnect_attempt', () => {
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.CONNECTING });
+    });
+
+    socket.on('reconnect', () => {
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.CONNECTED });
+    });
+
+    socket.on('reconnect_error', () => {
+      // Keep as CONNECTING since socket.io will retry
+      dispatch({ type: ACTION_TYPES.SET_CONNECTION_STATUS, payload: CONNECTION_STATUS.CONNECTING });
     });
 
     // If socket is disconnected, try to connect manually

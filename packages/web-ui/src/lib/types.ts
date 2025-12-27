@@ -18,6 +18,16 @@ export const DEBATE_STATUS = {
 /** Union type of all debate statuses */
 export type DebateStatus = (typeof DEBATE_STATUS)[keyof typeof DEBATE_STATUS];
 
+/** String literal constants for connection statuses */
+export const CONNECTION_STATUS = {
+  CONNECTING: 'connecting',
+  CONNECTED: 'connected',
+  DISCONNECTED: 'disconnected',
+} as const;
+
+/** Union type of all connection statuses */
+export type ConnectionStatus = (typeof CONNECTION_STATUS)[keyof typeof CONNECTION_STATUS];
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -91,6 +101,7 @@ export interface AgentState {
 
 export interface DebateState {
   status: DebateStatus;
+  connectionStatus: ConnectionStatus;
   problem: string;
   clarificationsEnabled: boolean;
   rounds: number;
@@ -141,6 +152,7 @@ export const ACTION_TYPES = {
   ADD_AGENT_CONFIG: 'ADD_AGENT_CONFIG',
   REMOVE_AGENT_CONFIG: 'REMOVE_AGENT_CONFIG',
   SET_CONFIG_PANEL_COLLAPSED: 'SET_CONFIG_PANEL_COLLAPSED',
+  SET_CONNECTION_STATUS: 'SET_CONNECTION_STATUS',
 } as const;
 
 export type DebateAction =
@@ -170,5 +182,6 @@ export type DebateAction =
   | { type: typeof ACTION_TYPES.UPDATE_AGENT_CONFIG; payload: { index: number; agent: AgentConfigInput } }
   | { type: typeof ACTION_TYPES.ADD_AGENT_CONFIG; payload: AgentConfigInput }
   | { type: typeof ACTION_TYPES.REMOVE_AGENT_CONFIG; payload: number }
-  | { type: typeof ACTION_TYPES.SET_CONFIG_PANEL_COLLAPSED; payload: boolean };
+  | { type: typeof ACTION_TYPES.SET_CONFIG_PANEL_COLLAPSED; payload: boolean }
+  | { type: typeof ACTION_TYPES.SET_CONNECTION_STATUS; payload: ConnectionStatus };
 
