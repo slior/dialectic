@@ -5,6 +5,19 @@
 
 export type ContributionType = 'proposal' | 'critique' | 'refinement';
 
+/** String literal constants for debate statuses (UI-specific) */
+export const DEBATE_STATUS = {
+  IDLE: 'idle',
+  COLLECTING_CLARIFICATIONS: 'collecting_clarifications',
+  AWAITING_CLARIFICATIONS: 'awaiting_clarifications',
+  RUNNING: 'running',
+  COMPLETED: 'completed',
+  ERROR: 'error',
+} as const;
+
+/** Union type of all debate statuses */
+export type DebateStatus = (typeof DEBATE_STATUS)[keyof typeof DEBATE_STATUS];
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -77,7 +90,7 @@ export interface AgentState {
 }
 
 export interface DebateState {
-  status: 'idle' | 'collecting_clarifications' | 'awaiting_clarifications' | 'running' | 'completed' | 'error';
+  status: DebateStatus;
   problem: string;
   clarificationsEnabled: boolean;
   rounds: number;

@@ -1,10 +1,13 @@
 'use client'
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AgentState, ContributionType } from '@/lib/types';
+
+const COPY_FEEDBACK_TIMEOUT_MS = 2000;
 
 interface AgentCardProps {
   agent: AgentState;
+  isDebateCompleted: boolean;
 }
 
 const roleColors: Record<string, string> = {
@@ -22,16 +25,91 @@ const contributionTypeLabels: Record<ContributionType, string> = {
   refinement: 'Refinement',
 };
 
-export default function AgentCard({ agent }: AgentCardProps) {
+/**
+ * Formats agent contributions into a text string suitable for clipboard copying.
+ * Includes agent header (name, ID, role) and all contributions with their types and rounds.
+ */
+function formatAgentContributions(agent: AgentState): string {
+  // Format header
+  let text = `Agent: ${agent.name}\nID: ${agent.id}\nRole: ${agent.role}\n\n`;
+
+  // Format contributions
+  agent.contributions.forEach((contrib) => {
+    text += `--- ${contributionTypeLabels[contrib.type]} (Round ${contrib.round}) ---\n${contrib.content}\n\n`;
+  });
+
+  return text;
+}
+
+export default function AgentCard({ agent, isDebateCompleted }: AgentCardProps) {
   const [expandedContribution, setExpandedContribution] = useState<number | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const roleColor = roleColors[agent.role] || 'text-text-primary';
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    if (agent.contributions.length === 0) {
+      return;
+    }
+
+    try {
+      const text = formatAgentContributions(agent);
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      
+      // Reset feedback after timeout
+      timeoutRef.current = setTimeout(() => {
+        setCopySuccess(false);
+        timeoutRef.current = null;
+      }, COPY_FEEDBACK_TIMEOUT_MS);
+    } catch (err) {
+      // Silently handle clipboard errors (e.g., clipboard API not available)
+      console.error('Failed to copy to clipboard:', err);
+    }
+  };
 
   return (
     <div className="panel flex flex-col h-full min-h-0">
       {/* Header */}
       <div className="panel-header flex items-center justify-between shrink-0">
-        <span className={roleColor}>{agent.name}</span>
-        <span className="text-text-muted text-xs">({agent.role})</span>
+        <div className="flex items-center gap-2">
+          <span className={roleColor}>{agent.name}</span>
+          <span className="text-text-muted text-xs">({agent.role})</span>
+        </div>
+        {/* Copy button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCopy();
+          }}
+          disabled={!isDebateCompleted || agent.contributions.length === 0}
+          title="Copy agent contributions to clipboard"
+          className={`p-1.5 rounded transition-colors ${
+            isDebateCompleted && agent.contributions.length > 0
+              ? 'hover:bg-tertiary/30 text-text-primary'
+              : 'opacity-50 cursor-not-allowed text-text-muted'
+          }`}
+        >
+          {copySuccess ? (
+            <span className="text-accent-green text-sm">✓</span>
+          ) : (
+            <span className="text-sm">📋</span>
+          )}
+        </button>
       </div>
 
       {/* Status */}

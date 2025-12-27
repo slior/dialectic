@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDebateSocket } from '@/hooks/useDebateSocket';
+import { DEBATE_STATUS } from '@/lib/types';
 import StatusBar from './StatusBar';
 import NotificationArea from './NotificationArea';
 import ProblemInput from './ProblemInput';
@@ -42,7 +43,7 @@ export default function Dashboard() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const canStartDebate = !state.isRunning && state.problem.trim().length > 0 && state.agentConfigs.length > 0;
-  const showClarifications = state.status === 'awaiting_clarifications' && state.clarificationQuestions;
+  const showClarifications = state.status === DEBATE_STATUS.AWAITING_CLARIFICATIONS && state.clarificationQuestions;
 
   // Convert percentage or pixel string to pixels
   const parseWidth = useCallback((width: string, containerWidth: number): number => {
@@ -245,7 +246,7 @@ export default function Dashboard() {
           <div className="flex-1 min-h-0 p-4 overflow-y-auto">
             <div className="grid grid-cols-3 gap-3 h-full">
               {state.agents.map((agent) => (
-                <AgentCard key={agent.id} agent={agent} />
+                <AgentCard key={agent.id} agent={agent} isDebateCompleted={state.status === DEBATE_STATUS.COMPLETED} />
               ))}
               {state.agents.length === 0 && (
                 <div className="col-span-3 flex items-center justify-center text-text-muted">

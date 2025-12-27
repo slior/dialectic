@@ -12,12 +12,13 @@ import {
   NotificationMessage,
   ACTION_TYPES,
   ContributionType,
+  DEBATE_STATUS,
 } from '@/lib/types';
 
 const DEFAULT_ROUNDS = 3;
 
 const initialState: DebateState = {
-  status: 'idle',
+  status: DEBATE_STATUS.IDLE,
   problem: '',
   clarificationsEnabled: false,
   rounds: DEFAULT_ROUNDS,
@@ -95,7 +96,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       const syncedAgents = syncAgentsFromConfigs(state.agentConfigs);
       return {
         ...state,
-        status: 'running',
+        status: DEBATE_STATUS.RUNNING,
         isRunning: true,
         solution: undefined,
         currentRound: 0,
@@ -111,7 +112,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
     case ACTION_TYPES.COLLECTING_CLARIFICATIONS:
       return {
         ...state,
-        status: 'collecting_clarifications',
+        status: DEBATE_STATUS.COLLECTING_CLARIFICATIONS,
         notifications: [
           ...state.notifications,
           createNotification('info', 'Collecting clarifying questions from agents...'),
@@ -121,7 +122,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
     case ACTION_TYPES.CLARIFICATIONS_REQUIRED:
       return {
         ...state,
-        status: 'awaiting_clarifications',
+        status: DEBATE_STATUS.AWAITING_CLARIFICATIONS,
         clarificationQuestions: action.payload.questions,
         notifications: [
           ...state.notifications,
@@ -132,7 +133,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
     case ACTION_TYPES.CLARIFICATIONS_SUBMITTED:
       return {
         ...state,
-        status: 'running',
+        status: DEBATE_STATUS.RUNNING,
         clarificationQuestions: undefined,
         notifications: [
           ...state.notifications,
@@ -273,7 +274,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       
       return {
         ...state,
-        status: 'completed',
+        status: DEBATE_STATUS.COMPLETED,
         isRunning: false,
         configPanelCollapsed: false,
         solution: result.solution,
@@ -288,7 +289,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
     case ACTION_TYPES.ERROR:
       return {
         ...state,
-        status: 'error',
+        status: DEBATE_STATUS.ERROR,
         isRunning: false,
         currentPhase: undefined,
         agents: state.agents.map(a => ({ ...a, currentActivity: undefined })),
@@ -310,7 +311,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
     case ACTION_TYPES.DEBATE_CANCELLED:
       return {
         ...state,
-        status: 'idle',
+        status: DEBATE_STATUS.IDLE,
         isRunning: false,
         clarificationQuestions: undefined,
         configPanelCollapsed: false,

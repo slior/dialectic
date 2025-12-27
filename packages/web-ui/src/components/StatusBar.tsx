@@ -1,6 +1,6 @@
 'use client'
 
-import { ContributionType } from '@/lib/types';
+import { ContributionType, DEBATE_STATUS } from '@/lib/types';
 
 interface StatusBarProps {
   status: string;
@@ -10,12 +10,12 @@ interface StatusBarProps {
 }
 
 const statusLabels: Record<string, { label: string; color: string }> = {
-  idle: { label: 'Ready', color: 'text-text-muted' },
-  collecting_clarifications: { label: 'Collecting Questions', color: 'text-accent-cyan' },
-  awaiting_clarifications: { label: 'Awaiting Answers', color: 'text-accent-yellow' },
-  running: { label: 'Running', color: 'text-accent-green' },
-  completed: { label: 'Completed', color: 'text-accent-blue' },
-  error: { label: 'Error', color: 'text-accent-red' },
+  [DEBATE_STATUS.IDLE]: { label: 'Ready', color: 'text-text-muted' },
+  [DEBATE_STATUS.COLLECTING_CLARIFICATIONS]: { label: 'Collecting Questions', color: 'text-accent-cyan' },
+  [DEBATE_STATUS.AWAITING_CLARIFICATIONS]: { label: 'Awaiting Answers', color: 'text-accent-yellow' },
+  [DEBATE_STATUS.RUNNING]: { label: 'Running', color: 'text-accent-green' },
+  [DEBATE_STATUS.COMPLETED]: { label: 'Completed', color: 'text-accent-blue' },
+  [DEBATE_STATUS.ERROR]: { label: 'Error', color: 'text-accent-red' },
 };
 
 const phaseLabels: Record<ContributionType, string> = {
@@ -38,7 +38,7 @@ export default function StatusBar({ status, round, totalRounds, phase }: StatusB
 
       {/* Center: Status */}
       <div className="flex items-center gap-4">
-        {status === 'running' && (
+        {status === DEBATE_STATUS.RUNNING && (
           <>
             <div className="flex items-center gap-2">
               <span className="text-text-muted text-sm">Round:</span>
@@ -64,8 +64,8 @@ export default function StatusBar({ status, round, totalRounds, phase }: StatusB
       {/* Right: Connection Status */}
       <div className="flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full ${
-          status === 'running' ? 'bg-accent-green animate-pulse-dot' : 
-          status === 'error' ? 'bg-accent-red' : 'bg-text-muted'
+          status === DEBATE_STATUS.RUNNING ? 'bg-accent-green animate-pulse-dot' : 
+          status === DEBATE_STATUS.ERROR ? 'bg-accent-red' : 'bg-text-muted'
         }`} />
         <span className={`text-sm ${statusInfo.color}`}>
           {statusInfo.label}
