@@ -384,6 +384,16 @@ export function useDebateSocket() {
       dispatch({ type: ACTION_TYPES.CONNECTION_ESTABLISHED, payload: data });
     });
 
+    // Handle socket connection (including reconnections)
+    socket.on('connect', () => {
+      // The server should automatically emit 'connectionEstablished' via handleConnection
+    });
+
+    // If socket is disconnected, try to connect manually
+    if (!socket.connected && socket.disconnected) {
+      socket.connect();
+    }
+
     // Debate lifecycle events
     socket.on('debateStarted', () => {
       dispatch({ type: ACTION_TYPES.DEBATE_STARTED });

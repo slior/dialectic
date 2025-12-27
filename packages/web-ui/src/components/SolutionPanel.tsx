@@ -51,9 +51,9 @@ export default function SolutionPanel({ solution }: SolutionPanelProps) {
   const hasSolution = !!solution?.description;
 
   return (
-    <div className="bg-secondary">
+    <div className="bg-secondary h-full flex flex-col">
       {/* Header */}
-      <div className="w-full px-4 py-2 flex items-center justify-between border-b border-border">
+      <div className="flex-shrink-0 w-full px-4 py-2 flex items-center justify-between border-b border-border">
         {/* Left: Title */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -95,7 +95,7 @@ export default function SolutionPanel({ solution }: SolutionPanelProps) {
 
       {/* Content */}
       {isExpanded && (
-        <div className="p-4 max-h-64 overflow-y-auto">
+        <div className="flex-1 min-h-0 p-4 overflow-y-auto">
           {solution ? (
             <div className="space-y-2">
               <pre className="text-text-primary text-sm whitespace-pre-wrap leading-relaxed">
