@@ -143,16 +143,6 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(private readonly debateService: DebateService) {}
 
   /**
-   * Writes a message directly to stderr for immediate console output.
-   * Ensures progress messages are visible in NestJS server console.
-   *
-   * @param message - The message to write to console.
-   */
-  private writeToConsole(message: string): void {
-    process.stderr.write(message + '\n');
-  }
-
-  /**
    * Handles new WebSocket client connections.
    * Sends current debate state to the newly connected client.
    *
@@ -162,7 +152,6 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.connectedClients.add(client.id);
     const message = LOG_MESSAGES.CLIENT_CONNECTED(client.id);
     logInfo(message);
-    this.writeToConsole(`[INFO] ${message}`);
     
     // Send current state to newly connected client
     client.emit(WS_EVENTS.CONNECTION_ESTABLISHED, {
@@ -181,7 +170,6 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.connectedClients.delete(client.id);
     const message = LOG_MESSAGES.CLIENT_DISCONNECTED(client.id);
     logInfo(message);
-    this.writeToConsole(`[INFO] ${message}`);
   }
 
   /**
@@ -309,7 +297,6 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     
     const startMessage = LOG_MESSAGES.DEBATE_STARTED;
     logInfo(startMessage);
-    this.writeToConsole(`[INFO] ${startMessage}`);
     client.emit(WS_EVENTS.DEBATE_STARTED, { problem: this.currentProblem });
 
     // If clarifications enabled, collect questions first
@@ -423,7 +410,6 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const completionMessage = LOG_MESSAGES.DEBATE_COMPLETED;
       logSuccess(completionMessage);
-      this.writeToConsole(`[SUCCESS] ${completionMessage}`);
       client.emit(WS_EVENTS.DEBATE_COMPLETE, this.formatDebateResult(result));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -449,63 +435,53 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.totalRounds = total;
         const message = LOG_MESSAGES.ROUND_STARTING(round, total);
         logInfo(message);
-        this.writeToConsole(`[INFO] ${message}`);
         client.emit(WS_EVENTS.ROUND_START, { round, total });
       },
       onPhaseStart: (round: number, phase: ContributionType, count: number) => {
         const phaseLabel = this.getPhaseLabel(phase);
         const message = this.formatMessageWithRound(`${phaseLabel} phase starting`, round);
         logInfo(message);
-        this.writeToConsole(`[INFO] ${message}`);
         client.emit(WS_EVENTS.PHASE_START, { round, phase, expectedCount: count });
       },
       onAgentStart: (agentName: string, activity: string) => {
         const message = this.formatMessageWithRound(`${agentName} is ${activity}...`, this.currentRound);
         logInfo(message);
-        this.writeToConsole(`[INFO] ${message}`);
         client.emit(WS_EVENTS.AGENT_START, { agentName, activity });
       },
       onAgentComplete: (agentName: string, activity: string) => {
         const message = this.formatMessageWithRound(`${agentName} completed ${activity}`, this.currentRound);
         logSuccess(message);
-        this.writeToConsole(`[SUCCESS] ${message}`);
         client.emit(WS_EVENTS.AGENT_COMPLETE, { agentName, activity });
       },
       onPhaseComplete: (round: number, phase: ContributionType) => {
         const phaseLabel = this.getPhaseLabel(phase);
         const message = this.formatMessageWithRound(`${phaseLabel} phase completed`, round);
         logSuccess(message);
-        this.writeToConsole(`[SUCCESS] ${message}`);
         client.emit(WS_EVENTS.PHASE_COMPLETE, { round, phase });
       },
       onSynthesisStart: () => {
         const message = 'Synthesis starting';
         logInfo(message);
-        this.writeToConsole(`[INFO] ${message}`);
         client.emit(WS_EVENTS.SYNTHESIS_START);
       },
       onSynthesisComplete: () => {
         const message = 'Synthesis completed';
         logSuccess(message);
-        this.writeToConsole(`[SUCCESS] ${message}`);
         client.emit(WS_EVENTS.SYNTHESIS_COMPLETE);
       },
       onSummarizationStart: (agentName: string) => {
         const message = this.formatMessageWithRound(`${agentName} is summarizing context...`, this.currentRound);
         logInfo(message);
-        this.writeToConsole(`[INFO] ${message}`);
         client.emit(WS_EVENTS.SUMMARIZATION_START, { agentName });
       },
       onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
         const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
         logSuccess(message);
-        this.writeToConsole(`[SUCCESS] ${message}`);
         client.emit(WS_EVENTS.SUMMARIZATION_COMPLETE, { agentName, beforeChars, afterChars });
       },
       onSummarizationEnd: (agentName: string) => {
         const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
         logSuccess(message);
-        this.writeToConsole(`[SUCCESS] ${message}`);
         client.emit(WS_EVENTS.SUMMARIZATION_END, { agentName });
       },
       onContributionCreated: (contribution: Contribution, roundNumber: number) => {
