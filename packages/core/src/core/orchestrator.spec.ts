@@ -935,3 +935,77 @@ describe('Orchestrator Tool Metadata', () => {
   });
 });
 
+describe('DebateOrchestrator - Critique Activity String', () => {
+  let tmpDir: string;
+  
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'debate-orch-critique-'));
+  });
+
+  afterEach(() => {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  });
+
+  it('should include critiqued agent name in critique activity string', async () => {
+    const agent1Config: AgentConfig = {
+      id: 'agent-1',
+      name: 'Agent A',
+      role: AGENT_ROLES.ARCHITECT,
+      model: 'gpt-4',
+      provider: LLM_PROVIDERS.OPENAI,
+      temperature: 0.5
+    };
+
+    const agent2Config: AgentConfig = {
+      id: 'agent-2',
+      name: 'Agent B',
+      role: AGENT_ROLES.PERFORMANCE,
+      model: 'gpt-4',
+      provider: LLM_PROVIDERS.OPENAI,
+      temperature: 0.5
+    };
+
+    const agent1 = new MockAgent(agent1Config);
+    const agent2 = new MockAgent(agent2Config);
+    const judge = new MockJudge();
+    const stateManager = new StateManager(tmpDir);
+
+    const onAgentStart = jest.fn();
+    const hooks = { onAgentStart };
+
+    const config: DebateConfig = {
+      rounds: SINGLE_ROUND,
+      terminationCondition: { type: TERMINATION_TYPES.FIXED },
+      synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+      includeFullHistory: true,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
+    };
+
+    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as any, stateManager, config, hooks);
+    
+    await orchestrator.runDebate('Test problem');
+
+    // Verify onAgentStart was called
+    expect(onAgentStart).toHaveBeenCalled();
+
+    // Extract all activity strings from calls
+    const activityCalls = onAgentStart.mock.calls.map(call => ({ agentName: call[0], activity: call[1] }));
+
+    // Find critique activities
+    const critiqueActivities = activityCalls.filter(call => call.activity.includes('critiquing'));
+    
+    // Verify critique activities include agent names
+    critiqueActivities.forEach(call => {
+      expect(call.activity).toMatch(/^critiquing Agent [AB]$/);
+    });
+
+    // Verify proposal activities are unchanged
+    const proposalActivities = activityCalls.filter(call => call.activity === 'proposing');
+    expect(proposalActivities.length).toBeGreaterThan(0);
+
+    // Verify refinement activities are unchanged
+    const refinementActivities = activityCalls.filter(call => call.activity === 'refining');
+    expect(refinementActivities.length).toBeGreaterThan(0);
+  });
+});
+

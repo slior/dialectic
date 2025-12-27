@@ -22,6 +22,22 @@ function isFulfilled<T>(result: PromiseSettledResult<T>): result is PromiseFulfi
 }
 
 /**
+ * Formats the critique activity string to include the name of the agent being critiqued.
+ * If the critiqued agent cannot be found, returns just the base activity string.
+ * 
+ * @param agents - Array of all agents participating in the debate.
+ * @param critiquedAgentId - The ID of the agent being critiqued.
+ * @returns Activity string in the format "critiquing [AgentName]" or "critiquing" if agent not found.
+ */
+function formatCritiqueActivity(agents: Agent[], critiquedAgentId: string): string {
+  const critiquedAgent = agents.find(a => a.config.id === critiquedAgentId);
+  const critiquedAgentName = critiquedAgent?.config.name;
+  return critiquedAgentName 
+    ? `${ACTIVITY_CRITIQUING} ${critiquedAgentName}`
+    : ACTIVITY_CRITIQUING;
+}
+
+/**
  * OrchestratorHooks provides optional callbacks for receiving real-time notifications
  * about debate progress. These hooks are intended for use by UI components, logging,
  * or other observers that wish to track the debate's execution at a fine-grained level.
@@ -286,6 +302,35 @@ export class DebateOrchestrator {
   }
 
   /**
+   * Builds a critique contribution by having an agent critique another agent's proposal.
+   * Handles activity tracking hooks and error handling.
+   *
+   * @param agent - The agent performing the critique.
+   * @param proposal - The proposal being critiqued.
+   * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
+   * @param state - Current debate state.
+   * @returns The critique contribution.
+   */
+  private async buildCritiqueContribution(
+    agent: Agent,
+    proposal: Contribution,
+    preparedContexts: Map<string, DebateContext>,
+    state: DebateState
+  ): Promise<Contribution> {
+    const activity = formatCritiqueActivity(this.agents, proposal.agentId);
+    this.hooks?.onAgentStart?.(agent.config.name, activity);
+    try {
+      const started = Date.now();
+      const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
+      const critique = await agent.critique({ content: proposal.content, metadata: proposal.metadata }, ctx, state);
+      const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.CRITIQUE, critique.content, critique.metadata, started, proposal.agentId );
+      return contribution;
+    } finally {
+      this.hooks?.onAgentComplete?.(agent.config.name, activity);
+    }
+  }
+
+  /**
    * Invokes an agent's LLM to produce a proposal contribution for the current round.
    *
    * This method resolves the prepared context for the agent (if provided; otherwise falls back to a full buildContext),
@@ -375,17 +420,7 @@ export class DebateOrchestrator {
       const others = proposals.filter((p) => p.agentId !== agent.config.id);
       for (const prop of others) {
         tasks.push(async () => {
-          const activity = `${ACTIVITY_CRITIQUING} ${prop.agentRole}`;
-          this.hooks?.onAgentStart?.(agent.config.name, activity);
-          try {
-            const started = Date.now();
-            const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
-            const critique = await agent.critique({ content: prop.content, metadata: prop.metadata }, ctx, state);
-            const contribution = this.buildContribution( agent, CONTRIBUTION_TYPES.CRITIQUE, critique.content, critique.metadata, started, prop.agentId );
-            return contribution;
-          } finally {
-            this.hooks?.onAgentComplete?.(agent.config.name, activity);
-          }
+          return this.buildCritiqueContribution(agent, prop, preparedContexts, state);
         });
       }
     }
