@@ -1,0 +1,200 @@
+---
+description: Publish core and/or CLI packages to npm with version management
+---
+
+# Publish Packages
+
+Publish `@dialectic/core` and/or `dialectic` CLI packages to npm with automatic version bumping and dependency management.
+
+## Input Parameters
+
+The command accepts the following parameters:
+
+- **publish_core** (required, boolean)
+  - Whether to publish the `@dialectic/core` package
+  - If `true`, the core package will be version-bumped, built, and published before the CLI package
+  - If `false`, only the CLI package will be published (assumes core is already published)
+
+- **core_version_bump** (optional, required if `publish_core` is `true`)
+  - Version bump type for the core package
+  - Must be one of: `major`, `minor`, `patch`
+  - Only used when `publish_core` is `true`
+  - If `publish_core` is `true` and this is not provided, default to `patch`
+
+- **cli_version_bump** (required)
+  - Version bump type for the CLI package
+  - Must be one of: `major`, `minor`, `patch`
+  - The CLI package will always be published with this version bump
+
+## Process
+
+### Step 1: Validate Parameters
+
+1. Check that `publish_core` is provided and is a boolean (`true` or `false`)
+2. Check that `cli_version_bump` is provided and is one of: `major`, `minor`, `patch`
+3. If `publish_core` is `true`:
+   - Check that `core_version_bump` is provided (or default to `patch` if not provided)
+   - Validate `core_version_bump` is one of: `major`, `minor`, `patch`
+
+### Step 2: Publish Core Package (if requested)
+
+If `publish_core` is `true`:
+
+1. **Navigate to core package directory**
+   - Change to `packages/core` directory from project root
+   - Use absolute paths or ensure proper directory navigation
+
+2. **Update core version**
+   - Run `npm version <core_version_bump>` (e.g., `npm version patch`)
+   - This updates `packages/core/package.json` version field
+   - This also creates a git tag (if in a git repository)
+
+3. **Get new core version**
+   - Read the new version from `packages/core/package.json`
+   - Store it in a variable for later use (e.g., `CORE_VERSION`)
+
+4. **Build core package**
+   - Run `npm run build` from `packages/core` directory
+   - Or use workspace command: `npm run build:core` from project root
+   - Ensure build completes successfully before proceeding
+
+5. **Publish core package**
+   - Run `npm publish --access public` from `packages/core` directory
+   - Verify publish succeeds before proceeding
+
+6. **Update CLI dependency on core**
+   - Read `packages/cli/package.json`
+   - Update the `dependencies` field: `"@dialectic/core": "^<CORE_VERSION>"`
+   - Update to match the newly published core version
+   - Save the updated `package.json`
+
+### Step 3: Build CLI Package
+
+1. **Build CLI package**
+   - From project root, run `npm run build:cli`
+   - Or navigate to `packages/cli` and run `npm run build`
+   - Ensure build completes successfully
+   - This ensures the CLI package is built with the latest core dependency
+
+### Step 4: Publish CLI Package
+
+1. **Invoke publish script**
+   - Execute `scripts/publish-cli.sh` with `cli_version_bump` as argument
+   - Use absolute path or ensure script is executable
+   - The script will:
+     - Update CLI version using `npm version <cli_version_bump>`
+     - Build the CLI package
+     - Publish to npm with `--access public`
+
+2. **Verify success**
+   - Check that the script exits with success code
+   - Display the published version to the user
+
+## Implementation Instructions
+
+When executing this command, follow these steps precisely:
+
+1. **Parameter Validation**
+   ```typescript
+   // Validate publish_core is boolean
+   if (publish_core !== true && publish_core !== false) {
+     throw new Error("publish_core must be true or false");
+   }
+   
+   // Validate cli_version_bump
+   if (!['major', 'minor', 'patch'].includes(cli_version_bump)) {
+     throw new Error("cli_version_bump must be 'major', 'minor', or 'patch'");
+   }
+   
+   // If publishing core, validate core_version_bump
+   if (publish_core && !core_version_bump) {
+     core_version_bump = 'patch'; // Default to patch
+   }
+   if (publish_core && !['major', 'minor', 'patch'].includes(core_version_bump)) {
+     throw new Error("core_version_bump must be 'major', 'minor', or 'patch'");
+   }
+   ```
+
+2. **Publish Core (if requested)**
+   - Navigate to `packages/core` directory
+   - Run: `npm version <core_version_bump>`
+   - Read new version from `packages/core/package.json`: `require('./packages/core/package.json').version`
+   - Run: `npm run build` (from core directory) or `npm run build:core` (from root)
+   - Run: `npm publish --access public` (from core directory)
+   - Update `packages/cli/package.json`:
+     - Read the file
+     - Update `dependencies["@dialectic/core"]` to `"^<new_core_version>"`
+     - Write the file back
+
+3. **Build CLI**
+   - From project root, run: `npm run build:cli`
+   - Or from CLI directory: `npm run build`
+
+4. **Publish CLI**
+   - Execute: `bash scripts/publish-cli.sh <cli_version_bump>`
+   - Or: `./scripts/publish-cli.sh <cli_version_bump>` (if executable)
+   - Use absolute path resolution if needed
+   - Ensure script has proper permissions
+
+## Error Handling
+
+- If any step fails, stop execution and report the error
+- Provide clear error messages indicating which step failed
+- Do not proceed to next step if previous step failed
+- Validate npm authentication before attempting to publish (check `npm whoami`)
+
+## Path Handling
+
+- All paths should be relative to project root or use absolute paths
+- Script should work from any directory (use path resolution)
+- Handle Windows compatibility (Git Bash/WSL paths)
+
+## Output
+
+Provide clear output at each step:
+- "Publishing @dialectic/core with <version_bump> bump..."
+- "Building @dialectic/core..."
+- "Published @dialectic/core@<version>"
+- "Updating CLI dependency on @dialectic/core to ^<version>..."
+- "Building CLI package..."
+- "Publishing dialectic CLI with <version_bump> bump..."
+- "Published dialectic@<version>"
+
+## Example Usage
+
+**Publish both core and CLI:**
+```
+Publish packages with:
+- publish_core: true
+- core_version_bump: patch
+- cli_version_bump: patch
+```
+
+**Publish only CLI (core already published):**
+```
+Publish packages with:
+- publish_core: false
+- cli_version_bump: minor
+```
+
+**Publish core with major bump, CLI with patch:**
+```
+Publish packages with:
+- publish_core: true
+- core_version_bump: major
+- cli_version_bump: patch
+```
+
+## Dependencies
+
+- npm must be authenticated (`npm login` or `npm whoami` should succeed)
+- Git repository (for `npm version` to create tags)
+- All dependencies installed (`npm install` completed)
+- Build tools available (TypeScript compiler)
+
+## Notes
+
+- The `npm version` command creates git tags automatically
+- The CLI package depends on `@dialectic/core`, so core must be published first if it changed
+- Version bumps follow semantic versioning (major.minor.patch)
+- The publish script (`scripts/publish-cli.sh`) handles CLI-specific publishing logic
