@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+**/dist
+**/.next
+**/coverage
+
+# TypeScript build info
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Logs
+*.log
+**/build.log
+
+# Git files
+.git
+.gitignore
+
+# Documentation (except README.md)
+*.md
+!README.md
+docs/
+examples/
+
+# Test files
+**/*.spec.ts
+**/*.test.ts
+**/__tests__
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Development files
+.vscode
+.idea
+.DS_Store
+
+# E2E tests
+e2e-tests/
+
+# Debates directory (will be created in container)
+debates/
+

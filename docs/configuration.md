@@ -1277,6 +1277,23 @@ If summarization fails due to LLM errors:
   - Production: `https://api.yourdomain.com`
   - Self-hosted: `https://your-api-server.com`
 
+### `CORS_ORIGINS`
+- **Type**: String (comma-separated)
+- **Required**: No
+- **Description**: Comma-separated list of allowed CORS origins for the web API. This controls which origins are allowed to make cross-origin requests to both the HTTP REST API and WebSocket connections. Each origin should be a complete URL including the protocol (http:// or https://).
+- **Default**: `"http://localhost:3000,http://127.0.0.1:3000"` (suitable for local development)
+- **How to Set**:
+  - Windows PowerShell: `$Env:CORS_ORIGINS = "http://localhost:3000,https://app.yourdomain.com"`
+  - macOS/Linux bash/zsh: `export CORS_ORIGINS="http://localhost:3000,https://app.yourdomain.com"`
+  - In `.env` file: `CORS_ORIGINS=http://localhost:3000,https://app.yourdomain.com`
+- **Examples**:
+  - Single origin (localhost): `http://localhost:3000`
+  - Multiple origins (development): `http://localhost:3000,http://127.0.0.1:3000`
+  - Multiple origins (production): `https://app.yourdomain.com,https://www.yourdomain.com`
+  - Mixed development and production: `http://localhost:3000,https://app.yourdomain.com`
+- **Note**: This setting applies to both HTTP REST API endpoints and WebSocket connections. The origins are parsed by splitting on commas, trimming whitespace, and filtering out empty values. Only include trusted origins for security.
+- **Security**: Only include origins that you trust. In production, restrict this to your actual frontend domain(s). Wildcards are not supported; each origin must be explicitly listed.
+
 ## Command Line Options
 
 The CLI accepts the following options that can override configuration file settings:

@@ -82,6 +82,82 @@ npm run dev:web
 # Open http://localhost:3000 in your browser
 ```
 
+**Option 3: Docker (Containerized)**
+
+Prerequisites: Docker and Docker Compose installed.
+
+Build the Docker image:
+```bash
+docker build -t dialectic-web .
+```
+
+Run with Docker:
+```bash
+# Basic run with required API key
+docker run -d \
+  -p 3000:3000 \
+  -p 3001:3001 \
+  -e OPENAI_API_KEY=sk-your-key-here \
+  --name dialectic-web \
+  dialectic-web
+```
+
+Or use Docker Compose:
+```bash
+# Create .env file with your API keys, e.g for OPENAI
+echo "OPENAI_API_KEY=sk-your-key-here" > .env
+
+# Start services
+docker-compose up -d
+```
+
+**Environment Variable Examples:**
+
+Single origin (localhost):
+```bash
+docker run -d \
+  -p 3000:3000 -p 3001:3001 \
+  -e OPENAI_API_KEY=sk-your-key \
+  -e CORS_ORIGINS=http://localhost:3000 \
+  dialectic-web
+```
+
+Multiple origins (production):
+```bash
+docker run -d \
+  -p 3000:3000 -p 3001:3001 \
+  -e OPENAI_API_KEY=sk-your-key \
+  -e NEXT_PUBLIC_API_URL=https://api.yourdomain.com \
+  -e CORS_ORIGINS=https://app.yourdomain.com,https://www.yourdomain.com \
+  dialectic-web
+```
+
+With Langfuse tracing:
+```bash
+docker run -d \
+  -p 3000:3000 -p 3001:3001 \
+  -e OPENAI_API_KEY=sk-your-key \
+  -e LANGFUSE_SECRET_KEY=sk-lf-your-key \
+  -e LANGFUSE_PUBLIC_KEY=pk-lf-your-key \
+  dialectic-web
+```
+
+With volume mounts for debates and config:
+```bash
+docker run -d \
+  -p 3000:3000 -p 3001:3001 \
+  -e OPENAI_API_KEY=sk-your-key \
+  -v ./debates:/app/debates \
+  -v ./debate-config.json:/app/debate-config.json:ro \
+  dialectic-web
+```
+
+**Ports:**
+- `3000` - Web UI (Next.js)
+- `3001` - Web API (NestJS)
+
+For CORS configuration details, see [docs/configuration.md](docs/configuration.md#cors_origins).
+
 For detailed instructions on running the different packages, see [docs/operation.md](docs/operation.md).
 
 ## Interfaces

@@ -21,6 +21,7 @@ import {
   logSuccess,
   logWarning,
 } from '@dialectic/core';
+import { getCorsOrigins } from '../utils/cors';
 
 /**
  * Agent configuration input from client (matches AgentConfigInput from UI).
@@ -57,7 +58,7 @@ const MIN_ROUNDS = 1;
 const DEFAULT_MISSING_ANSWER = 'NA';
 
 // CORS configuration
-const CORS_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'] as const;
+const CORS_ORIGINS = getCorsOrigins();
 
 // WebSocket event names
 const WS_EVENTS = {

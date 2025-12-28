@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  dialectic-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"  # Web UI
+      - "3001:3001"  # Web API
+    environment:
+      # Required API keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # OR
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      
+      # Optional: Langfuse tracing
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}
+      
+      # Service configuration
+      - PORT=${PORT:-3001}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      - NODE_ENV=production
+    volumes:
+      # Optional: persist debate state files
+      - ./debates:/app/debates
+      # Optional: mount config files
+      - ./debate-config.json:/app/debate-config.json:ro
+    restart: unless-stopped
+
