@@ -51,7 +51,6 @@ COPY --from=builder /app/packages/core/package.json ./packages/core/
 COPY --from=builder /app/packages/web-api/dist ./packages/web-api/dist
 COPY --from=builder /app/packages/web-api/package.json ./packages/web-api/
 COPY --from=builder /app/packages/web-ui/.next ./packages/web-ui/.next
-COPY --from=builder /app/packages/web-ui/public ./packages/web-ui/public
 COPY --from=builder /app/packages/web-ui/package.json ./packages/web-ui/
 COPY --from=builder /app/packages/web-ui/next.config.js ./packages/web-ui/
 

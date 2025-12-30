@@ -13,7 +13,7 @@ sleep 2
 # Start web-ui in foreground
 echo "Starting Dialectic Web UI on port 3000..."
 cd /app/packages/web-ui
-exec node_modules/.bin/next start -p 3000
+exec npm run start -w @dialectic/web-ui -- --port "${WEB_UI_PORT:-3000}"
 
 # If web-ui exits, kill API
 trap "kill $API_PID" EXIT
