@@ -258,3 +258,89 @@ describe('StateManager - addSummary()', () => {
   });
 });
 
+describe('StateManager updateUserFeedback', () => {
+  let tmpDir: string;
+  
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'debate-state-'));
+  });
+  
+  afterEach(() => {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  });
+
+  it('should update userFeedback for existing debate', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+    
+    await sm.updateUserFeedback(state.id, 1);
+    
+    const loadedState = await sm.getDebate(state.id);
+    expect(loadedState).toBeDefined();
+    expect(loadedState!.userFeedback).toBe(1);
+    
+    // Verify file on disk contains updated userFeedback
+    const filePath = path.join(tmpDir, `${state.id}.json`);
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    expect(parsed.userFeedback).toBe(1);
+  });
+
+  it('should update userFeedback to negative value', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+    
+    await sm.updateUserFeedback(state.id, -1);
+    
+    const loadedState = await sm.getDebate(state.id);
+    expect(loadedState).toBeDefined();
+    expect(loadedState!.userFeedback).toBe(-1);
+  });
+
+  it('should throw error if debate not found', async () => {
+    const sm = new StateManager(tmpDir);
+    
+    await expect(sm.updateUserFeedback('nonexistent-id', 1)).rejects.toThrow(/not found/);
+  });
+
+  it('should persist userFeedback to disk', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+    await sm.updateUserFeedback(state.id, 1);
+    
+    // Create new StateManager instance pointing to same directory
+    const sm2 = new StateManager(tmpDir);
+    const loadedState = await sm2.getDebate(state.id);
+    
+    expect(loadedState).toBeDefined();
+    expect(loadedState!.userFeedback).toBe(1);
+  });
+
+  it('should overwrite existing userFeedback', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+    
+    await sm.updateUserFeedback(state.id, 1);
+    await sm.updateUserFeedback(state.id, -1);
+    
+    const loadedState = await sm.getDebate(state.id);
+    expect(loadedState).toBeDefined();
+    expect(loadedState!.userFeedback).toBe(-1);
+  });
+
+  it('should update updatedAt timestamp', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+    const initialUpdatedAt = state.updatedAt.getTime();
+    
+    // Wait a bit to ensure timestamp difference
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    await sm.updateUserFeedback(state.id, 1);
+    
+    const loadedState = await sm.getDebate(state.id);
+    expect(loadedState).toBeDefined();
+    expect(loadedState!.updatedAt.getTime()).toBeGreaterThan(initialUpdatedAt);
+  });
+});
+

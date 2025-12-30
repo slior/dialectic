@@ -139,6 +139,8 @@ export interface DebateState {
   };
   /** Optional clarifications collected from agents and answered by the user before round 1. */
   clarifications?: AgentClarifications[];
+  /** Optional user feedback value: 1 for positive (thumb-up), -1 for negative (thumb-down). */
+  userFeedback?: number;
 }
 
 /**

@@ -2,14 +2,18 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Solution } from '@/lib/types';
+import { downloadDebate } from '@/lib/api';
 
 const COPY_FEEDBACK_TIMEOUT_MS = 2000;
 
 interface SolutionPanelProps {
   solution?: Solution;
+  debateId?: string;
+  userFeedback?: number;
+  onFeedbackSubmit?: (feedback: number) => void;
 }
 
-export default function SolutionPanel({ solution }: SolutionPanelProps) {
+export default function SolutionPanel({ solution, debateId, userFeedback, onFeedbackSubmit }: SolutionPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -49,6 +53,28 @@ export default function SolutionPanel({ solution }: SolutionPanelProps) {
   };
 
   const hasSolution = !!solution?.description;
+  const canProvideFeedback = !!debateId && debateId.trim().length > 0;
+  const isPositiveActive = userFeedback === 1;
+  const isNegativeActive = userFeedback === -1;
+
+  const handleFeedbackClick = (feedback: number) => {
+    if (!canProvideFeedback || !onFeedbackSubmit) {
+      return;
+    }
+    onFeedbackSubmit(feedback);
+  };
+
+  const handleDownload = async () => {
+    if (!canProvideFeedback) {
+      return;
+    }
+    try {
+      await downloadDebate(debateId!);
+    } catch (err) {
+      console.error('Failed to download debate:', err);
+      // Error handling could be improved with a notification system
+    }
+  };
 
   return (
     <div className="bg-secondary h-full flex flex-col">
@@ -65,6 +91,61 @@ export default function SolutionPanel({ solution }: SolutionPanelProps) {
 
         {/* Right: Action buttons */}
         <div className="flex items-center gap-2">
+          {/* Thumb-up button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleFeedbackClick(1);
+            }}
+            disabled={!canProvideFeedback}
+            title="Positive feedback (thumb-up)"
+            className={`p-1.5 rounded transition-colors ${
+              canProvideFeedback
+                ? isPositiveActive
+                  ? 'bg-accent-green/20 text-accent-green hover:bg-accent-green/30'
+                  : 'hover:bg-tertiary/30 text-text-primary'
+                : 'opacity-50 cursor-not-allowed text-text-muted'
+            }`}
+          >
+            <span className="text-sm">👍</span>
+          </button>
+
+          {/* Thumb-down button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleFeedbackClick(-1);
+            }}
+            disabled={!canProvideFeedback}
+            title="Negative feedback (thumb-down)"
+            className={`p-1.5 rounded transition-colors ${
+              canProvideFeedback
+                ? isNegativeActive
+                  ? 'bg-accent-red/20 text-accent-red hover:bg-accent-red/30'
+                  : 'hover:bg-tertiary/30 text-text-primary'
+                : 'opacity-50 cursor-not-allowed text-text-muted'
+            }`}
+          >
+            <span className="text-sm">👎</span>
+          </button>
+
+          {/* Download button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDownload();
+            }}
+            disabled={!canProvideFeedback}
+            title="Download debate JSON file"
+            className={`p-1.5 rounded transition-colors ${
+              canProvideFeedback
+                ? 'hover:bg-tertiary/30 text-text-primary'
+                : 'opacity-50 cursor-not-allowed text-text-muted'
+            }`}
+          >
+            <span className="text-sm">⬇️</span>
+          </button>
+
           {/* Copy button */}
           <button
             onClick={(e) => {

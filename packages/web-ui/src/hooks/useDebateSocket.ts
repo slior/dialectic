@@ -3,6 +3,7 @@
 import { useEffect, useReducer, useRef, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
 import { getSocket, disconnectSocket } from '@/lib/socket';
+import { submitFeedback } from '@/lib/api';
 import {
   DebateState,
   DebateAction,
@@ -281,6 +282,7 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
         configPanelCollapsed: false,
         solution: result.solution,
         agents: updatedAgents,
+        debateId: result.debateId,
         notifications: [
           ...state.notifications,
           createNotification('success', `Debate completed in ${result.metadata.durationMs}ms`),
@@ -373,6 +375,12 @@ function debateReducer(state: DebateState, action: DebateAction): DebateState {
       return {
         ...state,
         connectionStatus: action.payload,
+      };
+
+    case ACTION_TYPES.SET_USER_FEEDBACK:
+      return {
+        ...state,
+        userFeedback: action.payload,
       };
 
     default:
@@ -567,6 +575,26 @@ export function useDebateSocket() {
     dispatch({ type: ACTION_TYPES.REMOVE_AGENT_CONFIG, payload: index });
   }, []);
 
+  const submitUserFeedback = useCallback(async (feedback: number) => {
+    if (!state.debateId) {
+      return;
+    }
+    try {
+      await submitFeedback(state.debateId, feedback);
+      dispatch({ type: ACTION_TYPES.SET_USER_FEEDBACK, payload: feedback });
+      dispatch({
+        type: ACTION_TYPES.ADD_NOTIFICATION,
+        payload: createNotification('success', 'Feedback submitted successfully'),
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      dispatch({
+        type: ACTION_TYPES.ADD_NOTIFICATION,
+        payload: createNotification('error', `Failed to submit feedback: ${errorMessage}`),
+      });
+    }
+  }, [state.debateId]);
+
   return {
     state,
     setProblem,
@@ -580,6 +608,7 @@ export function useDebateSocket() {
     updateAgentConfig,
     addAgentConfig,
     removeAgentConfig,
+    submitUserFeedback,
   };
 }
 

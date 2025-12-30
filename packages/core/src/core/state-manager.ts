@@ -282,6 +282,26 @@ export class StateManager {
   }
 
   /**
+   * Updates the user feedback for a debate and persists it to disk.
+   * 
+   * @param debateId - The unique identifier of the debate.
+   * @param feedback - The feedback value: 1 for positive (thumb-up), -1 for negative (thumb-down).
+   * @throws {Error} If the debate with the given ID does not exist.
+   * 
+   * This method loads the debate from disk (using getDebate), updates the userFeedback property,
+   * updates the updatedAt timestamp, and saves the state back to disk.
+   */
+  async updateUserFeedback(debateId: string, feedback: number): Promise<void> {
+    const state = await this.getDebate(debateId);
+    if (!state) {
+      throw new Error(`Debate ${debateId} not found`);
+    }
+    state.userFeedback = feedback;
+    state.updatedAt = new Date();
+    await this.save(state);
+  }
+
+  /**
    * Ensures the base directory exists on disk.
    */
   private ensureDirectoryExists() {

@@ -115,6 +115,8 @@ export interface DebateState {
   solution?: Solution;
   notifications: NotificationMessage[];
   isRunning: boolean;
+  debateId?: string;
+  userFeedback?: number;
 }
 
 export interface NotificationMessage {
@@ -153,6 +155,7 @@ export const ACTION_TYPES = {
   REMOVE_AGENT_CONFIG: 'REMOVE_AGENT_CONFIG',
   SET_CONFIG_PANEL_COLLAPSED: 'SET_CONFIG_PANEL_COLLAPSED',
   SET_CONNECTION_STATUS: 'SET_CONNECTION_STATUS',
+  SET_USER_FEEDBACK: 'SET_USER_FEEDBACK',
 } as const;
 
 export type DebateAction =
@@ -183,5 +186,6 @@ export type DebateAction =
   | { type: typeof ACTION_TYPES.ADD_AGENT_CONFIG; payload: AgentConfigInput }
   | { type: typeof ACTION_TYPES.REMOVE_AGENT_CONFIG; payload: number }
   | { type: typeof ACTION_TYPES.SET_CONFIG_PANEL_COLLAPSED; payload: boolean }
-  | { type: typeof ACTION_TYPES.SET_CONNECTION_STATUS; payload: ConnectionStatus };
+  | { type: typeof ACTION_TYPES.SET_CONNECTION_STATUS; payload: ConnectionStatus }
+  | { type: typeof ACTION_TYPES.SET_USER_FEEDBACK; payload: number };
 

@@ -27,6 +27,7 @@ export default function Dashboard() {
     cancelDebate,
     clearNotification,
     setAgentConfigs,
+    submitUserFeedback,
   } = useDebateSocket();
 
   // Panel size state
@@ -269,7 +270,12 @@ export default function Dashboard() {
             className="flex-shrink-0 border-t border-border overflow-y-auto"
             style={{ height: solutionPanelHeight }}
           >
-            <SolutionPanel solution={state.solution} />
+            <SolutionPanel 
+              solution={state.solution}
+              debateId={state.debateId}
+              userFeedback={state.userFeedback}
+              onFeedbackSubmit={submitUserFeedback}
+            />
           </div>
         </div>
       </div>
