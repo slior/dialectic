@@ -110,6 +110,7 @@ dialectic debate "Design a simple API" --agents architect,kiss
 - `testing` - Testing strategy and quality assurance
 - `kiss` - Simplicity-focused perspective, challenges complexity
 - `generalist` - General-purpose role (typically used for judge)
+- `datamodeling` - Data and domain modeling perspective
 
 **Note:** The `--agents` option filters agents from your configuration file by role. If no agents match, the system falls back to default agents (architect, performance, and kiss).
 

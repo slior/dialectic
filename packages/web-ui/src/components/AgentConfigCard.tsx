@@ -19,6 +19,7 @@ const AGENT_ROLES = [
   { value: 'testing', label: 'Testing' },
   { value: 'kiss', label: 'KISS' },
   { value: 'generalist', label: 'Generalist' },
+  { value: 'datamodeling', label: 'Data Modeling' },
 ] as const;
 
 const PROVIDERS = [

@@ -11,6 +11,7 @@ export const AGENT_ROLES = {
   TESTING: "testing",
   GENERALIST: "generalist",
   KISS: "kiss",
+  DATA_MODELING: "datamodeling",
 } as const;
 
 export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES];

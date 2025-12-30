@@ -82,6 +82,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
   - `"testing"` - Testing strategy and quality assurance
   - `"kiss"` - Simplicity-focused perspective, challenges complexity
   - `"generalist"` - General-purpose role (typically used for judge)
+  - `"datamodeling"` - Data and domain modeling perspective
 - **Semantics**: Defines the agent's functional perspective in the debate. Agents with unknown roles default to architect behavior with a warning.
 - **Example**: `"architect"`
 
@@ -199,6 +200,19 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 }
 ```
 
+#### Data Modeling Agent Configuration
+```json
+{
+  "id": "agent-data-modeling",
+  "name": "Data Modeling Specialist",
+  "role": "datamodeling",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.5,
+  "enabled": true
+}
+```
+
 #### Agent with Tool Configuration
 ```json
 {
@@ -214,6 +228,19 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 ```
 
 This agent has access to base registry tools (Context Search) with a custom tool call limit. See [Tool Calling](#tool-calling) section for more examples with custom tool schemas.
+
+#### Data Modeling Agent Configuration
+```json
+{
+  "id": "agent-data-modeling",
+  "name": "Data Modeling Specialist",
+  "role": "datamodeling",
+  "model": "gpt-4",
+  "provider": "openai",
+  "temperature": 0.5,
+  "enabled": true
+}
+```
 
 ### Default agents values:
 

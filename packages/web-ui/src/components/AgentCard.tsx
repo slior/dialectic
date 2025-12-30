@@ -17,6 +17,7 @@ const roleColors: Record<string, string> = {
   testing: 'text-accent-green',
   kiss: 'text-accent-magenta',
   generalist: 'text-accent-cyan',
+  datamodeling: 'text-accent-orange',
 };
 
 const contributionTypeLabels: Record<ContributionType, string> = {

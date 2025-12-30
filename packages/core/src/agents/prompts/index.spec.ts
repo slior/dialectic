@@ -60,6 +60,17 @@ describe('Summary Prompts', () => {
       expect(typeof summaryPrompt).toBe('string');
       expect(summaryPrompt.length).toBeGreaterThan(0);
     });
+
+    it('should provide summary prompt for data modeling role', () => {
+      const prompts = getPromptsForRole(AGENT_ROLES.DATA_MODELING);
+      const summaryPrompt = prompts.summarizePrompt(TEST_CONTENT, MAX_LENGTH_1000);
+
+      expect(summaryPrompt).toBeDefined();
+      expect(typeof summaryPrompt).toBe('string');
+      expect(summaryPrompt.length).toBeGreaterThan(0);
+      expect(summaryPrompt).toContain(TEST_CONTENT);
+      expect(summaryPrompt).toContain(MAX_LENGTH_1000_STRING);
+    });
   });
 
   describe('RoleBasedAgent.defaultSummaryPrompt()', () => {
@@ -69,7 +80,8 @@ describe('Summary Prompts', () => {
         AGENT_ROLES.PERFORMANCE,
         AGENT_ROLES.SECURITY,
         AGENT_ROLES.TESTING,
-        AGENT_ROLES.GENERALIST
+        AGENT_ROLES.GENERALIST,
+        AGENT_ROLES.DATA_MODELING
       ];
 
       roles.forEach(role => {
@@ -104,6 +116,13 @@ describe('Summary Prompts', () => {
         MAX_LENGTH_1000
       );
       expect(secPrompt.toLowerCase()).toMatch(/security|threat|vulnerability/);
+
+      const dataModelingPrompt = RoleBasedAgent.defaultSummaryPrompt(
+        AGENT_ROLES.DATA_MODELING,
+        CONTENT_SIMPLE,
+        MAX_LENGTH_1000
+      );
+      expect(dataModelingPrompt.toLowerCase()).toMatch(/data|domain|entity|relationship|model/);
     });
 
     it('should interpolate content into prompt', () => {

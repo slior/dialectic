@@ -19,7 +19,7 @@
 
 ## Overview
 
-Dialectic is a multi-agent debate system that helps solve software design problems. Multiple AI agents with different perspectives (architecture, performance, security, simplicity) debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
+Dialectic is a multi-agent debate system that helps solve software design problems. Multiple AI agents with different perspectives (architecture, performance, security, data modeling, simplicity) debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
 
 Dialectic can be used via:
 - **CLI**: Traditional command-line interface for scripting and automation
