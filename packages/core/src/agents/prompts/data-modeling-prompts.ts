@@ -62,6 +62,8 @@ Use the following Markdown structure in your response:
 ---
 Respond **only** in this structured format.
 Focus on clear, well-defined data models that support the problem requirements.
+
+You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).
 `;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.PROPOSAL);

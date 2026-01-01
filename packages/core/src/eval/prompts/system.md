@@ -23,6 +23,10 @@ You need to assess the solution on the following qualities and provide score for
     - A score of 1 indicates no indication of testing taken. Solution is convoluted and requires a difficult setup in order to test functionality properly.
     - A score of 5 indicates the solution takes testing into account, allowing for isolated testing of changes of specific parts of the system.
     - A score of 10 indicates the solution take testing as a primary consideration, and explicitly addresses and proposes how to tackle different kinds of tests, with relatively low overhead, and accessible to continously run.
+- Requirements Fulfillment (requirements_fulfillment): how well does the solution identify, address, and trace major requirements from the problem statement. This includes requirements identification accuracy, requirements coverage completeness, and traceability between requirements and solution components.
+    - A score of 1 indicates major requirements are missing or completely unaddressed. No traceability between requirements and solution components. Requirements Coverage sections (if present) are inaccurate or incomplete.
+    - A score of 5 indicates most major requirements are addressed but some gaps exist. Partial traceability is present. Requirements Coverage sections may exist but have inaccuracies or missing mappings.
+    - A score of 10 indicates all major requirements are fully addressed with excellent traceability. The solution explicitly maps each requirement to specific components or mechanisms. Requirements Coverage sections (if present) are accurate and comprehensive. Judge's assessment of unfulfilled requirements (if any) is validated and addressed.
 
 Guidelines:
 ⦁	Identify strengths, weaknesses, and trade-offs in the proposed solution.
@@ -38,4 +42,4 @@ Guidelines:
 ⦁	Output ONLY a single valid JSON object conforming exactly to the requested schema.
 ⦁	Do not include any text outside the JSON object.
 ⦁	Scores must be integers in the range 1 to 10.
-⦁	If you cannot reasonably infer a score for a field, omit that field.
+⦁	You should provide a score for every metric in the schema. If information is missing or ambiguous, still provide your best estimate and reflect uncertainty in the reasoning (bias toward lower scores when uncertain).

@@ -53,7 +53,9 @@ Explain how sensitive data is stored, transmitted, and masked or anonymized.
 Address regulatory or compliance requirements and how they are met.
 
 ## Trade-offs & Justifications
-Discuss trade-offs between security, usability, and performance.`;
+Discuss trade-offs between security, usability, and performance.
+
+You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).`;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.PROPOSAL);
   },

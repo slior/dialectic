@@ -53,7 +53,9 @@ Describe how to manage CPU, memory, storage, and network usage efficiently.
 Explain how performance will be measured and verified.
 
 ## Trade-offs & Justifications
-Discuss trade-offs between performance, complexity, and maintainability.`;
+Discuss trade-offs between performance, complexity, and maintainability.
+
+You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).`;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.PROPOSAL);
   },

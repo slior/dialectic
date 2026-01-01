@@ -82,14 +82,15 @@ export class EvaluatorAgent {
   /**
    * Renders the user prompt by replacing placeholders with actual inputs.
    *
-   * @param inputs - The evaluation inputs (problem, clarifications, and solution).
+   * @param inputs - The evaluation inputs (problem, clarifications, solution, and optional requirements info).
    * @returns The rendered user prompt string.
    */
   private renderUserPrompt(inputs: EvaluatorInputs): string {
     return this.resolvedUserPromptTemplate
       .replace('{problem}', inputs.problem)
       .replace('{clarifications}', inputs.clarificationsMarkdown)
-      .replace('{final_solution}', inputs.finalSolution);
+      .replace('{final_solution}', inputs.finalSolution)
+      .replace('{requirements_info}', inputs.requirementsInfo || 'N/A');
   }
 
   /**

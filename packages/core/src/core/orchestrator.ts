@@ -6,20 +6,12 @@ import { TracingContext } from '../types/tracing.types';
 import { logWarning } from '../utils/console';
 import { AgentRole, Critique } from '../types/agent.types';
 import { enhanceProblemWithContext } from '../utils/context-enhancer';
+import { isFulfilled } from '../utils/promise';
 
 // Constants for agent activity descriptions used in progress tracking
 const ACTIVITY_PROPOSING = 'proposing';
 const ACTIVITY_CRITIQUING = 'critiquing';
 const ACTIVITY_REFINING = 'refining';
-
-/**
- * Type guard to check if a Promise.allSettled result is fulfilled.
- * @param result - The result from Promise.allSettled.
- * @returns True if the result is fulfilled, false if rejected.
- */
-function isFulfilled<T>(result: PromiseSettledResult<T>): result is PromiseFulfilledResult<T> {
-  return result.status === 'fulfilled';
-}
 
 /**
  * Formats the critique activity string to include the name of the agent being critiqued.

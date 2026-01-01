@@ -54,6 +54,8 @@ Identify key risks (technical, organizational, operational) and how they are mit
 ## Expected Benefits
 Summarize expected advantages and outcomes of the proposed design.
 
+You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).
+
 `;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.PROPOSAL);

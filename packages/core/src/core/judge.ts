@@ -19,9 +19,26 @@ Be objective and evidence-based; combine complementary ideas; address concerns; 
 const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 
 /**
- * Default confidence score to return when a more sophisticated scoring mechanism is not implemented.
+ * Hard cap for confidence when major requirements are unfulfilled.
  */
-const DEFAULT_CONFIDENCE_SCORE = 75;
+const CONFIDENCE_CAP_WHEN_MAJORS_UNMET = 40;
+
+/**
+ * Fallback confidence score when JSON parsing fails and we cannot validate requirements.
+ */
+const FALLBACK_CONFIDENCE_SCORE = 50;
+
+/**
+ * Interface for parsed judge synthesis output.
+ */
+interface JudgeSynthesisOutput {
+  solutionMarkdown: string;
+  tradeoffs: string[];
+  recommendations: string[];
+  unfulfilledMajorRequirements: string[];
+  openQuestions: string[];
+  confidence: number;
+}
 
 /**
  * JudgeAgent is responsible for synthesizing the best solution from the debate history.
@@ -65,6 +82,52 @@ export class JudgeAgent {
         provider: this.config.provider,
       });
     }
+  }
+
+  /**
+   * Parses the raw synthesis output text from the LLM and constructs a Solution object.
+   *
+   * This method attempts to parse structured information such as tradeoffs, recommendations,
+   * confidence scores, and open questions from the provided rawText, applies any necessary
+   * adjustments (like capping confidence), and generates a markdown-formatted solution description.
+   * If parsing fails, the rawText is returned as the solution description with default/fallback metadata.
+   *
+   * @param rawText - The raw output string from the synthesis LLM call.
+   * @returns A Solution object containing the synthesized description and metadata.
+   */
+  private buildSolutionFromSynthesisText(rawText: string): Solution {
+    const parsed = this.parseJudgeSynthesisOutput(rawText);
+
+    if (parsed) {
+      const finalConfidence = this.applyHardCaps(parsed.confidence, parsed.unfulfilledMajorRequirements);
+      const description = this.renderFinalSolutionMarkdown(
+        parsed.solutionMarkdown,
+        finalConfidence,
+        parsed.unfulfilledMajorRequirements,
+        parsed.openQuestions,
+        parsed.recommendations,
+        parsed.tradeoffs
+      );
+
+      return {
+        description,
+        tradeoffs: parsed.tradeoffs,
+        recommendations: parsed.recommendations,
+        confidence: finalConfidence,
+        synthesizedBy: this.config.id,
+        unfulfilledMajorRequirements: parsed.unfulfilledMajorRequirements,
+        openQuestions: parsed.openQuestions,
+      };
+    }
+
+    // Fallback: treat response as plain markdown
+    return {
+      description: rawText,
+      tradeoffs: [],
+      recommendations: [],
+      confidence: this.applyHardCaps(FALLBACK_CONFIDENCE_SCORE, []),
+      synthesizedBy: this.config.id,
+    };
   }
 
   /**
@@ -152,24 +215,16 @@ export class JudgeAgent {
       // End span and fall back to non-tracing execution
       // span is guaranteed to be defined here (if it wasn't, we would have returned early)
       try {
-        span!.end({
-          level: SPAN_LEVEL.ERROR,
-          statusMessage: errorMessage,
-        });
-      } catch {
-        // Ignore errors ending span
+        span!.end({ level: SPAN_LEVEL.ERROR, statusMessage: errorMessage, });
+      } catch (tracingError: unknown) {
+        logWarning(`Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}`);
       }
       return await this.executeSynthesis(systemPrompt, prompt, temperature);
     }
 
     // Execute LLM call - if this fails, we should NOT retry, just propagate the error
     try {
-      const res = await this.provider.complete({
-        model: this.config.model,
-        temperature,
-        systemPrompt,
-        userPrompt: prompt,
-      });
+      const res = await this.provider.complete({ model: this.config.model, temperature, systemPrompt, userPrompt: prompt, });
 
       // Convert usage to langfuse format
       const langfuseUsage = res.usage ? {
@@ -187,19 +242,15 @@ export class JudgeAgent {
         ...(langfuseUsage && { usage: langfuseUsage }),
       });
 
+      const solution = this.buildSolutionFromSynthesisText(res.text);
+
       span!.end({
         output: {
-          solutionDescription: res.text.substring(0, 200), // Truncate for metadata
+          solutionDescription: solution.description.substring(0, 200), // Truncate for metadata
         },
       });
 
-      return {
-        description: res.text,
-        tradeoffs: [],
-        recommendations: [],
-        confidence: DEFAULT_CONFIDENCE_SCORE,
-        synthesizedBy: this.config.id,
-      };
+      return solution;
     } catch (error: unknown) {
       // LLM call failed - end tracing with error and propagate the error (don't retry)
       // generation and span are guaranteed to be defined here (if they weren't, we would have returned early)
@@ -231,25 +282,10 @@ export class JudgeAgent {
    * @param temperature - Temperature setting for the LLM.
    * @returns A Solution object created from the LLM response.
    */
-  private async executeSynthesis(
-    systemPrompt: string,
-    userPrompt: string,
-    temperature: number
-  ): Promise<Solution> {
-    const res = await this.provider.complete({
-      model: this.config.model,
-      temperature,
-      systemPrompt,
-      userPrompt,
-    });
-
-    return {
-      description: res.text,
-      tradeoffs: [],
-      recommendations: [],
-      confidence: DEFAULT_CONFIDENCE_SCORE,
-      synthesizedBy: this.config.id,
-    };
+  private async executeSynthesis( systemPrompt: string, userPrompt: string, temperature: number ): Promise<Solution>
+  {
+    const res = await this.provider.complete({ model: this.config.model, temperature, systemPrompt, userPrompt, });
+    return this.buildSolutionFromSynthesisText(res.text);
   }
 
   /**
@@ -540,8 +576,7 @@ export class JudgeAgent {
       if (finalRoundContent) {
         text += `Final Round Key Contributions:\n${finalRoundContent}\n\n`;
       }
-    } else {
-      // Use full history
+    } else { // Use full history
       rounds.forEach((round, idx) => {
         text += `Round ${idx + 1}\n`;
         for (const c of round.contributions) {
@@ -550,7 +585,206 @@ export class JudgeAgent {
       });
     }
 
-    text += `\nSynthesize the best solution incorporating strongest ideas, addressing concerns, with clear recommendations and a confidence score.`;
+    text += `\n\n## Instructions
+
+You MUST respond with **ONLY valid JSON** (no markdown code blocks, no prose). Use this exact schema:
+
+{
+  "solutionMarkdown": "Full finalized solution in Markdown format. This should be a complete, well-structured solution description.",
+  "tradeoffs": ["List of trade-offs considered", "Each as a separate string"],
+  "recommendations": ["List of concrete recommendations", "Each as a separate string"],
+  "unfulfilledMajorRequirements": ["List any major requirements that are not fulfilled", "Empty array if all are met"],
+  "openQuestions": ["List any open questions or ambiguities", "Empty array if none"],
+  "confidence": 75
+}
+
+### Requirements Analysis
+
+1. **Infer major requirements** from the problem statement and debate history:
+   - Look for strong language: "must", "shall", "required", "needs to", "critical", "essential"
+   - Review any clarifications provided during the debate (they are authoritative)
+   - Review Requirements Coverage sections in proposals if present
+
+2. **Assess fulfillment**: For each major requirement, determine if the synthesized solution addresses it adequately.
+
+3. **Set confidence**:
+   - If ANY unfulfilled major requirements exist, set confidence ≤ 40 (the code will enforce this cap)
+   - Otherwise, set confidence based on solution quality, completeness, and coherence (0-100)
+
+4. **Always produce solutionMarkdown**: Even if confidence is low or requirements are unmet, provide a complete solution description in Markdown format.
+
+5. **Populate arrays**: Include all relevant trade-offs, recommendations, unfulfilled requirements, and open questions. Use empty arrays if none apply.
+
+Respond with ONLY the JSON object, no other text.`;
     return text;
+  }
+
+  /**
+   * Extracts the first JSON object from text, handling cases where JSON is wrapped in markdown code blocks.
+   * 
+   * @param text - The text to extract JSON from.
+   * @returns The JSON string, or null if no JSON object found.
+   */
+  private extractFirstJsonObject(text: string): string | null {
+    // Remove markdown code block markers if present
+    let cleaned = text.trim();
+    if (cleaned.startsWith('```json')) {
+      cleaned = cleaned.replace(/^```json\s*/i, '');
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```\s*/, '');
+    }
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.replace(/\s*```$/, '');
+    }
+    cleaned = cleaned.trim();
+
+    // Find the first complete JSON object
+    let braceCount = 0;
+    let startIdx = -1;
+    for (let i = 0; i < cleaned.length; i++) {
+      if (cleaned[i] === '{') {
+        if (startIdx === -1) {
+          startIdx = i;
+        }
+        braceCount++;
+      } else if (cleaned[i] === '}') {
+        braceCount--;
+        if (braceCount === 0 && startIdx !== -1) {
+          return cleaned.substring(startIdx, i + 1);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Parses judge synthesis output from text, extracting JSON and validating required fields.
+   * 
+   * @param text - The raw text response from the LLM.
+   * @returns Parsed output, or undefined if parsing fails.
+   */
+  private parseJudgeSynthesisOutput(text: string): JudgeSynthesisOutput | undefined {
+    const jsonStr = this.extractFirstJsonObject(text);
+    if (!jsonStr) {
+      logWarning(`Judge ${this.config.name}: No JSON object found in judge synthesis response. Falling back to plain markdown.`);
+      return undefined;
+    }
+
+    try {
+      const parsed = JSON.parse(jsonStr) as Partial<JudgeSynthesisOutput>;
+      
+      // Validate required field
+      if (!parsed.solutionMarkdown || typeof parsed.solutionMarkdown !== 'string') {
+        logWarning(
+          `Judge ${this.config.name}: Invalid judge synthesis JSON (missing/invalid "solutionMarkdown"). Falling back to plain markdown.`
+        );
+        return undefined;
+      }
+
+      // Normalize arrays (ensure they are arrays, default to empty)
+      const tradeoffs = Array.isArray(parsed.tradeoffs) ? parsed.tradeoffs : [];
+      const recommendations = Array.isArray(parsed.recommendations) ? parsed.recommendations : [];
+      const unfulfilledMajorRequirements = Array.isArray(parsed.unfulfilledMajorRequirements)  ? parsed.unfulfilledMajorRequirements  : [];
+      const openQuestions = Array.isArray(parsed.openQuestions) ? parsed.openQuestions : [];
+
+      // Normalize confidence (ensure it's a number, clamp to 0-100)
+      const confidence = typeof parsed.confidence === 'number'? this.clampConfidence(parsed.confidence) : FALLBACK_CONFIDENCE_SCORE;
+
+      return {
+        solutionMarkdown: parsed.solutionMarkdown,
+        tradeoffs: tradeoffs.map(String),
+        recommendations: recommendations.map(String),
+        unfulfilledMajorRequirements: unfulfilledMajorRequirements.map(String),
+        openQuestions: openQuestions.map(String),
+        confidence,
+      };
+    } catch (err: unknown) {
+      logWarning( `Judge ${this.config.name}: Failed to parse judge synthesis JSON. Falling back to plain markdown. Error: ${getErrorMessage(err)}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Clamps confidence score to valid range (0-100).
+   * 
+   * @param n - The confidence score to clamp.
+   * @returns Clamped confidence score.
+   */
+  private clampConfidence(n: number): number {
+    if (n < 0) return 0;
+    if (n > 100) return 100;
+    return n;
+  }
+
+  /**
+   * Applies hard caps to confidence based on unfulfilled major requirements.
+   * 
+   * @param confidence - The base confidence score.
+   * @param unfulfilledMajor - Array of unfulfilled major requirements.
+   * @returns Confidence score with hard caps applied.
+   */
+  private applyHardCaps(confidence: number, unfulfilledMajor: string[]): number {
+    if (unfulfilledMajor.length > 0) {
+      return Math.min(confidence, CONFIDENCE_CAP_WHEN_MAJORS_UNMET);
+    }
+    return confidence;
+  }
+
+  /**
+   * Renders the final solution markdown by combining solutionMarkdown with a Judge Assessment section.
+   * 
+   * @param solutionMarkdown - The main solution markdown.
+   * @param confidence - The confidence score.
+   * @param unfulfilledMajorRequirements - Array of unfulfilled major requirements.
+   * @param openQuestions - Array of open questions.
+   * @param recommendations - Array of recommendations.
+   * @param tradeoffs - Array of trade-offs.
+   * @returns Complete markdown string for Solution.description.
+   */
+  private renderFinalSolutionMarkdown(
+    solutionMarkdown: string, confidence: number, unfulfilledMajorRequirements: string[],
+    openQuestions: string[], recommendations: string[], tradeoffs: string[] ): string
+  {
+    let markdown = solutionMarkdown.trim();
+
+    // Append Judge Assessment section
+    markdown += '\n\n---\n\n## Judge Assessment\n\n';
+
+    markdown += `**Confidence Score**: ${confidence}/100\n\n`;
+
+    if (unfulfilledMajorRequirements.length > 0) {
+      markdown += `### ⚠️ Unfulfilled Major Requirements\n\n`;
+      unfulfilledMajorRequirements.forEach(req => {
+        markdown += `- ${req}\n`;
+      });
+      markdown += '\n';
+    }
+
+    if (openQuestions.length > 0) {
+      markdown += `### Open Questions\n\n`;
+      openQuestions.forEach(q => {
+        markdown += `- ${q}\n`;
+      });
+      markdown += '\n';
+    }
+
+    if (recommendations.length > 0) {
+      markdown += `### Recommendations\n\n`;
+      recommendations.forEach(rec => {
+        markdown += `- ${rec}\n`;
+      });
+      markdown += '\n';
+    }
+
+    if (tradeoffs.length > 0) {
+      markdown += `### Trade-offs\n\n`;
+      tradeoffs.forEach(to => {
+        markdown += `- ${to}\n`;
+      });
+      markdown += '\n';
+    }
+
+    return markdown;
   }
 }

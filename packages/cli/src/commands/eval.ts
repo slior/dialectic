@@ -9,11 +9,13 @@ import {
   EXIT_INVALID_ARGS,
   EXIT_GENERAL_ERROR,
   EvaluatorConfig,
+  EvaluatorInputs,
   ParsedEvaluation,
   AggregatedJsonOutput,
   AggregatedAverages,
   clampScoreToRange,
   isEnabledEvaluator,
+  isFulfilled,
   DebateState,
   EvaluatorAgent,
   resolvePrompt,
@@ -26,9 +28,11 @@ import {
   readBuiltInPrompt,
 } from '@dialectic/core';
 
+import { extractRequirementsInfo } from './eval-requirements';
+
 const FILE_ENCODING_UTF8 = 'utf-8';
 const JSON_INDENT_SPACES = 2;
-const CSV_HEADER = 'debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score';
+const CSV_HEADER = 'debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Requirements Fulfillment,Overall Score';
 const JSON_EXTENSION = '.json';
 const CSV_EXTENSION = '.csv';
 
@@ -41,8 +45,6 @@ type LoadedEvaluatorConfig = {
   /** Absolute directory path containing the configuration file */
   configDir: string;
 };
-
-
 
 /**
  * Builds a Markdown-formatted string representing all clarifications exchanged during a debate.
@@ -171,9 +173,9 @@ function pushIfValid(arr: number[], v: unknown, warnLabel: string, agentId: stri
 function renderMarkdownTable(agg: AggregatedAverages): string {
   const f = (v: number | null) => v == null ? 'N/A' : v.toFixed(2);
   let table = '';
-  table += `| Functional Completeness | Performance & Scalability | Security | Maintainability & Evolvability | Regulatory Compliance | Testability | Overall Score |\n`;
-  table += `|------------------------|---------------------------|----------|-------------------------------|------------------------|------------|---------------|\n`;
-  table += `| ${f(agg.functional_completeness)} | ${f(agg.performance_scalability)} | ${f(agg.security)} | ${f(agg.maintainability_evolvability)} | ${f(agg.regulatory_compliance)} | ${f(agg.testability)} | ${f(agg.overall_score)} |\n`;
+  table += `| Functional Completeness | Performance & Scalability | Security | Maintainability & Evolvability | Regulatory Compliance | Testability | Requirements Fulfillment | Overall Score |\n`;
+  table += `|------------------------|---------------------------|----------|-------------------------------|------------------------|------------|-------------------------|---------------|\n`;
+  table += `| ${f(agg.functional_completeness)} | ${f(agg.performance_scalability)} | ${f(agg.security)} | ${f(agg.maintainability_evolvability)} | ${f(agg.regulatory_compliance)} | ${f(agg.testability)} | ${f(agg.requirements_fulfillment)} | ${f(agg.overall_score)} |\n`;
   return table;
 }
 
@@ -211,6 +213,7 @@ function formatCsvRow(debateFilename: string, agg: AggregatedAverages): string {
     formatScore(agg.maintainability_evolvability),
     formatScore(agg.regulatory_compliance),
     formatScore(agg.testability),
+    formatScore(agg.requirements_fulfillment),
     formatScore(agg.overall_score),
   ];
 
@@ -237,6 +240,7 @@ function buildAggregatedJsonOutput(
         maintainability_evolvability: { average_score: aggregatedAverages.maintainability_evolvability },
         regulatory_compliance: { average_score: aggregatedAverages.regulatory_compliance },
         testability: { average_score: aggregatedAverages.testability },
+        requirements_fulfillment: { average_score: aggregatedAverages.requirements_fulfillment },
       },
     },
     overall_score: aggregatedAverages.overall_score,
@@ -417,13 +421,13 @@ function loadAndValidateEnabledAgents(configPath: string): { enabledAgents: Eval
  * are present and non-empty, and builds a Markdown representation of the clarifications.
  *
  * @param {string} debatePath - The path to the debate state JSON file.
- * @returns {{ problem: string, finalSolution: string, clarificationsMarkdown: string }} Object containing validated debate data.
+ * @returns {EvaluatorInputs} Object containing validated debate data for evaluator input.
  * @throws {Error} Throws a validation error if:
  *   - The debate file cannot be read or parsed.
  *   - The problem field is missing or empty.
  *   - The finalSolution.description field is missing or empty.
  */
-function loadAndValidateDebateState(debatePath: string): { problem: string, finalSolution: string, clarificationsMarkdown: string } {
+function loadAndValidateDebateState(debatePath: string): EvaluatorInputs {
   const debate: DebateState = readJsonFile<DebateState>(debatePath, 'Debate file');
   const problem = (debate.problem || '').trim();
   const finalSolution = (debate.finalSolution && debate.finalSolution.description || '').trim();
@@ -433,7 +437,11 @@ function loadAndValidateDebateState(debatePath: string): { problem: string, fina
   // Access clarifications directly from the parsed object to avoid type issues
   const clarificationsMarkdown = buildClarificationsMarkdown(debate);
   
-  return { problem, finalSolution, clarificationsMarkdown };
+  // Extract requirements information (handles missing data gracefully)
+  const requirementsInfo = extractRequirementsInfo(debate);
+  const requirementsInfoJson = JSON.stringify(requirementsInfo, null, 2);
+  
+  return { problem, finalSolution, clarificationsMarkdown, requirementsInfo: requirementsInfoJson };
 }
 
 /**
@@ -448,7 +456,7 @@ function loadAndValidateDebateState(debatePath: string): { problem: string, fina
  * @returns {ParsedEvaluation | null} The parsed evaluation object, or null if validation/parsing failed.
  */
 function validateAndParseEvaluatorResult(result: PromiseSettledResult<any>, agentId: string): ParsedEvaluation | null {
-  if (result.status !== 'fulfilled') {
+  if (!isFulfilled(result)) {
     writeStderr(`[${agentId}] Skipped due to error\n`);
     return null;
   }
@@ -552,9 +560,7 @@ export function evalCommand(program: Command) {
 
         const { enabledAgents, configDir } = loadAndValidateEnabledAgents(options.config);
         const evaluators = buildEvaluatorAgents(enabledAgents, configDir, options.verbose);
-        const { problem, finalSolution, clarificationsMarkdown } = loadAndValidateDebateState(options.debate);
-
-        const inputs = { problem, clarificationsMarkdown, finalSolution };
+        const inputs = loadAndValidateDebateState(options.debate);
 
         // Run all in parallel
         const results = await Promise.allSettled(evaluators.map((e) => e.evaluate(inputs)));
@@ -566,6 +572,7 @@ export function evalCommand(program: Command) {
         const arrMaint: number[] = [];
         const arrReg: number[] = [];
         const arrTest: number[] = [];
+        const arrReqFulfill: number[] = [];
         const arrOverall: number[] = [];
 
         results.forEach((res, idx) => {
@@ -589,6 +596,7 @@ export function evalCommand(program: Command) {
           pushIfValid(arrMaint, nonf.maintainability_evolvability?.score, 'non_functional.maintainability_evolvability.score', agentId);
           pushIfValid(arrReg, nonf.regulatory_compliance?.score, 'non_functional.regulatory_compliance.score', agentId);
           pushIfValid(arrTest, nonf.testability?.score, 'non_functional.testability.score', agentId);
+          pushIfValid(arrReqFulfill, nonf.requirements_fulfillment?.score, 'non_functional.requirements_fulfillment.score', agentId);
           pushIfValid(arrOverall, overallSummary.overall_score, 'overall_summary.overall_score', agentId);
         });
 
@@ -599,6 +607,7 @@ export function evalCommand(program: Command) {
           maintainability_evolvability: averageOrNull(arrMaint),
           regulatory_compliance: averageOrNull(arrReg),
           testability: averageOrNull(arrTest),
+          requirements_fulfillment: averageOrNull(arrReqFulfill),
           overall_score: averageOrNull(arrOverall),
         };
 

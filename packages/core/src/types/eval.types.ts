@@ -19,6 +19,7 @@ export interface EvaluatorInputs {
   problem: string;
   clarificationsMarkdown: string; // fenced code blocks including NA entries
   finalSolution: string;
+  requirementsInfo?: string; // Optional JSON-formatted requirements information
 }
 
 export interface ParsedEvaluation {
@@ -33,6 +34,7 @@ export interface ParsedEvaluation {
       maintainability_evolvability?: { score?: number; reasoning?: string };
       regulatory_compliance?: { score?: number; reasoning?: string };
       testability?: { score?: number; reasoning?: string };
+      requirements_fulfillment?: { score?: number; reasoning?: string };
     };
   };
   overall_summary?: {
@@ -49,19 +51,21 @@ export interface AggregatedAverages {
   maintainability_evolvability: number | null;
   regulatory_compliance: number | null;
   testability: number | null;
+  requirements_fulfillment: number | null;
   overall_score: number | null;
 }
 
 export interface AggregatedJsonOutput {
   evaluation: {
     functional_completeness: { average_score: number | null };
-    non_functional: {
-      performance_scalability: { average_score: number | null };
-      security: { average_score: number | null };
-      maintainability_evolvability: { average_score: number | null };
-      regulatory_compliance: { average_score: number | null };
-      testability: { average_score: number | null };
-    };
+      non_functional: {
+        performance_scalability: { average_score: number | null };
+        security: { average_score: number | null };
+        maintainability_evolvability: { average_score: number | null };
+        regulatory_compliance: { average_score: number | null };
+        testability: { average_score: number | null };
+        requirements_fulfillment: { average_score: number | null };
+      };
   };
   overall_score: number | null;
   agents: Record<string, ParsedEvaluation>; // keyed by evaluator id

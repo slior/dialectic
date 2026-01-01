@@ -40,7 +40,7 @@ const FLAG_TESTS = '--tests';
 const FLAG_PROBLEMS = '--problems';
 
 // CSV header constant
-const CSV_HEADER = 'example name,eval result file name,functional_completeness score,performance_scalability score,security score,maintainability score,regulatory_compliance score,testability score,overall_score';
+const CSV_HEADER = 'example name,eval result file name,functional_completeness score,performance_scalability score,security score,maintainability score,regulatory_compliance score,testability score,requirements_fulfillment score,overall_score';
 
 // Exit code constants (matching project conventions)
 const EXIT_GENERAL_ERROR = 1;
@@ -90,6 +90,7 @@ interface EvaluationJsonOutput {
       maintainability_evolvability?: { average_score: number | null }; /** Average score for maintainability and evolvability. */
       regulatory_compliance?: { average_score: number | null }; /** Average score for regulatory compliance. */
       testability?: { average_score: number | null }; /** Average score for testability. */
+      requirements_fulfillment?: { average_score: number | null }; /** Average score for requirements fulfillment. */
     };
   };
   
@@ -113,6 +114,7 @@ interface CsvRow {
   maintainability: string; /** String representation of the maintainability (and evolvability) score. */
   regulatoryCompliance: string; /** String representation of the regulatory compliance score. */
   testability: string; /** String representation of the testability score. */
+  requirementsFulfillment: string; /** String representation of the requirements fulfillment score. */
   overallScore: string; /** String representation of the overall aggregate evaluation score. */
 }
 
@@ -397,6 +399,7 @@ function parseEvaluationJson(jsonPath: string): CsvRow | null {
     const maintainability = data.evaluation.non_functional?.maintainability_evolvability?.average_score ?? null;
     const regulatoryCompliance = data.evaluation.non_functional?.regulatory_compliance?.average_score ?? null;
     const testability = data.evaluation.non_functional?.testability?.average_score ?? null;
+    const requirementsFulfillment = data.evaluation.non_functional?.requirements_fulfillment?.average_score ?? null;
     const overallScore = data.overall_score ?? null;
     
     return {
@@ -408,6 +411,7 @@ function parseEvaluationJson(jsonPath: string): CsvRow | null {
       maintainability: scoreToString(maintainability),
       regulatoryCompliance: scoreToString(regulatoryCompliance),
       testability: scoreToString(testability),
+      requirementsFulfillment: scoreToString(requirementsFulfillment),
       overallScore: scoreToString(overallScore),
     };
   } catch (error: unknown) {
@@ -449,6 +453,7 @@ function generateCsvContent(rows: CsvRow[]): string {
       escapeCsvField(row.maintainability),
       escapeCsvField(row.regulatoryCompliance),
       escapeCsvField(row.testability),
+      escapeCsvField(row.requirementsFulfillment),
       escapeCsvField(row.overallScore),
     ].join(',');
   });

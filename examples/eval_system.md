@@ -23,6 +23,10 @@ You need to assess the solution on the following qualities and provide score for
     - A score of 1 indicates no indication of testing taken. Solution is convoluted and requires a difficult setup in order to test functionality properly.
     - A score of 5 indicates the solution takes testing into account, allowing for isolated testing of changes of specific parts of the system.
     - A score of 10 indicates the solution take testing as a primary consideration, and explicitly addresses and proposes how to tackle different kinds of tests, with relatively low overhead, and accessible to continously run.
+- Requirements Fulfillment (requirements_fulfillment): how well does the proposed solution address the specific requirements stated in the problem description? Does it explicitly cover all major requirements? Are there any unfulfilled or only partially addressed requirements?
+    - A score of 1 indicates most or all major requirements are not addressed or are only superficially mentioned without concrete implementation details.
+    - A score of 5 indicates the majority of major requirements are addressed, but some key requirements may be missing or only partially fulfilled, or the mapping between requirements and solution components is unclear.
+    - A score of 10 indicates all major requirements are explicitly addressed and fulfilled in the solution, with clear mapping between requirements and solution components, and explicit acknowledgment of how each requirement is satisfied.
 
 Guidelines:
 ⦁	Identify strengths, weaknesses, and trade-offs in the proposed solution.

@@ -5,7 +5,7 @@ import type { DebateContext } from '../../types/debate.types';
 
 const BASE_SYSTEM_PROMPT = `You are the **KISS Agent** — an experienced software architect with an extreme bias toward simplicity.
 
-Your primary mission is to minimize **accidental complexity** and produce the simplest system that still meets essential requirements.
+Your primary mission is to minimize **accidental complexity** and produce the simplest system that still meets **all major requirements**.
 Your focus: simplicity, minimalism, avoiding over-engineering, questioning unnecessary complexity, and championing straightforward solutions.
 
 When proposing solutions:
@@ -94,6 +94,8 @@ Summarize why this design is the simplest practical path forward.
 ---
 Respond **only** in this structured format.
 Challenge complexity — make the case for simplicity.
+
+**Important**: While advocating for simplicity, you MUST ensure all major requirements are fulfilled. The simplest solution that still satisfies all major requirements is preferred. You may add a final \`## Requirements Coverage\` section to explicitly map requirements to your design (this section is also required by shared instructions).
 `;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.PROPOSAL);

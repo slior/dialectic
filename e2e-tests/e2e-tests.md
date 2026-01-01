@@ -396,6 +396,7 @@ The generated CSV files contain the following columns:
 - `maintainability score` - Maintainability and evolvability score
 - `regulatory_compliance score` - Regulatory compliance score
 - `testability score` - Testability score
+- `requirements_fulfillment score` - Requirements fulfillment score
 - `overall_score` - Overall aggregate score
 
 Empty values indicate that a particular metric was not evaluated or scored.

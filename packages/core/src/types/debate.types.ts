@@ -179,6 +179,19 @@ export interface Solution {
   recommendations: string[]; /** Concrete recommendations. */
   confidence: number; /** Confidence score (0-100). */
   synthesizedBy: string; /** Judge agent id that performed the synthesis. */
+  /**
+   * Major requirements that the judge explicitly determined are not fulfilled.
+   *
+   * Optional for backward compatibility and for cases where the judge output could not be parsed
+   * (e.g. fallback plain markdown response).
+   */
+  unfulfilledMajorRequirements?: string[];
+  /**
+   * Open questions the judge identified that block full confidence in the solution.
+   *
+   * Optional for backward compatibility and for cases where the judge output could not be parsed.
+   */
+  openQuestions?: string[];
 }
 
 /**

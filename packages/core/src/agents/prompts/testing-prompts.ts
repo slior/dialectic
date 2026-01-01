@@ -52,7 +52,9 @@ Explain how metrics, logging, and tracing will support defect detection and vali
 Address load, resilience, security, and compliance testing approaches.
 
 ## Risks & Limitations
-Identify areas that are hard to test or likely to fail silently.`;
+Identify areas that are hard to test or likely to fail silently.
+
+You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).`;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.PROPOSAL);
   },

@@ -71,6 +71,8 @@ Use the following Markdown structure in your response:
 
 Respond **only** in this structured format.
 Avoid generalities — make concrete architectural claims and reasoning.
+
+You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).
 `;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.PROPOSAL);

@@ -37,6 +37,7 @@ export * from './types/eval.types';
 export { resolvePrompt, PromptResolveResult, readBuiltInPrompt } from './utils/prompt-loader';
 export { loadEnvironmentFile } from './utils/env-loader';
 export { createValidationError, writeFileWithDirectories, numOrUndefined, averageOrNull, readJsonFile } from './utils/common';
+export { isFulfilled } from './utils/promise';
 export { generateDebateId } from './utils/id';
 export { generateDebateReport } from './utils/report-generator';
 export { enhanceProblemWithContext } from './utils/context-enhancer';
@@ -64,6 +65,7 @@ export { EvaluatorAgent } from './eval/evaluator-agent';
 export {
   INSTRUCTION_TYPES,
   InstructionType,
+  REQUIREMENTS_COVERAGE_SECTION_TITLE,
   getSharedSystemInstructions,
   getSharedProposalInstructions,
   getSharedCritiqueInstructions,

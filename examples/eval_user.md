@@ -46,6 +46,10 @@ Return ONLY a single JSON object matching this schema:
       "testability": {
         "score": <integer 1..10>,
         "reasoning": "<string>"
+      },
+      "requirements_fulfillment": {
+        "score": <integer 1..10>,
+        "reasoning": "<string>"
       }
     }
   },

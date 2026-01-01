@@ -1077,7 +1077,7 @@ describe('CLI eval command', () => {
       const content = fs.readFileSync(outputPath, 'utf-8');
       const lines = content.trim().split('\n');
       
-      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Requirements Fulfillment,Overall Score');
       expect(lines[1]).toContain('debate');
       expect(lines[1]).toContain('8.00');
       expect(lines[1]).toContain('7.00');
@@ -1092,7 +1092,7 @@ describe('CLI eval command', () => {
       const outputPath = path.join(tmpDir, 'results.csv');
       
       // Create existing CSV file with header
-      fs.writeFileSync(outputPath, 'debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score\n');
+      fs.writeFileSync(outputPath, 'debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Requirements Fulfillment,Overall Score\n');
       
       jest.spyOn(EvaluatorAgent.prototype, 'evaluate').mockResolvedValue({
         id: 'e1',
@@ -1109,7 +1109,7 @@ describe('CLI eval command', () => {
       const lines = content.trim().split('\n');
       
       expect(lines.length).toBe(2); // Header + 1 data row
-      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Requirements Fulfillment,Overall Score');
       expect(lines[1]).toContain('debate');
     });
 
@@ -1314,7 +1314,7 @@ describe('CLI eval command', () => {
       const dataRow = lines[1]!.split(',');
       
       // Verify header order
-      expect(header).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      expect(header).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Requirements Fulfillment,Overall Score');
       
       // Verify data order matches header (skip first field which is debate filename)
       expect(dataRow[1]).toBe('1.00'); // functional_completeness
@@ -1323,7 +1323,8 @@ describe('CLI eval command', () => {
       expect(dataRow[4]).toBe('4.00'); // maintainability_evolvability
       expect(dataRow[5]).toBe('5.00'); // regulatory_compliance
       expect(dataRow[6]).toBe('6.00'); // testability
-      expect(dataRow[7]).toBe('7.00'); // overall_score
+      expect(dataRow[7]).toBe(''); // requirements_fulfillment (empty when not provided)
+      expect(dataRow[8]).toBe('7.00'); // overall_score
     });
 
     it('should detect CSV extension case-insensitively (.CSV)', async () => {
@@ -1420,7 +1421,7 @@ describe('CLI eval command', () => {
       const lines = content.trim().split('\n');
       
       expect(lines.length).toBe(3); // Header + 2 data rows
-      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Overall Score');
+      expect(lines[0]).toBe('debate,Functional Completeness,Performance & Scalability,Security,Maintainability & Evolvability,Regulatory Compliance,Testability,Requirements Fulfillment,Overall Score');
       expect(lines[1]).toContain('debate');
       expect(lines[2]).toContain('debate2');
     });
