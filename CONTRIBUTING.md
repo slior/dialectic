@@ -195,6 +195,8 @@ Before submitting a pull request, verify:
 
 ## Why This Structure?
 
+For a detailed overview of the repository organization, package structure, and dependencies, see [Repository Organization](docs/repo_organization.md).
+
 This monorepo structure provides:
 
 - **Co-located tests** - Tests live next to source code, making them easier to find and maintain
@@ -231,6 +233,40 @@ Each package has its own `jest.config.ts`:
   - Tests in `src/` directory
   - Module name mapping for `@dialectic/core` imports
   - Langfuse mock configured
+
+## Cursor Commands
+
+The repository includes Cursor IDE commands for common maintenance tasks:
+
+### Publish Packages
+
+The `publish-packages` command automates publishing `@dialectic/core` and/or `dialectic` CLI packages to npm. It handles:
+
+- **Version bumping** - Automatically bumps version numbers (major/minor/patch) for core and/or CLI packages
+- **Dependency management** - Updates CLI package's dependency on core when core is published
+- **Build and publish** - Builds packages and publishes them to npm in the correct order
+
+**Usage:** Invoke the command through Cursor's command palette with parameters:
+- `publish_core` (boolean) - Whether to publish the core package
+- `core_version_bump` (optional) - Version bump type for core (`major`, `minor`, `patch`)
+- `cli_version_bump` (required) - Version bump type for CLI (`major`, `minor`, `patch`)
+
+**Note:** Requires npm authentication (`npm login`) and a git repository for version tags.
+
+### Update Changelog
+
+The `update-changelog` command automatically updates `CHANGELOG.md` by analyzing git commits between versions. It:
+
+- **Analyzes commits** - Extracts meaningful changes from git commit history
+- **Categorizes changes** - Groups commits into Added, Changed, Fixed, and Documentation sections
+- **Filters noise** - Excludes chore, cleanup, and refactoring commits unless they include significant changes
+- **Formats entries** - Creates user-friendly changelog entries with consistent formatting
+
+**Usage:** Invoke the command through Cursor's command palette:
+- With version: `Update changelog for version v0.3.0`
+- Without version: `Update changelog` (uses latest git tag)
+
+**Note:** Requires a git repository with version tags.
 
 ## Questions?
 
