@@ -5,7 +5,7 @@ import { Command } from 'commander';
 import { warnUser, infoUser } from '../index';
 import { DebateProgressUI } from '../utils/progress-ui';
 
-// Import everything from @dialectic/core
+// Import everything from dialectic-core
 import {
   // Exit codes
   EXIT_INVALID_ARGS,
@@ -67,7 +67,7 @@ import {
   createTracingAgent,
   buildTraceTags,
   formatTraceNameWithTimestamp,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;

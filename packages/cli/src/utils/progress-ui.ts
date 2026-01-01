@@ -5,7 +5,7 @@ import {
   logInfo,
   logSuccess,
   logWarning,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 // Constants for UI strings and configuration
 const PHASE_LABELS = {

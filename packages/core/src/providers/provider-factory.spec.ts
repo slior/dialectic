@@ -1,4 +1,4 @@
-import { createProvider, OpenAIProvider, OpenRouterProvider, EXIT_CONFIG_ERROR } from '@dialectic/core';
+import { createProvider, OpenAIProvider, OpenRouterProvider, EXIT_CONFIG_ERROR } from 'dialectic-core';
 
 // Mock the provider classes
 jest.mock('./openai-provider');

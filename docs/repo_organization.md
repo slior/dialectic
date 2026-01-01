@@ -50,7 +50,7 @@ The packages follow a clear dependency hierarchy:
 
 ## Packages
 
-### `@dialectic/core`
+### `dialectic-core`
 
 **Location:** `packages/core/`
 
@@ -88,7 +88,7 @@ The packages follow a clear dependency hierarchy:
 - **CLI Utilities** - User-facing messaging and error handling
 
 **Dependencies:**
-- `@dialectic/core` - Uses core library for all debate functionality
+- `dialectic-core` - Uses core library for all debate functionality
 - `commander` - CLI framework
 - `chalk` - Terminal colors
 
@@ -109,7 +109,7 @@ The packages follow a clear dependency hierarchy:
 - **Debate Service** - Business logic wrapping core library
 
 **Dependencies:**
-- `@dialectic/core` - Uses core library for debate orchestration
+- `dialectic-core` - Uses core library for debate orchestration
 - `@nestjs/*` - NestJS framework for building the API
 - `socket.io` - WebSocket support
 
@@ -139,7 +139,7 @@ The packages follow a clear dependency hierarchy:
 
 **Default Port:** 3000 (Next.js default)
 
-**Note:** The web-ui does not directly depend on `@dialectic/core`. It communicates with the web-api via HTTP and WebSocket, which in turn uses the core library.
+**Note:** The web-ui does not directly depend on `dialectic-core`. It communicates with the web-api via HTTP and WebSocket, which in turn uses the core library.
 
 ## Other Directories
 
@@ -290,7 +290,7 @@ The repository uses **Nx** for:
 
 ### Package Linking
 
-npm workspaces automatically link packages together. When you import `@dialectic/core` in the CLI package, it uses the local version from `packages/core/`, not a published npm package. This allows for seamless development across packages.
+npm workspaces automatically link packages together. When you import `dialectic-core` in the CLI package, it uses the local version from `packages/core/`, not a published npm package. This allows for seamless development across packages.
 
 ## Key Files at Root
 

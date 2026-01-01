@@ -1,6 +1,6 @@
 {
-  "name": "@dialectic/core",
-  "version": "0.4.0",
+  "name": "dialectic-core",
+  "version": "0.5.1",
   "description": "Core debate orchestration library for Dialectic",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -23,6 +23,9 @@
   ],
   "author": "Lior Schejter (https://github.com/slior)",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "dotenv": "^16.3.1",
     "langfuse": "^3.38.6",
@@ -41,4 +44,3 @@
     "typescript": ">=5.0.0"
   }
 }
-

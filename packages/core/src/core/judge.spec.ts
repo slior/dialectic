@@ -1,4 +1,4 @@
-import { JudgeAgent, AgentConfig, LLMProvider, CompletionRequest, CompletionResponse, DebateRound, DebateContext, LLM_PROVIDERS, AGENT_ROLES, CONTRIBUTION_TYPES, SummarizationConfig } from '@dialectic/core';
+import { JudgeAgent, AgentConfig, LLMProvider, CompletionRequest, CompletionResponse, DebateRound, DebateContext, LLM_PROVIDERS, AGENT_ROLES, CONTRIBUTION_TYPES, SummarizationConfig } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_JUDGE_TEMPERATURE = 0.3;

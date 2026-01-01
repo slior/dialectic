@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { resolvePrompt } from '@dialectic/core';
+import { resolvePrompt } from 'dialectic-core';
 
 // Test constants
 const PROMPT_SOURCE_BUILT_IN = 'built-in';

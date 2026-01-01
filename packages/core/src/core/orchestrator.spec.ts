@@ -1,4 +1,4 @@
-import { DebateOrchestrator, DebateConfig, DebateRound, DebateState, Solution, Agent, StateManager, AgentConfig, Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult } from '@dialectic/core';
+import { DebateOrchestrator, DebateConfig, DebateRound, DebateState, Solution, Agent, StateManager, AgentConfig, Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult } from 'dialectic-core';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

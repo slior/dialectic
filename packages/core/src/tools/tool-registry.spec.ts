@@ -1,4 +1,4 @@
-import { ToolRegistry, ToolImplementation, createBaseRegistry } from '@dialectic/core';
+import { ToolRegistry, ToolImplementation, createBaseRegistry } from 'dialectic-core';
 
 // Test constants
 const TOOL_NAME_TEST = 'test_tool';

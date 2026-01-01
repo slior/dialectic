@@ -11,11 +11,11 @@ import {
   CONTRIBUTION_TYPES,
   SystemConfig,
   LLM_PROVIDERS
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 // Mock env-loader
-jest.mock('@dialectic/core', () => {
-  const actual = jest.requireActual('@dialectic/core');
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
   return {
     ...actual,
     loadEnvironmentFile: jest.fn()

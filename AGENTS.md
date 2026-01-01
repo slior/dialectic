@@ -581,7 +581,7 @@ The project uses strict TypeScript settings defined in `tsconfig.json`:
 **Imports:**
 - Use ES6 import/export syntax
 - Group imports: external packages, then internal modules
-- Use package imports (`@dialectic/core`) or relative imports within packages when appropriate
+- Use package imports (`dialectic-core`) or relative imports within packages when appropriate
 
 **Error Handling:**
 - Use custom error classes with exit codes (see `packages/core/src/utils/exit-codes.ts`)
@@ -896,7 +896,7 @@ Good code is:
 1. **Test Structure:**
    ```typescript
    // Import from package (preferred)
-   import { DebateOrchestrator } from '@dialectic/core';
+   import { DebateOrchestrator } from 'dialectic-core';
    // Or import from package src for testing
    import { Component } from '../packages/core/src/core/component';
    

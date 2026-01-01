@@ -18,7 +18,7 @@ sequenceDiagram
     participant Socket as Socket.IO Client
     participant Gateway as DebateGateway
     participant Service as DebateService
-    participant Core as @dialectic/core
+    participant Core as dialectic-core
     participant State as StateManager
 
     User->>UI: Load Dashboard page
@@ -365,7 +365,7 @@ When the Dashboard component mounts:
    - Resolves system prompts via `resolvePrompt()`
    - Creates tool registries via `buildToolRegistry()`
    - Instantiates `RoleBasedAgent` instances
-4. **Core Collection**: Calls `collectClarifications()` from `@dialectic/core`:
+4. **Core Collection**: Calls `collectClarifications()` from `dialectic-core`:
    - For each agent: calls `agent.askClarifyingQuestions(problem, context)`
    - Returns `AgentClarifications[]` with questions grouped by agent
 5. **Storage**: Gateway stores questions in `pendingClarifications`
@@ -791,7 +791,7 @@ The UI uses a reducer pattern to manage state:
 
 **Location**: `packages/web-api/src/debate/debate.service.ts`
 
-The web API integrates with `@dialectic/core` through:
+The web API integrates with `dialectic-core` through:
 
 1. **Agent Building**: Uses `RoleBasedAgent.create()` and `createProvider()` from core
 2. **Judge Building**: Uses `JudgeAgent` constructor from core

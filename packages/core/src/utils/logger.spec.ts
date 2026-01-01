@@ -1,4 +1,4 @@
-import { Logger } from '@dialectic/core';
+import { Logger } from 'dialectic-core';
 
 describe('Logger', () => {
   it('prints minimal messages in non-verbose mode', () => {

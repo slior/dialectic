@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { runCli } from '../index';
-import { EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EvaluatorAgent, loadEnvironmentFile } from '@dialectic/core';
+import { EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EvaluatorAgent, loadEnvironmentFile } from 'dialectic-core';
 
 // Test constants
 const TEST_PROBLEM = 'Test problem';
@@ -29,14 +29,14 @@ const TEMP_DIR_PREFIX = 'eval-test-';
 const mockCreateProvider = jest.fn();
 
 // Mock the provider-factory module using the moduleNameMapper path
-// This needs to happen before @dialectic/core is mocked
-jest.mock('@dialectic/core/providers/provider-factory', () => ({
+// This needs to happen before dialectic-core is mocked
+jest.mock('dialectic-core/providers/provider-factory', () => ({
   createProvider: (...args: any[]) => mockCreateProvider(...args)
 }));
 
 // Mock env-loader
-jest.mock('@dialectic/core', () => {
-  const actual = jest.requireActual('@dialectic/core');
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
   return {
     ...actual,
     loadEnvironmentFile: jest.fn(),

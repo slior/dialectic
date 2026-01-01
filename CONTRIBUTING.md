@@ -34,10 +34,10 @@ When writing tests, **always import from package sources**, never from the legac
 
 #### Core Functionality
 
-For core functionality (agents, providers, tools, types, utilities), import from `@dialectic/core`:
+For core functionality (agents, providers, tools, types, utilities), import from `dialectic-core`:
 
 ```typescript
-// Import from @dialectic/core
+// Import from dialectic-core
 import { 
   DebateOrchestrator, 
   RoleBasedAgent, 
@@ -45,7 +45,7 @@ import {
   ToolRegistry,
   DebateConfig,
   CONTRIBUTION_TYPES 
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 ```
 
@@ -65,12 +65,12 @@ import { DebateProgressUI } from '../utils/progress-ui';
 
 | Source | Import From | Examples |
 |--------|-------------|----------|
-| Core agents | `@dialectic/core` | `RoleBasedAgent`, `JudgeAgent`, `Agent` |
-| Core orchestrator | `@dialectic/core` | `DebateOrchestrator`, `StateManager` |
-| Providers | `@dialectic/core` | `LLMProvider`, `OpenAIProvider`, `createProvider` |
-| Tools | `@dialectic/core` | `ToolRegistry`, `ToolImplementation`, `ContextSearchTool` |
-| Types | `@dialectic/core` | `DebateConfig`, `AgentConfig`, `CONTRIBUTION_TYPES` |
-| Core utilities | `@dialectic/core` | `loadEnvironmentFile`, `Logger`, `enhanceProblemWithContext` |
+| Core agents | `dialectic-core` | `RoleBasedAgent`, `JudgeAgent`, `Agent` |
+| Core orchestrator | `dialectic-core` | `DebateOrchestrator`, `StateManager` |
+| Providers | `dialectic-core` | `LLMProvider`, `OpenAIProvider`, `createProvider` |
+| Tools | `dialectic-core` | `ToolRegistry`, `ToolImplementation`, `ContextSearchTool` |
+| Types | `dialectic-core` | `DebateConfig`, `AgentConfig`, `CONTRIBUTION_TYPES` |
+| Core utilities | `dialectic-core` | `loadEnvironmentFile`, `Logger`, `enhanceProblemWithContext` |
 | CLI commands | `../packages/cli/src/index` | `runCli` |
 | CLI utilities | `../packages/cli/src/utils/...` | `DebateProgressUI` |
 
@@ -91,7 +91,7 @@ export { YourNewClass } from './path/to/your-new-class';
 Then import it in tests:
 
 ```typescript
-import { YourNewClass } from '@dialectic/core';
+import { YourNewClass } from 'dialectic-core';
 ```
 
 ### Mocking
@@ -100,8 +100,8 @@ When mocking modules, use the package import path. For modules that are imported
 
 ```typescript
 // ✅ CORRECT - Mock using package import
-jest.mock('@dialectic/core', () => {
-  const actual = jest.requireActual('@dialectic/core');
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
   return {
     ...actual,
     loadEnvironmentFile: jest.fn(),
@@ -113,7 +113,7 @@ jest.mock('@dialectic/core', () => {
 // When a module imports another using relative paths (e.g., '../providers/provider-factory'),
 // mock it using the moduleNameMapper path
 const mockCreateProvider = jest.fn();
-jest.mock('@dialectic/core/providers/provider-factory', () => ({
+jest.mock('dialectic-core/providers/provider-factory', () => ({
   createProvider: (...args: any[]) => mockCreateProvider(...args)
 }));
 
@@ -132,7 +132,7 @@ jest.mock('../src/utils/env-loader', () => ({
 }));
 ```
 
-**Important:** When mocking modules that are imported via relative paths (like `EvaluatorAgent` importing `createProvider` from `'../providers/provider-factory'`), use the `moduleNameMapper` path (`@dialectic/core/providers/provider-factory`) rather than trying to mock with relative paths.
+**Important:** When mocking modules that are imported via relative paths (like `EvaluatorAgent` importing `createProvider` from `'../providers/provider-factory'`), use the `moduleNameMapper` path (`dialectic-core/providers/provider-factory`) rather than trying to mock with relative paths.
 
 ### Running Tests
 
@@ -158,7 +158,7 @@ Tests can be run from multiple locations:
 All tests should pass regardless of where they're run from. Each package has its own `jest.config.ts` that:
 - Looks for tests in the `src/` directory (`roots: ['<rootDir>/src']`)
 - Matches files with `.spec.ts` extension (`testMatch: ['**/*.spec.ts']`)
-- Configures module name mapping for `@dialectic/core` imports
+- Configures module name mapping for `dialectic-core` imports
 
 ### Verification
 
@@ -175,7 +175,7 @@ Before submitting a pull request, verify:
    # Check for legacy imports in package tests
    grep -r "../src/" packages/*/src/**/*.spec.ts
    ```
-   This should return no results. All imports should use `@dialectic/core` or relative paths within packages.
+   This should return no results. All imports should use `dialectic-core` or relative paths within packages.
 
 3. **Tests are co-located with source files:**
    - Test files should be in `packages/*/src/` directories
@@ -226,12 +226,12 @@ Each package has its own `jest.config.ts`:
 
 - **Core package** (`packages/core/jest.config.ts`):
   - Tests in `src/` directory
-  - Module name mapping for `@dialectic/core` and `@dialectic/core/*`
+  - Module name mapping for `dialectic-core` and `dialectic-core/*`
   - Langfuse mock configured
 
 - **CLI package** (`packages/cli/jest.config.ts`):
   - Tests in `src/` directory
-  - Module name mapping for `@dialectic/core` imports
+  - Module name mapping for `dialectic-core` imports
   - Langfuse mock configured
 
 ## Cursor Commands
@@ -240,7 +240,7 @@ The repository includes Cursor IDE commands for common maintenance tasks:
 
 ### Publish Packages
 
-The `publish-packages` command automates publishing `@dialectic/core` and/or `dialectic` CLI packages to npm. It handles:
+The `publish-packages` command automates publishing `dialectic-core` and/or `dialectic` CLI packages to npm. It handles:
 
 - **Version bumping** - Automatically bumps version numbers (major/minor/patch) for core and/or CLI packages
 - **Dependency management** - Updates CLI package's dependency on core when core is published

@@ -1,4 +1,4 @@
-import { ToolSchema, ToolCall, ToolResult, ToolCallMetadata } from '@dialectic/core';
+import { ToolSchema, ToolCall, ToolResult, ToolCallMetadata } from 'dialectic-core';
 
 // Test constants
 const TOOL_NAME_TEST = 'test_tool';

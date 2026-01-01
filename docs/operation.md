@@ -41,7 +41,7 @@ The monorepo contains four packages:
 
 | Package | Description | Location |
 |---------|-------------|----------|
-| `@dialectic/core` | Shared debate logic and types | `packages/core/` |
+| `dialectic-core` | Shared debate logic and types | `packages/core/` |
 | `dialectic` | Command-line interface | `packages/cli/` |
 | `@dialectic/web-api` | NestJS backend with WebSocket | `packages/web-api/` |
 | `@dialectic/web-ui` | Next.js frontend dashboard | `packages/web-ui/` |

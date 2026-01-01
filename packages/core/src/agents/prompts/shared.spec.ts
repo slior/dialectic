@@ -6,7 +6,7 @@ import {
   getSharedCritiqueInstructions,
   getSharedRefinementInstructions,
   getSharedSummarizationInstructions
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 // Test constants
 const PROMPT_TEST = 'test prompt';

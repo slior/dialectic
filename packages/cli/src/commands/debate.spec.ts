@@ -14,8 +14,8 @@ jest.mock('openai', () => {
 });
 
 // Mock env-loader
-jest.mock('@dialectic/core', () => {
-  const actual = jest.requireActual('@dialectic/core');
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
   return {
     ...actual,
     loadEnvironmentFile: jest.fn()
@@ -51,7 +51,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import { runCli } from '../index';
-import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, loadEnvironmentFile, RoleBasedAgent, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD } from '@dialectic/core';
+import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, loadEnvironmentFile, RoleBasedAgent, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD } from 'dialectic-core';
 import { loadConfig } from './debate';
 
 const mockedLoadEnvironmentFile = loadEnvironmentFile as jest.MockedFunction<typeof loadEnvironmentFile>;

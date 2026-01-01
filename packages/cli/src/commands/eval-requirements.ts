@@ -5,7 +5,7 @@ import {
   DebateState,
   REQUIREMENTS_COVERAGE_SECTION_TITLE,
   writeStderr,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 export type AgentRequirementsCoverage = {
   agentId: string;

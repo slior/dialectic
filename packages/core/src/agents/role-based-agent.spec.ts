@@ -1,4 +1,4 @@
-import { RoleBasedAgent, LLMProvider, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, ToolSchema, DebateContext, DebateState, CompletionRequest, CompletionResponse, ToolRegistry, ToolImplementation, ToolCall, CONTRIBUTION_TYPES, SUMMARIZATION_METHODS, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, createProvider } from '@dialectic/core';
+import { RoleBasedAgent, LLMProvider, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, ToolSchema, DebateContext, DebateState, CompletionRequest, CompletionResponse, ToolRegistry, ToolImplementation, ToolCall, CONTRIBUTION_TYPES, SUMMARIZATION_METHODS, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, createProvider } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;

@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Param, Body, HttpCode, HttpStatus, NotFoundException, BadRequestException, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { StateManager } from '@dialectic/core';
+import { StateManager } from 'dialectic-core';
 
 // Feedback value constants
 const FEEDBACK_POSITIVE = 1;

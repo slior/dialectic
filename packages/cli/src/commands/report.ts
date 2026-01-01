@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { infoUser } from '../index';
 import { loadConfig } from './debate';
 
-// Import from @dialectic/core
+// Import from dialectic-core
 import {
   EXIT_INVALID_ARGS,
   EXIT_GENERAL_ERROR,
@@ -16,7 +16,7 @@ import {
   createValidationError,
   readJsonFile,
   writeFileWithDirectories,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 // Error message constants
 const ERROR_INVALID_DEBATE_JSON = 'Invalid debate JSON';

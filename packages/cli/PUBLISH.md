@@ -4,7 +4,7 @@ This guide explains how to publish only the CLI tool to npm.
 
 ## Prerequisites
 
-Before publishing the CLI, you **must** publish `@dialectic/core` first, as the CLI depends on it:
+Before publishing the CLI, you **must** publish `dialectic-core` first, as the CLI depends on it:
 
 ```bash
 # 1. Navigate to core package
@@ -13,7 +13,7 @@ cd packages/core
 # 2. Build the core package
 npm run build
 
-# 3. Publish @dialectic/core
+# 3. Publish dialectic-core
 npm publish --access public
 ```
 
@@ -81,9 +81,9 @@ Additionally, `.npmignore` ensures no unwanted files slip through.
 When updating versions:
 
 1. Update `packages/core/package.json` version
-2. Publish `@dialectic/core`
+2. Publish `dialectic-core`
 3. Update `packages/cli/package.json` version (must match or be compatible)
-4. Update `packages/cli/package.json` dependency: `"@dialectic/core": "^X.Y.Z"`
+4. Update `packages/cli/package.json` dependency: `"dialectic-core": "^X.Y.Z"`
 5. Publish `dialectic` CLI
 
 ## Verifying the Published Package

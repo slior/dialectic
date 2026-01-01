@@ -1,14 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { DebateController } from './debate.controller';
-import { StateManager, DebateState, DEBATE_STATUS } from '@dialectic/core';
+import { StateManager, DebateState, DEBATE_STATUS } from 'dialectic-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-// Mock @dialectic/core dependencies
-jest.mock('@dialectic/core', () => {
-  const actual = jest.requireActual('@dialectic/core');
+// Mock dialectic-core dependencies
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
   return {
     ...actual,
   };

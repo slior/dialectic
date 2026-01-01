@@ -22,7 +22,7 @@ import {
   ContributionType,
   Contribution,
   logWarning,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 // Default configuration constants
 const DEFAULT_ROUNDS = 3;
@@ -76,7 +76,7 @@ export interface OrchestratorHooks {
 
 /**
  * Service that manages debate orchestration for the web API.
- * Uses @dialectic/core for the actual debate logic.
+ * Uses dialectic-core for the actual debate logic.
  */
 @Injectable()
 export class DebateService {

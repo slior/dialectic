@@ -1,4 +1,4 @@
-import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent, TRACE_OPTIONS, TraceMetadata, DebateConfig, LLMProvider, RoleBasedAgent, AgentConfig, AgentRole, AGENT_ROLES, LLM_PROVIDERS, SummarizationConfig } from '@dialectic/core';
+import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent, TRACE_OPTIONS, TraceMetadata, DebateConfig, LLMProvider, RoleBasedAgent, AgentConfig, AgentRole, AGENT_ROLES, LLM_PROVIDERS, SummarizationConfig } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;

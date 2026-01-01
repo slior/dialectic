@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { debateCommand, loadConfig as loadDebateConfig } from './commands/debate';
 import { evalCommand } from './commands/eval';
 import { reportCommand } from './commands/report';
-import { EXIT_GENERAL_ERROR, logInfo, logWarning } from '@dialectic/core';
+import { EXIT_GENERAL_ERROR, logInfo, logWarning } from 'dialectic-core';
 
 export const PROGRAM_NAME = 'dialectic';
 

@@ -1,4 +1,4 @@
-import { OpenAIProvider, LLMProvider, ToolSchema } from '@dialectic/core';
+import { OpenAIProvider, LLMProvider, ToolSchema } from 'dialectic-core';
 import OpenAI from 'openai';
 
 // Test constants

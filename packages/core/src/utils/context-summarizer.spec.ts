@@ -1,4 +1,4 @@
-import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES } from '@dialectic/core';
+import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_SUMMARY_TEMPERATURE = 0.3;

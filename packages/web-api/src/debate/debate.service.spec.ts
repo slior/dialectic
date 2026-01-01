@@ -1,6 +1,6 @@
-// Mock @dialectic/core dependencies
-jest.mock('@dialectic/core', () => {
-  const actual = jest.requireActual('@dialectic/core');
+// Mock dialectic-core dependencies
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
   return {
     ...actual,
     StateManager: jest.fn(),
@@ -38,7 +38,7 @@ import {
   collectClarifications,
   resolvePrompt,
   buildToolRegistry,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 // Test constants
 const DEFAULT_ROUNDS = 3;

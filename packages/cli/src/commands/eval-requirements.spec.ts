@@ -3,7 +3,7 @@ import {
   CONTRIBUTION_TYPES,
   DEBATE_STATUS,
   DebateState,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 import { extractRequirementsInfo } from './eval-requirements';
 

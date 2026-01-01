@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { loadEnvironmentFile } from '@dialectic/core';
+import { loadEnvironmentFile } from 'dialectic-core';
 
 // Mock fs and path modules
 jest.mock('fs');

@@ -15,8 +15,8 @@ const config: Config = {
   coverageDirectory: '<rootDir>/coverage',
   coverageReporters: ['text', 'lcov', 'html', 'json'],
   moduleNameMapper: {
-    '^@dialectic/core$': '<rootDir>/src/index.ts',
-    '^@dialectic/core/(.*)$': '<rootDir>/src/$1',
+    '^dialectic-core$': '<rootDir>/src/index.ts',
+    '^dialectic-core/(.*)$': '<rootDir>/src/$1',
     '^langfuse$': '<rootDir>/src/__mocks__/langfuse.ts'
   },
   transform: {

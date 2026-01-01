@@ -1,5 +1,5 @@
 
-import { ContextSearchTool, DebateContext, DebateRound, Contribution, CONTRIBUTION_TYPES, DebateState, DEBATE_STATUS } from '@dialectic/core';
+import { ContextSearchTool, DebateContext, DebateRound, Contribution, CONTRIBUTION_TYPES, DebateState, DEBATE_STATUS } from 'dialectic-core';
 
 // Test constants
 const TOOL_NAME_CONTEXT_SEARCH = 'context_search';

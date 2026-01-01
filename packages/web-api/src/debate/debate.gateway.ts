@@ -20,7 +20,7 @@ import {
   logInfo,
   logSuccess,
   logWarning,
-} from '@dialectic/core';
+} from 'dialectic-core';
 import { getCorsOrigins } from '../utils/cors';
 
 /**

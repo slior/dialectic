@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Command } from 'commander';
 
-// Import from @dialectic/core
+// Import from dialectic-core
 import {
   writeStderr,
   loadEnvironmentFile,
@@ -26,7 +26,7 @@ import {
   createValidationError,
   readJsonFile,
   readBuiltInPrompt,
-} from '@dialectic/core';
+} from 'dialectic-core';
 
 import { extractRequirementsInfo } from './eval-requirements';
 

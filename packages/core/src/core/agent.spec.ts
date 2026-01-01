@@ -1,4 +1,4 @@
-import { Agent, ToolRegistry, ToolImplementation, ToolCall, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState } from '@dialectic/core';
+import { Agent, ToolRegistry, ToolImplementation, ToolCall, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_TOOL_CALL_LIMIT = 10;

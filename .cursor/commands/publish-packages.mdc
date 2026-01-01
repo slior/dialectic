@@ -4,14 +4,14 @@ description: Publish core and/or CLI packages to npm with version management
 
 # Publish Packages
 
-Publish `@dialectic/core` and/or `dialectic` CLI packages to npm with automatic version bumping and dependency management.
+Publish `dialectic-core` and/or `dialectic` CLI packages to npm with automatic version bumping and dependency management.
 
 ## Input Parameters
 
 The command accepts the following parameters:
 
 - **publish_core** (required, boolean)
-  - Whether to publish the `@dialectic/core` package
+  - Whether to publish the `dialectic-core` package
   - If `true`, the core package will be version-bumped, built, and published before the CLI package
   - If `false`, only the CLI package will be published (assumes core is already published)
 
@@ -64,7 +64,7 @@ If `publish_core` is `true`:
 
 6. **Update CLI dependency on core**
    - Read `packages/cli/package.json`
-   - Update the `dependencies` field: `"@dialectic/core": "^<CORE_VERSION>"`
+   - Update the `dependencies` field: `"dialectic-core": "^<CORE_VERSION>"`
    - Update to match the newly published core version
    - Save the updated `package.json`
 
@@ -123,7 +123,7 @@ When executing this command, follow these steps precisely:
    - Run: `npm publish --access public` (from core directory)
    - Update `packages/cli/package.json`:
      - Read the file
-     - Update `dependencies["@dialectic/core"]` to `"^<new_core_version>"`
+     - Update `dependencies["dialectic-core"]` to `"^<new_core_version>"`
      - Write the file back
 
 3. **Build CLI**
@@ -152,10 +152,10 @@ When executing this command, follow these steps precisely:
 ## Output
 
 Provide clear output at each step:
-- "Publishing @dialectic/core with <version_bump> bump..."
-- "Building @dialectic/core..."
-- "Published @dialectic/core@<version>"
-- "Updating CLI dependency on @dialectic/core to ^<version>..."
+- "Publishing dialectic-core with <version_bump> bump..."
+- "Building dialectic-core..."
+- "Published dialectic-core@<version>"
+- "Updating CLI dependency on dialectic-core to ^<version>..."
 - "Building CLI package..."
 - "Publishing dialectic CLI with <version_bump> bump..."
 - "Published dialectic@<version>"
@@ -195,6 +195,6 @@ Publish packages with:
 ## Notes
 
 - The `npm version` command creates git tags automatically
-- The CLI package depends on `@dialectic/core`, so core must be published first if it changed
+- The CLI package depends on `dialectic-core`, so core must be published first if it changed
 - Version bumps follow semantic versioning (major.minor.patch)
 - The publish script (`scripts/publish-cli.sh`) handles CLI-specific publishing logic

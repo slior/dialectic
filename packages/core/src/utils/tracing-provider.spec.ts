@@ -1,4 +1,4 @@
-import { TracingLLMProvider, LLMProvider, CompletionRequest, TracingContext } from '@dialectic/core';
+import { TracingLLMProvider, LLMProvider, CompletionRequest, TracingContext } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;

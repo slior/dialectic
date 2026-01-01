@@ -1,4 +1,4 @@
-import { TracingDecoratorAgent, RoleBasedAgent, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, Proposal, Critique, SummarizationConfig, DebateContext, DebateState, TracingContext, LLMProvider, ToolImplementation, ToolCall, ToolResult } from '@dialectic/core';
+import { TracingDecoratorAgent, RoleBasedAgent, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, Proposal, Critique, SummarizationConfig, DebateContext, DebateState, TracingContext, LLMProvider, ToolImplementation, ToolCall, ToolResult } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;
