@@ -1,0 +1,441 @@
+---
+alwaysApply: false
+---
+# Unit Test Mock Cleanup Rules
+
+## Overview
+
+This guide explains how to properly set up and clean up mocks in Jest unit tests. Improper mock cleanup causes test pollution, where mocks from one test affect subsequent tests, leading to hard-to-debug failures like "Maximum call stack size exceeded" errors.
+
+## Problem Summary
+
+When tests create spies or mocks but don't properly restore them, the mocks remain active and interfere with other tests. This causes:
+- Test pollution: One test's mocks affecting other tests
+- Flaky tests: Tests pass in isolation but fail when run together
+- Stack overflow errors: Infinite loops from uncleaned spies
+- Hard-to-debug failures: Errors appear in unrelated tests
+
+## Core Principles
+
+1. **Always track spies in variables** - Store spy references so you can restore them
+2. **Always restore in cleanup hooks** - Use `afterEach` or `beforeEach` to restore mocks
+3. **Use `mockRestore()` not implementation changes** - Changing mock implementation doesn't remove the spy
+4. **Clean up all mocks** - Don't leave any spies or mocks active between tests
+
+---
+
+## Rule 1: Track Spies in Variables
+
+### Bad - Spy Not Tracked
+
+```typescript
+describe('Error handling', () => {
+  it('should handle errors', async () => {
+    // BAD: Spy created but not stored
+    jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(() => {
+      throw new Error('Test error');
+    });
+    
+    await expect(runCli(['debate', 'Design'])).rejects.toThrow();
+    
+    // Problem: Spy is never restored, remains active for other tests
+  });
+});
+```
+
+### Good - Spy Tracked and Restored
+
+```typescript
+describe('Error handling', () => {
+  let orchestratorSpy: jest.SpyInstance | undefined;
+
+  afterEach(() => {
+    // Clean up spy if it was created
+    if (orchestratorSpy) {
+      orchestratorSpy.mockRestore();
+      orchestratorSpy = undefined;
+    }
+  });
+
+  it('should handle errors', async () => {
+    // GOOD: Spy stored in variable
+    orchestratorSpy = jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(() => {
+      throw new Error('Test error');
+    });
+    
+    await expect(runCli(['debate', 'Design'])).rejects.toThrow();
+    // Spy will be restored in afterEach
+  });
+});
+```
+
+---
+
+## Rule 2: Always Use `mockRestore()`
+
+### Bad - Changing Implementation Instead of Restoring
+
+```typescript
+it('should test something', async () => {
+  const { DebateOrchestrator } = require('dialectic-core');
+  const OriginalOrchestrator = DebateOrchestrator;
+  
+  // BAD: Creating spy
+  jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(() => {
+    throw new Error('Test');
+  });
+  
+  await runCli(['debate', 'Design']);
+  
+  // BAD: Just changing implementation back, spy still active
+  jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(OriginalOrchestrator);
+});
+```
+
+### Good - Properly Restore the Spy
+
+```typescript
+describe('Error handling', () => {
+  let orchestratorSpy: jest.SpyInstance | undefined;
+
+  afterEach(() => {
+    if (orchestratorSpy) {
+      // GOOD: Actually restore the spy
+      orchestratorSpy.mockRestore();
+      orchestratorSpy = undefined;
+    }
+  });
+
+  it('should test something', async () => {
+    // GOOD: Store spy reference
+    orchestratorSpy = jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(() => {
+      throw new Error('Test');
+    });
+    
+    await runCli(['debate', 'Design']);
+    // Spy automatically restored in afterEach
+  });
+});
+```
+
+---
+
+## Rule 3: Clean Up in `afterEach` Hook
+
+### Bad - No Cleanup Hook
+
+```typescript
+describe('My tests', () => {
+  it('test 1', () => {
+    const spy = jest.spyOn(SomeClass, 'method').mockReturnValue('value');
+    // BAD: Spy never restored
+  });
+
+  it('test 2', () => {
+    // Problem: spy from test 1 might still be active
+    const result = SomeClass.method(); // Might return mocked value!
+  });
+});
+```
+
+### Good - Cleanup in `afterEach`
+
+```typescript
+describe('My tests', () => {
+  let spy: jest.SpyInstance | undefined;
+
+  afterEach(() => {
+    // GOOD: Always restore spies after each test
+    if (spy) {
+      spy.mockRestore();
+      spy = undefined;
+    }
+  });
+
+  it('test 1', () => {
+    spy = jest.spyOn(SomeClass, 'method').mockReturnValue('value');
+    // Spy will be restored automatically
+  });
+
+  it('test 2', () => {
+    // GOOD: Previous spy was restored, this test is clean
+    const result = SomeClass.method(); // Real implementation
+  });
+});
+```
+
+---
+
+## Rule 4: Clean Up Module-Level Mocks
+
+### Bad - Module Mock Not Reset
+
+```typescript
+// At top of file
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
+  return {
+    ...actual,
+    collectClarifications: jest.fn().mockResolvedValue([]),
+  };
+});
+
+describe('Tests', () => {
+  it('test 1', () => {
+    // BAD: Mock used but never reset
+    mockedCollectClarifications.mockResolvedValueOnce([...]);
+    // Test runs...
+  });
+
+  it('test 2', () => {
+    // Problem: Mock might still have state from test 1
+    // This can cause unexpected behavior
+  });
+});
+```
+
+### Good - Reset Module Mocks in `beforeEach`
+
+```typescript
+// At top of file
+const mockedCollectClarifications = collectClarifications as jest.MockedFunction<typeof collectClarifications>;
+
+describe('Tests', () => {
+  beforeEach(() => {
+    // GOOD: Reset mock state before each test
+    mockedCollectClarifications.mockClear();
+    mockedCollectClarifications.mockResolvedValue([]);
+  });
+
+  it('test 1', () => {
+    mockedCollectClarifications.mockResolvedValueOnce([...]);
+    // Test runs...
+  });
+
+  it('test 2', () => {
+    // GOOD: Mock was reset, clean state
+  });
+});
+```
+
+---
+
+## Rule 5: Avoid Unnecessary `jest.requireActual`
+
+### Bad - Complex Pattern with `jest.requireActual`
+
+```typescript
+it('should test clarifications', async () => {
+  // BAD: Unnecessarily complex
+  const actualCollectClarifications = jest.requireActual('dialectic-core').collectClarifications;
+  mockedCollectClarifications.mockImplementation((problem, agents, maxPerAgent, warn) => {
+    return actualCollectClarifications(problem, agents, maxPerAgent, warn);
+  });
+  
+  const spy = jest.spyOn(RoleBasedAgent.prototype as any, 'askClarifyingQuestions')
+    .mockResolvedValueOnce({ questions: [...] });
+  
+  // This creates complex interactions that can break
+});
+```
+
+### Good - Simple Direct Mocking
+
+```typescript
+it('should test clarifications', async () => {
+  // GOOD: Directly mock what you need
+  mockedCollectClarifications.mockResolvedValueOnce([
+    {
+      agentId: 'agent-architect',
+      agentName: 'System Architect',
+      role: 'architect',
+      items: [{ id: 'q1', question: 'What is the SLA?', answer: '' }]
+    }
+  ]);
+  
+  // Simple, clear, and reliable
+});
+```
+
+---
+
+## Complete Example: Before and After
+
+### Before - Problematic Test
+
+```typescript
+describe('Error handling', () => {
+  it('should use error code when error has code property', async () => {
+    // BAD: Spy not tracked
+    const { DebateOrchestrator } = require('dialectic-core');
+    const OriginalOrchestrator = DebateOrchestrator;
+    
+    jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(function() {
+      throw Object.assign(new Error('Test error'), { code: EXIT_INVALID_ARGS });
+    });
+    
+    await expect(runCli(['debate', 'Design a system', '--rounds', '1']))
+      .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+    
+    // BAD: Just changing implementation, spy still active
+    jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(OriginalOrchestrator);
+  });
+});
+```
+
+### After - Fixed Test
+
+```typescript
+describe('Error handling', () => {
+  let orchestratorSpy: jest.SpyInstance | undefined;
+
+  afterEach(() => {
+    // GOOD: Clean up spy if it was created
+    if (orchestratorSpy) {
+      orchestratorSpy.mockRestore();
+      orchestratorSpy = undefined;
+    }
+  });
+
+  it('should use error code when error has code property', async () => {
+    // GOOD: Spy tracked in variable
+    orchestratorSpy = jest.spyOn(require('dialectic-core'), 'DebateOrchestrator').mockImplementation(function() {
+      throw Object.assign(new Error('Test error'), { code: EXIT_INVALID_ARGS });
+    });
+    
+    await expect(runCli(['debate', 'Design a system', '--rounds', '1']))
+      .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+    // Spy automatically restored in afterEach
+  });
+});
+```
+
+---
+
+## Checklist for Mock Cleanup
+
+When writing or reviewing tests, verify:
+
+- [ ] **All spies are stored in variables** - No anonymous spies
+- [ ] **All spies are restored in `afterEach`** - Use `mockRestore()`, not implementation changes
+- [ ] **Module mocks are reset in `beforeEach`** - Use `mockClear()` and reset default behavior
+- [ ] **No `jest.requireActual` unless necessary** - Prefer direct mocking
+- [ ] **Tests pass when run together** - Not just in isolation
+- [ ] **No test pollution** - Each test starts with clean state
+
+---
+
+## Common Patterns
+
+### Pattern 1: Single Spy Per Test Suite
+
+```typescript
+describe('My feature', () => {
+  let mySpy: jest.SpyInstance | undefined;
+
+  beforeEach(() => {
+    // Setup
+  });
+
+  afterEach(() => {
+    if (mySpy) {
+      mySpy.mockRestore();
+      mySpy = undefined;
+    }
+  });
+
+  it('test 1', () => {
+    mySpy = jest.spyOn(MyClass, 'method').mockReturnValue('value');
+    // test code
+  });
+});
+```
+
+### Pattern 2: Multiple Spies Per Test Suite
+
+```typescript
+describe('My feature', () => {
+  let spy1: jest.SpyInstance | undefined;
+  let spy2: jest.SpyInstance | undefined;
+
+  afterEach(() => {
+    if (spy1) {
+      spy1.mockRestore();
+      spy1 = undefined;
+    }
+    if (spy2) {
+      spy2.mockRestore();
+      spy2 = undefined;
+    }
+  });
+
+  it('test with multiple spies', () => {
+    spy1 = jest.spyOn(Class1, 'method1');
+    spy2 = jest.spyOn(Class2, 'method2');
+    // test code
+  });
+});
+```
+
+### Pattern 3: Module-Level Mock with Reset
+
+```typescript
+// At top of file
+jest.mock('dialectic-core', () => {
+  const actual = jest.requireActual('dialectic-core');
+  return {
+    ...actual,
+    collectClarifications: jest.fn().mockResolvedValue([]),
+  };
+});
+
+const mockedCollectClarifications = collectClarifications as jest.MockedFunction<typeof collectClarifications>;
+
+describe('My tests', () => {
+  beforeEach(() => {
+    // Reset module mock before each test
+    mockedCollectClarifications.mockClear();
+    mockedCollectClarifications.mockResolvedValue([]);
+  });
+
+  it('test 1', () => {
+    mockedCollectClarifications.mockResolvedValueOnce([...]);
+    // test code
+  });
+});
+```
+
+---
+
+## Quick Reference
+
+| Problem | Solution | Example |
+|---------|----------|---------|
+| Spy not tracked | Store in variable | `let spy: jest.SpyInstance \| undefined;` |
+| Spy not restored | Use `mockRestore()` in `afterEach` | `spy.mockRestore();` |
+| Changing implementation instead of restoring | Use `mockRestore()` | Don't change implementation back |
+| Module mock state persists | Reset in `beforeEach` | `mockedFn.mockClear();` |
+| Complex `jest.requireActual` pattern | Use direct mocking | `mockResolvedValueOnce([...])` |
+| Test pollution | Clean up all mocks | See patterns above |
+
+---
+
+## Why This Matters
+
+- **Test Isolation**: Each test should be independent
+- **Reliability**: Tests should pass consistently, not just sometimes
+- **Debugging**: Failures should point to the actual problem, not mock pollution
+- **Maintainability**: Clean tests are easier to understand and modify
+
+---
+
+## Summary
+
+Good test mock practices:
+- **Track all spies** in variables
+- **Restore all spies** in `afterEach` hooks
+- **Reset module mocks** in `beforeEach` hooks
+- **Use simple mocking patterns** when possible
+- **Verify tests pass together** not just in isolation
+
+Remember: **If a test passes alone but fails with others, you have mock pollution.**
