@@ -268,6 +268,88 @@ The `update-changelog` command automatically updates `CHANGELOG.md` by analyzing
 
 **Note:** Requires a git repository with version tags.
 
+## Running Dialectic for Development
+
+### CLI Development Mode
+
+Run the CLI directly with TypeScript (no build required):
+
+```bash
+# Using npm workspace
+npm run dev:cli -- debate "Design a rate limiting system"
+
+# Or navigate to the CLI package
+cd packages/cli
+npm run dev -- debate "Design a rate limiting system"
+```
+
+**Examples:**
+
+```bash
+# Simple debate
+npm run dev:cli -- debate "Design a caching strategy for a web application"
+
+# Debate with specific agents
+npm run dev:cli -- debate "Design a secure API gateway" --agents architect,security
+
+# Debate with verbose output and report
+npm run dev:cli -- debate "Design a microservices architecture" \
+  --rounds 3 \
+  --verbose \
+  --report ./reports/microservices.md
+
+# Debate from a problem file
+npm run dev:cli -- debate --problemDescription ./problems/my-problem.txt
+
+# View help
+npm run dev:cli -- --help
+npm run dev:cli -- debate --help
+```
+
+### Web UI Development Mode
+
+The Web UI provides a graphical dashboard for running and monitoring debates in real-time. It consists of two components that need to run simultaneously:
+- **Web API** (NestJS backend) - Port 3001
+- **Web UI** (Next.js frontend) - Port 3000
+
+**Option 1: Run both with a single command:**
+
+```bash
+npm run dev:web
+```
+
+This starts both the API server and the UI using `concurrently`.
+
+**Option 2: Run separately (in two terminals):**
+
+Terminal 1 - Start the API server:
+```bash
+npm run dev:api
+# Server starts at http://localhost:3001
+```
+
+Terminal 2 - Start the UI:
+```bash
+npm run dev:ui
+# UI available at http://localhost:3000
+```
+
+**Option 3: Navigate to individual packages:**
+
+```bash
+# Terminal 1 - API
+cd packages/web-api
+npm run start:dev
+
+# Terminal 2 - UI
+cd packages/web-ui
+npm run dev
+```
+
+Once both are running, open http://localhost:3000 in your browser.
+
+For more details on running the Web UI, see [docs/operation.md](docs/operation.md#running-the-web-ui).
+
 ## Questions?
 
 If you're unsure about where to import something from, check:

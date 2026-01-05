@@ -45,6 +45,10 @@ npm install
 
 # Build all packages
 npm run build
+
+# Link the CLI command globally
+cd packages/cli
+npm link
 ```
 
 **API Key Setup:**
@@ -65,24 +69,22 @@ See `.env.example` for a complete example of all available environment variables
 
 **Option 1: CLI (Command Line)**
 
+After linking the CLI (see Setup), you can run debates using the `dialectic` command:
+
 ```bash
-# Development mode
-npm run dev:cli -- debate "Design a rate limiting system"
+# Simple debate
+dialectic debate "Design a rate limiting system"
 
 # With options
-npm run dev:cli -- debate "Design a caching strategy" --rounds 3 --verbose
+dialectic debate "Design a caching strategy" --rounds 3 --verbose
+
+# With config file and problem file
+dialectic debate -r 2 -c debate-config.json -p problem.md -v
 ```
 
-**Option 2: Web UI (Dashboard)**
+For more examples, see [e2e-tests/role_subsets/run_test.sh](e2e-tests/role_subsets/run_test.sh).
 
-```bash
-# Start both API and UI servers
-npm run dev:web
-
-# Open http://localhost:3000 in your browser
-```
-
-**Option 3: Docker (Containerized)**
+**Option 2: Docker (Containerized)**
 
 Prerequisites: Docker and Docker Compose installed.
 
@@ -168,10 +170,10 @@ The CLI provides full control over debates through command-line options:
 
 ```bash
 # Simple debate
-npm run dev:cli -- debate "Design a secure authentication system"
+dialectic debate "Design a secure authentication system"
 
 # Debate with specific agents and output
-npm run dev:cli -- debate "Design a microservices architecture" \
+dialectic debate "Design a microservices architecture" \
   --agents architect,performance,security \
   --rounds 5 \
   --output solution.txt \
@@ -179,10 +181,10 @@ npm run dev:cli -- debate "Design a microservices architecture" \
   --verbose
 
 # From a problem file
-npm run dev:cli -- debate --problemDescription problem.txt
+dialectic debate --problemDescription problem.txt
 
 # With interactive clarifications
-npm run dev:cli -- debate "Design a distributed cache" --clarify
+dialectic debate "Design a distributed cache" --clarify
 ```
 
 ### Web User Interface
@@ -222,27 +224,7 @@ For production deployments, set this to your API server's URL (e.g., `https://ap
 
 For comprehensive details on running the web components, including production builds and configuration options, see [AGENTS.md](AGENTS.md#web-components).
 
-### Web API Endpoints
-
-The Web API provides REST endpoints for interacting with debates:
-
-**POST `/api/debates/:id/feedback`**
-- Description: Submit user feedback for a completed debate
-- Request body: `{ feedback: number }` where `feedback` is `1` (positive) or `-1` (negative)
-- Response: `{ success: true, message: "Feedback submitted successfully" }`
-- Status codes: `200` (success), `400` (invalid feedback), `404` (debate not found)
-
-**GET `/api/debates/:id/download`**
-- Description: Download the complete debate JSON file
-- Response: JSON file with `Content-Disposition: attachment`
-- Status codes: `200` (success), `404` (debate not found)
-- File includes: All debate state including rounds, contributions, solution, and user feedback (if provided)
-- Filename: `{debateId}.json`
-
-**User Feedback Persistence:**
-- User feedback is saved to the debate JSON file and included in downloaded files
-- Feedback values: `1` for positive (thumb-up), `-1` for negative (thumb-down)
-- The `userFeedback` property is stored in the debate state JSON file
+For Web API endpoints documentation, see [docs/operation.md](docs/operation.md#web-api-endpoints).
 
 ## Commands
 
@@ -259,7 +241,7 @@ For detailed command documentation, including all options and examples, see [doc
 The `debate` command orchestrates a multi-agent debate to solve a software design problem. You provide a problem statement (either inline or from a file), and multiple AI agents with different perspectives debate the problem through structured rounds. Each round consists of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
 
 ```bash
-npm run dev:cli -- debate "Design a rate limiting system" --rounds 3 --verbose
+dialectic debate "Design a rate limiting system" --rounds 3 --verbose
 ```
 
 ### Evaluator Command
@@ -267,7 +249,7 @@ npm run dev:cli -- debate "Design a rate limiting system" --rounds 3 --verbose
 The `eval` command evaluates a completed debate using evaluator agents. This allows you to assess the quality and effectiveness of a debate's outcome by running specialized evaluator agents that analyze the debate process and final solution.
 
 ```bash
-npm run dev:cli -- eval --config eval-config.json --debate ./debates/my-debate.json
+dialectic eval --config eval-config.json --debate ./debates/my-debate.json
 ```
 
 ### Report Command
@@ -275,7 +257,7 @@ npm run dev:cli -- eval --config eval-config.json --debate ./debates/my-debate.j
 The `report` command generates a comprehensive markdown report from a saved debate state JSON file. This is useful for creating detailed reports from previously completed debates.
 
 ```bash
-npm run dev:cli -- report --debate ./debates/my-debate.json --output report.md
+dialectic report --debate ./debates/my-debate.json --output report.md
 ```
 
 ## Configuration

@@ -304,6 +304,28 @@ netstat -ano | findstr :3001
 taskkill /PID <PID> /F
 ```
 
+## Web API Endpoints
+
+The Web API provides REST endpoints for interacting with debates:
+
+**POST `/api/debates/:id/feedback`**
+- Description: Submit user feedback for a completed debate
+- Request body: `{ feedback: number }` where `feedback` is `1` (positive) or `-1` (negative)
+- Response: `{ success: true, message: "Feedback submitted successfully" }`
+- Status codes: `200` (success), `400` (invalid feedback), `404` (debate not found)
+
+**GET `/api/debates/:id/download`**
+- Description: Download the complete debate JSON file
+- Response: JSON file with `Content-Disposition: attachment`
+- Status codes: `200` (success), `404` (debate not found)
+- File includes: All debate state including rounds, contributions, solution, and user feedback (if provided)
+- Filename: `{debateId}.json`
+
+**User Feedback Persistence:**
+- User feedback is saved to the debate JSON file and included in downloaded files
+- Feedback values: `1` for positive (thumb-up), `-1` for negative (thumb-down)
+- The `userFeedback` property is stored in the debate state JSON file
+
 ### Getting Help
 
 - Check the [commands documentation](./commands.md) for CLI options
