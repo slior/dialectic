@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { debateCommand, loadConfig as loadDebateConfig } from './commands/debate';
 import { evalCommand } from './commands/eval';
 import { reportCommand } from './commands/report';
@@ -23,6 +25,25 @@ export function infoUser(message: string): void {
   logInfo(message);
 }
 
+/**
+ * Gets the package version from package.json.
+ * Works in both published packages and development/linked scenarios.
+ * 
+ * @returns The version string from package.json, or 'unknown' if not found.
+ */
+function getPackageVersion(): string {
+  try {
+    // When compiled: __dirname is dist/, so ../package.json is correct
+    // When published: __dirname is node_modules/dialectic/dist/, so ../package.json works
+    // When linked: same as published
+    const packageJsonPath = join(__dirname, '../package.json');
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+    return packageJson.version || 'unknown';
+  } catch (error) {
+    // Fallback for edge cases (shouldn't happen in normal usage)
+    return 'unknown';
+  }
+}
 
 /**
  * Runs the CLI for the multi-agent debate system.
@@ -36,7 +57,7 @@ export function infoUser(message: string): void {
  */
 export async function runCli(argv: string[]) {
   const program = new Command();
-  program.name(PROGRAM_NAME).description('Multi-agent debate system').version('0.1.0');
+  program.name(PROGRAM_NAME).description('Multi-agent debate system').version(getPackageVersion());
 
   // Register commands
   debateCommand(program);
