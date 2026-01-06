@@ -47,7 +47,7 @@ If `publish_core` is `true`:
 2. **Update core version**
    - Run `npm version <core_version_bump>` (e.g., `npm version patch`)
    - This updates `packages/core/package.json` version field
-   - This also creates a git tag (if in a git repository)
+   - Note: `npm version` may attempt to create a git tag, but we will create a single tag matching the CLI version later
 
 3. **Get new core version**
    - Read the new version from `packages/core/package.json`
@@ -68,6 +68,14 @@ If `publish_core` is `true`:
    - Update to match the newly published core version
    - Save the updated `package.json`
 
+7. **Commit core version changes (no tag yet)**
+   - From project root, stage the version changes:
+     - `packages/core/package.json`
+     - `packages/cli/package.json` (if dependency was updated)
+     - `package-lock.json` (if it was modified)
+   - Commit with message: `"chore: bump dialectic-core to <CORE_VERSION> and update CLI dependency"`
+   - **Note**: Do not create a git tag here. A single tag matching the CLI version will be created after all commits are done.
+
 ### Step 3: Build CLI Package
 
 1. **Build CLI package**
@@ -85,8 +93,24 @@ If `publish_core` is `true`:
      - Update CLI version using `npm version <cli_version_bump>`
      - Build the CLI package
      - Publish to npm with `--access public`
+   - Note: The script runs `npm version` which may create a git tag, but if the working directory isn't clean, it won't
 
-2. **Verify success**
+2. **Commit CLI version changes (if needed)**
+   - Check if `packages/cli/package.json` has uncommitted changes
+   - If changes exist:
+     - Read the new CLI version from `packages/cli/package.json`
+     - From project root, stage the version changes:
+       - `packages/cli/package.json`
+       - `package-lock.json` (if it was modified)
+     - Commit with message: `"chore: bump dialectic CLI to <CLI_VERSION>"`
+
+3. **Create single git tag matching CLI version**
+   - Read the final CLI version from `packages/cli/package.json`
+   - From project root, create annotated git tag: `git tag -a "v<CLI_VERSION>" -m "Release dialectic@<CLI_VERSION>"`
+   - Verify tag was created: `git tag --list | grep "v<CLI_VERSION>"`
+   - **Note**: This is the only git tag created, matching the CLI package version
+
+4. **Verify success**
    - Check that the script exits with success code
    - Display the published version to the user
 
@@ -125,6 +149,10 @@ When executing this command, follow these steps precisely:
      - Read the file
      - Update `dependencies["dialectic-core"]` to `"^<new_core_version>"`
      - Write the file back
+   - **Commit core version changes (no tag yet):**
+     - From project root, stage: `packages/core/package.json`, `packages/cli/package.json`, `package-lock.json`
+     - Commit: `git commit -m "chore: bump dialectic-core to <new_core_version> and update CLI dependency"`
+     - **Note**: Do not create a tag here. A single tag matching the CLI version will be created after all commits are done.
 
 3. **Build CLI**
    - From project root, run: `npm run build:cli`
@@ -135,6 +163,17 @@ When executing this command, follow these steps precisely:
    - Or: `./scripts/publish-cli.sh <cli_version_bump>` (if executable)
    - Use absolute path resolution if needed
    - Ensure script has proper permissions
+   - **After script completes, commit CLI version changes (if needed):**
+     - Check if `packages/cli/package.json` has uncommitted changes
+     - If changes exist:
+       - Read new CLI version from `packages/cli/package.json`
+       - From project root, stage: `packages/cli/package.json`, `package-lock.json`
+       - Commit: `git commit -m "chore: bump dialectic CLI to <new_cli_version>"`
+   - **Create single git tag matching CLI version:**
+     - Read final CLI version from `packages/cli/package.json`
+     - From project root, create tag: `git tag -a "v<new_cli_version>" -m "Release dialectic@<new_cli_version>"`
+     - Verify: `git tag --list | grep "v<new_cli_version>"`
+     - **Note**: This is the only git tag created, matching the CLI package version
 
 ## Error Handling
 
@@ -156,8 +195,11 @@ Provide clear output at each step:
 - "Building dialectic-core..."
 - "Published dialectic-core@<version>"
 - "Updating CLI dependency on dialectic-core to ^<version>..."
+- "Committing core version changes..."
 - "Building CLI package..."
 - "Publishing dialectic CLI with <version_bump> bump..."
+- "Committing CLI version changes..."
+- "Creating git tag v<cli_version> (matching CLI package version)..."
 - "Published dialectic@<version>"
 
 ## Example Usage
@@ -194,7 +236,10 @@ Publish packages with:
 
 ## Notes
 
-- The `npm version` command creates git tags automatically
+- The `npm version` command may create git tags automatically, but only if the working directory is clean
+- **Important**: This command explicitly commits version changes and creates a **single git tag** matching the CLI package version after all commits are done
+- **Tag Strategy**: Only one git tag is created per release, matching the CLI package version (e.g., `v0.5.2`). This tag is created after all version commits are complete, regardless of whether core was also published
 - The CLI package depends on `dialectic-core`, so core must be published first if it changed
 - Version bumps follow semantic versioning (major.minor.patch)
 - The publish script (`scripts/publish-cli.sh`) handles CLI-specific publishing logic
+- The git tag is created as an annotated tag with a descriptive message for better version tracking
