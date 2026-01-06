@@ -1,6 +1,42 @@
 # Changelog
 
 
+
+## [0.5.1]
+
+### Added
+- **Web Application**: Added complete web UI (Next.js) and API (NestJS) for running debates through a browser interface
+- **Data Modeling Agent**: Added Data Modeling Agent role with specialized prompts for data and domain modeling perspectives
+- **User Feedback**: Implemented user feedback functionality allowing users to provide feedback during debates
+- **Docker Support**: Added Docker support with Dockerfile and docker-compose.yml for easy deployment
+- **Package Publishing**: Added publish-packages command and CLI publish script for streamlined npm publishing
+- **Package Version Retrieval**: Added package version retrieval functionality in CLI
+- **Web UI Features**: Added connection status handling, copy-to-clipboard functionality, resizable panels, and rounds configuration UI
+- **Repository Organization**: Added repository organization documentation and Cursor commands for development workflow
+- **Setup Commands**: Added setup commands for problem and test generation
+- **CHANGELOG**: Added CHANGELOG.md file for tracking version history
+
+### Changed
+- **Package Structure**: Refactored from `src/` to monorepo structure with `packages/` (cli, core, web-api, web-ui)
+- **Package Imports**: Refactored package imports from `@dialectic/core` to `dialectic-core`
+- **Requirements Evaluation**: Emphasized requirements fulfillment and enhanced evaluation capabilities
+- **Test Coverage**: Increased test coverage and added unit test mock cleanup rules
+- **Agent Configuration**: Enhanced debate agent configuration and validation
+- **Real-time Updates**: Implemented real-time display of contributions via WebSocket
+- **Progress Display**: Added debate progress display in server console
+
+### Fixed
+- **Requirements Parsing**: Fixed resolving requirements parsing from debate contributions
+- **Clarifications Panel**: Fixed duplicate keys bug in ClarificationsPanel answers
+- **Socket Connection**: Fixed socket connection handling in Dashboard
+
+### Documentation
+- **Web Flow**: Added comprehensive web debate flow documentation
+- **Configuration**: Updated configuration documentation
+- **Repository Organization**: Added repository organization documentation
+
+---
+
 ## [0.4.0]
 
 ### Added
