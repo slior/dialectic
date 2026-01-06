@@ -23,7 +23,8 @@ const ERROR_ENV_FILE_LOAD_FAILED = 'Failed to load environment file';
  */
 export function loadEnvironmentFile(envFilePath?: string, verbose?: boolean): void {
   const fileName = envFilePath || DEFAULT_ENV_FILENAME;
-  const resolvedPath = path.resolve(process.cwd(), fileName);
+  const baseDir = process.env.INIT_CWD || process.cwd();
+  const resolvedPath = path.resolve(baseDir, fileName);
   const isDefaultFile = !envFilePath;
 
   if (!fs.existsSync(resolvedPath)) {

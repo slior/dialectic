@@ -37,6 +37,23 @@ const JSON_EXTENSION = '.json';
 const CSV_EXTENSION = '.csv';
 
 /**
+ * Resolves a file path relative to the workspace root (original working directory).
+ *
+ * npm sets INIT_CWD to the original working directory before workspace commands change cwd.
+ * This function uses that value if available, otherwise falls back to process.cwd().
+ * Absolute paths are returned as-is, relative paths are resolved against the base directory.
+ *
+ * @param {string} filePath - The file path to resolve (absolute or relative).
+ * @returns {string} The resolved absolute path.
+ */
+function resolveFilePath(filePath: string): string {
+  // npm sets INIT_CWD to the original working directory before workspace commands change cwd
+  const baseDir = process.env.INIT_CWD || process.cwd();
+  // Resolve path relative to original working directory (workspace root)
+  return path.isAbsolute(filePath) ? filePath : path.resolve(baseDir, filePath);
+}
+
+/**
  * Result of loading an evaluator configuration file.
  */
 type LoadedEvaluatorConfig = {
@@ -320,11 +337,18 @@ async function writeEvaluationResults(
   outputPath: string | undefined,
   debatePath: string
 ): Promise<void> {
-  const resolvedPath = outputPath ? path.resolve(process.cwd(), outputPath) : undefined;
+  const resolvedPath = outputPath ? resolveFilePath(outputPath) : undefined;
   
   if (resolvedPath && resolvedPath.toLowerCase().endsWith(JSON_EXTENSION)) {
     const jsonOut = buildAggregatedJsonOutput(aggregatedAverages, perAgentResults);
-    await fs.promises.writeFile(resolvedPath, JSON.stringify(jsonOut, null, JSON_INDENT_SPACES), FILE_ENCODING_UTF8);
+    try {
+      // Ensure parent directory exists
+      const parentDir = path.dirname(resolvedPath);
+      await fs.promises.mkdir(parentDir, { recursive: true });
+      await fs.promises.writeFile(resolvedPath, JSON.stringify(jsonOut, null, JSON_INDENT_SPACES), FILE_ENCODING_UTF8);
+    } catch (writeErr: any) {
+      throw writeErr;
+    }
   } else if (resolvedPath && resolvedPath.toLowerCase().endsWith(CSV_EXTENSION)) {
     await writeCsvOutput(resolvedPath, debatePath, aggregatedAverages);
   } else {
@@ -364,12 +388,12 @@ async function writeEvaluationResults(
  *   - The agents array is missing, not an array, or has zero entries.
  */
 function loadEvaluatorConfig(configPath: string): LoadedEvaluatorConfig {
-  const abs = path.resolve(process.cwd(), configPath);
-  const cfg = readJsonFile<any>(configPath, 'Evaluator config file');
+  const resolvedPath = resolveFilePath(configPath);
+  const cfg = readJsonFile<any>(resolvedPath, 'Evaluator config file');
   if (!cfg || !Array.isArray(cfg.agents) || cfg.agents.length === 0) {
     throw createValidationError('Invalid evaluator config: agents array required (length >= 1)', EXIT_INVALID_ARGS);
   }
-  const configDir = path.dirname(abs);
+  const configDir = path.dirname(resolvedPath);
   const agents: EvaluatorConfig[] = cfg.agents.map((a: unknown) => {
     // Type guard and validation for raw agent config
     if (!a || typeof a !== 'object') {
@@ -428,7 +452,8 @@ function loadAndValidateEnabledAgents(configPath: string): { enabledAgents: Eval
  *   - The finalSolution.description field is missing or empty.
  */
 function loadAndValidateDebateState(debatePath: string): EvaluatorInputs {
-  const debate: DebateState = readJsonFile<DebateState>(debatePath, 'Debate file');
+  const resolvedPath = resolveFilePath(debatePath);
+  const debate: DebateState = readJsonFile<DebateState>(resolvedPath, 'Debate file');
   const problem = (debate.problem || '').trim();
   const finalSolution = (debate.finalSolution && debate.finalSolution.description || '').trim();
   if (!problem) throw createValidationError('Invalid debate JSON: missing non-empty problem', EXIT_INVALID_ARGS);

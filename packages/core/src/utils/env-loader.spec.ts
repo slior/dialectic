@@ -37,11 +37,15 @@ const WARNING_MESSAGE_NO_ENV_FILE = 'No .env file found at';
 
 describe('env-loader', () => {
   let originalEnv: NodeJS.ProcessEnv;
+  let originalInitCwd: string | undefined;
   let stderrSpy: jest.SpyInstance;
 
   beforeEach(() => {
     originalEnv = process.env;
+    originalInitCwd = process.env.INIT_CWD;
     process.env = { ...originalEnv };
+    // Clear INIT_CWD so tests use process.cwd() instead
+    delete process.env.INIT_CWD;
     stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     
     // Reset mocks
@@ -53,12 +57,20 @@ describe('env-loader', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    if (originalInitCwd !== undefined) {
+      process.env.INIT_CWD = originalInitCwd;
+    }
     stderrSpy.mockRestore();
   });
 
   describe('loading default .env file', () => {
     beforeEach(() => {
-      process.cwd = jest.fn().mockReturnValue(MOCK_CWD_DEFAULT);
+      // Use INIT_CWD to bypass process.cwd() mocking issues
+      process.env.INIT_CWD = MOCK_CWD_DEFAULT;
+    });
+
+    afterEach(() => {
+      delete process.env.INIT_CWD;
     });
 
     it('should load default .env file when it exists', () => {
@@ -96,7 +108,12 @@ describe('env-loader', () => {
 
   describe('loading custom env file', () => {
     beforeEach(() => {
-      process.cwd = jest.fn().mockReturnValue(MOCK_CWD_DEFAULT);
+      // Use INIT_CWD to bypass process.cwd() mocking issues
+      process.env.INIT_CWD = MOCK_CWD_DEFAULT;
+    });
+
+    afterEach(() => {
+      delete process.env.INIT_CWD;
     });
 
     it('should load custom env file when it exists', () => {
@@ -133,7 +150,8 @@ describe('env-loader', () => {
 
   describe('path resolution', () => {
     it('should resolve paths relative to process.cwd()', () => {
-      process.cwd = jest.fn().mockReturnValue(MOCK_CWD_PROJECT);
+      // Use INIT_CWD to bypass process.cwd() mocking issues
+      process.env.INIT_CWD = MOCK_CWD_PROJECT;
       mockedFs.existsSync.mockReturnValue(true);
       mockedDotenv.config.mockReturnValue({ parsed: {} } as any);
 
@@ -141,6 +159,8 @@ describe('env-loader', () => {
 
       expect(mockedPath.resolve).toHaveBeenCalledWith(MOCK_CWD_PROJECT, CONFIG_ENV_FILE);
       expect(mockedFs.existsSync).toHaveBeenCalledWith(`${MOCK_RESOLVED_PREFIX}${CONFIG_ENV_FILE}`);
+      
+      delete process.env.INIT_CWD;
     });
   });
 

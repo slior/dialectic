@@ -48,10 +48,10 @@ export async function runCli(argv: string[]) {
 
 // If called directly from node
 if (require.main === module) {
-  runCli(process.argv.slice(2)).catch((err: any) => {
+  runCli(process.argv.slice(2)).catch((err: unknown) => {
     // Map generic error when not already code-tagged
-    const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
-    const msg = err?.message || 'Unknown error';
+    const code = (err && typeof err === 'object' && 'code' in err && typeof err.code === 'number') ? err.code : EXIT_GENERAL_ERROR;
+    const msg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Unknown error';
     process.stderr.write(msg + '\n');
     process.exit(code);
   });

@@ -38,7 +38,7 @@ const REQUIREMENTS_COVERAGE_SECTION_REGEX: RegExp = (() => {
     .map(escapeRegExp)
     .join('\\s*');
 
-  return new RegExp(`##\\s*${sectionTitlePattern}\\s*\\n\\n([\\s\\S]*?)(?=\\n##|\\n---|$)`, 'i');
+  return new RegExp(`#+\\s*${sectionTitlePattern}\\s*\\n+([\\s\\S]*?)(?=\\n##|\\n---|$)`, 'i');
 })();
 
 /**
