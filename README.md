@@ -199,18 +199,6 @@ The Web UI provides an interactive dashboard for running debates:
 - **User Feedback**: Provide feedback on completed debates using thumb-up (positive) or thumb-down (negative) buttons
 - **Download Debate**: Download the complete debate JSON file, including all contributions, rounds, and user feedback (if provided)
 
-Start the Web UI:
-```bash
-# Start both servers with one command
-npm run dev:web
-
-# Or start separately:
-npm run dev:api  # API server (port 3001)
-npm run dev:ui   # UI server (port 3000)
-```
-
-Then open http://localhost:3000 in your browser.
-
 **Configuration:**
 
 The Web UI connects to the API server via WebSocket. By default, it connects to `http://localhost:3001`. To configure a different API URL, set the `NEXT_PUBLIC_API_URL` environment variable:
