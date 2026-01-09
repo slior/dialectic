@@ -1,0 +1,35 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "web-api",
+  "sourceRoot": "packages/web-api/src",
+  "projectType": "application",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint \"src/**/*.ts\" --config ../../eslint.config.js",
+        "cwd": "packages/web-api"
+      },
+      "cache": true,
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/eslint.config.js"
+      ]
+    },
+    "lint:fix": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint \"src/**/*.ts\" --config ../../eslint.config.js --fix",
+        "cwd": "packages/web-api"
+      },
+      "cache": false,
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/eslint.config.js"
+      ]
+    }
+  },
+  "tags": ["scope:web-api", "type:application"]
+}

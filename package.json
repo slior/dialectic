@@ -23,6 +23,7 @@
     "test:cli": "npm run test -w dialectic",
     "test:cli:coverage": "npm run test:coverage -w dialectic",
     "lint": "nx run-many -t lint",
+    "lint:fix": "eslint \"packages/*/src/**/*.ts\" --fix --config eslint.config.js",
     "clean:cache": "nx reset"
   },
   "repository": {
@@ -39,7 +40,12 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@eslint/js": "^8.57.0",
     "concurrently": "^8.2.2",
-    "nx": "^19.8.0"
+    "eslint": "^8.57.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-sonarjs": "^1.0.0",
+    "nx": "^19.8.0",
+    "typescript-eslint": "^7.0.0"
   }
 }

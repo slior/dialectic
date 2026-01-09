@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+
+import { Command } from 'commander';
+import { EXIT_GENERAL_ERROR, logInfo, logWarning } from 'dialectic-core';
+
 import { debateCommand, loadConfig as loadDebateConfig } from './commands/debate';
 import { evalCommand } from './commands/eval';
 import { reportCommand } from './commands/report';
-import { EXIT_GENERAL_ERROR, logInfo, logWarning } from 'dialectic-core';
 
 export const PROGRAM_NAME = 'dialectic';
 

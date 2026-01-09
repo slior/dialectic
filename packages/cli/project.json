@@ -31,13 +31,27 @@
     "lint": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "eslint . --ext .ts",
+        "command": "eslint \"src/**/*.ts\" --config ../../eslint.config.js",
         "cwd": "packages/cli"
       },
       "cache": true,
       "inputs": [
         "default",
-        "^default"
+        "^default",
+        "{workspaceRoot}/eslint.config.js"
+      ]
+    },
+    "lint:fix": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint \"src/**/*.ts\" --config ../../eslint.config.js --fix",
+        "cwd": "packages/cli"
+      },
+      "cache": false,
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/eslint.config.js"
       ]
     }
   },

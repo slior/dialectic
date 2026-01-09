@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { Command } from 'commander';
 
 // Import from dialectic-core

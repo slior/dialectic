@@ -1,5 +1,6 @@
-import { DebateProgressUI } from './progress-ui';
 import { MessageType, MESSAGE_ICONS, CONTRIBUTION_TYPES } from 'dialectic-core';
+
+import { DebateProgressUI } from './progress-ui';
 
 // Test constants
 const DEFAULT_TOTAL_ROUNDS = 3;

@@ -1,8 +1,11 @@
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
-import { runCli } from '../index';
+import path from 'path';
+
 import { EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EvaluatorAgent, loadEnvironmentFile } from 'dialectic-core';
+
+import { runCli } from '../index';
+
 
 // Test constants
 const TEST_PROBLEM = 'Test problem';

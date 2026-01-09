@@ -1,11 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
-import { Command } from 'commander';
-import { warnUser, infoUser } from '../index';
-import { DebateProgressUI } from '../utils/progress-ui';
 
-// Import everything from dialectic-core
+import { Command } from 'commander';
 import {
   // Exit codes
   EXIT_INVALID_ARGS,
@@ -68,6 +65,11 @@ import {
   buildTraceTags,
   formatTraceNameWithTimestamp,
 } from 'dialectic-core';
+
+import { warnUser, infoUser } from '../index';
+import { DebateProgressUI } from '../utils/progress-ui';
+
+// Import everything from dialectic-core
 
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), 'debate-config.json');
 const DEFAULT_ROUNDS = 3;

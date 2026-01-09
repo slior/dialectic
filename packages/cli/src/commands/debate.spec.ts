@@ -1,10 +1,14 @@
 
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import fs from 'fs';
-import { runCli } from '../index';
+
 import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR, loadEnvironmentFile, RoleBasedAgent, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, 
   DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, collectClarifications, generateDebateReport } from 'dialectic-core';
+
+import { runCli } from '../index';
+
+
 import { loadConfig } from './debate';
 
 

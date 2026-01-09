@@ -1,7 +1,7 @@
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
-import { runCli } from '../index';
+import path from 'path';
+
 import { 
   EXIT_INVALID_ARGS, 
   DebateState, 
@@ -12,6 +12,9 @@ import {
   SystemConfig,
   LLM_PROVIDERS
 } from 'dialectic-core';
+
+import { runCli } from '../index';
+
 
 // Mock env-loader
 jest.mock('dialectic-core', () => {
