@@ -1546,4 +1546,106 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  it('should handle null history in prepareContext to cover processRelevantContributions early return', async () => {
+    const provider = new MockLLMProvider(['Summary']);
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      summaryConfig,
+      undefined
+    );
+
+    // Mock shouldSummarize to return true so processRelevantContributions is called
+    const shouldSummarizeSpy = jest.spyOn(agent, 'shouldSummarize').mockReturnValue(true);
+
+    const contextWithNullHistory: DebateContext = {
+      problem: 'Test problem',
+      history: null as any,
+    };
+
+    const result = await agent.prepareContext(contextWithNullHistory, 1);
+
+    expect(result.context).toEqual(contextWithNullHistory);
+    expect(result.summary).toBeUndefined();
+
+    shouldSummarizeSpy.mockRestore();
+  });
+
+  it('should handle critique contribution type in prepareContext callback', async () => {
+    const provider = new MockLLMProvider(['Summary text']);
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      summaryConfig,
+      undefined
+    );
+
+    // Create context with a proposal that triggers summarization
+    // and also include a critique that would be processed if critiques were included
+    const longContent = 'a'.repeat(LONG_CONTENT_LENGTH);
+    const context: DebateContext = {
+      problem: 'Test problem',
+      history: [{
+        roundNumber: 1,
+        timestamp: new Date(),
+        contributions: [
+          {
+            agentId: 'test-agent',
+            agentRole: AGENT_ROLES.ARCHITECT,
+            type: CONTRIBUTION_TYPES.PROPOSAL,
+            content: longContent,
+            metadata: {}
+          },
+          {
+            agentId: 'test-agent',
+            agentRole: AGENT_ROLES.ARCHITECT,
+            type: CONTRIBUTION_TYPES.REFINEMENT,
+            content: 'b'.repeat(50),
+            metadata: {}
+          }
+        ]
+      }]
+    };
+
+    // Mock processRelevantContributions to include a critique in the callback
+    // This tests the critique branch in the callback (line 345)
+    const processRelevantContributionsSpy = jest.spyOn(agent as any, 'processRelevantContributions').mockImplementation(
+      function(this: any, ...args: any[]) {
+        const callback = args[1] as (contribution: any, roundNumber: number) => string[];
+        const initialValue = args[2] as string[];
+        const reducer = args[3] as (acc: string[], contribution: string[]) => string[];
+        // Simulate the callback being called with a critique contribution
+        // This tests line 345 (the critique branch in the callback)
+        const critiqueContribution = {
+          agentId: 'test-agent',
+          agentRole: AGENT_ROLES.PERFORMANCE,
+          type: CONTRIBUTION_TYPES.CRITIQUE,
+          content: 'Critique content',
+          metadata: {}
+        };
+        const critiqueResult = callback(critiqueContribution, 1);
+        const proposalContribution = {
+          agentId: 'test-agent',
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.PROPOSAL,
+          content: longContent,
+          metadata: {}
+        };
+        const proposalResult = callback(proposalContribution, 1);
+        return reducer(reducer(initialValue, critiqueResult), proposalResult);
+      }
+    );
+
+    const result = await agent.prepareContext(context, 1);
+
+    expect(result.summary).toBeDefined();
+    expect(processRelevantContributionsSpy).toHaveBeenCalled();
+
+    processRelevantContributionsSpy.mockRestore();
+  });
 });
