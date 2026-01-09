@@ -2,13 +2,12 @@ import fs from 'fs';
 import path from 'path';
 
 import { Command } from 'commander';
-
-// Import from dialectic-core
 import {
   writeStderr,
   loadEnvironmentFile,
   EXIT_INVALID_ARGS,
   EXIT_GENERAL_ERROR,
+  ErrorWithCode,
   EvaluatorConfig,
   EvaluatorInputs,
   ParsedEvaluation,
@@ -27,6 +26,7 @@ import {
   createValidationError,
   readJsonFile,
   readBuiltInPrompt,
+  AgentClarifications,
 } from 'dialectic-core';
 
 import { extractRequirementsInfo } from './eval-requirements';
@@ -65,6 +65,40 @@ type LoadedEvaluatorConfig = {
 };
 
 /**
+ * Formats a single clarification item as Markdown.
+ * 
+ * @param item - The clarification item containing id, question, and answer
+ * @returns Markdown string for the clarification item, or empty string if item is invalid
+ */
+function formatClarificationItemMarkdown(item: { id?: string; question?: string; answer?: string }): string {
+  // Skip invalid items
+  if (!item || !item.id || !item.question || item.answer === undefined) {
+    return '';
+  }
+  
+  return `Question (${item.id}):\n\n\`\`\`text\n${item.question}\n\`\`\`\n\nAnswer:\n\n\`\`\`text\n${item.answer}\n\`\`\`\n\n`;
+}
+
+/**
+ * Formats a clarification group (agent's questions and answers) as Markdown.
+ * 
+ * @param group - The clarification group containing agentName, role, and items
+ * @returns Markdown string for the clarification group, or empty string if group is invalid
+ */
+function formatClarificationGroupMarkdown(group: AgentClarifications): string {
+  // Skip invalid groups
+  if (!group || !group.agentName || !group.role || group.items.length === 0) {
+    return '';
+  }
+  
+  let out = `### ${group.agentName} (${group.role})\n`;
+  for (const item of group.items) {
+    out += formatClarificationItemMarkdown(item);
+  }
+  return out;
+}
+
+/**
  * Builds a Markdown-formatted string representing all clarifications exchanged during a debate.
  *
  * The output contains a sequence of agent clarification sections. Each section begins with an
@@ -99,19 +133,7 @@ function buildClarificationsMarkdown(state: DebateState): string {
   
   let out = '';
   for (const group of state.clarifications) {
-    // Skip invalid groups
-    if (!group || !group.agentName || !group.role || !group.items || group.items.length === 0) {
-      continue;
-    }
-    out += `### ${group.agentName} (${group.role})\n`;
-    for (const item of group.items) {
-      // Skip invalid items
-      if (!item || !item.id || !item.question || item.answer === undefined) {
-        continue;
-      }
-      out += `Question (${item.id}):\n\n\`\`\`text\n${item.question}\n\`\`\`\n\n`;
-      out += `Answer:\n\n\`\`\`text\n${item.answer}\n\`\`\`\n\n`;
-    }
+    out += formatClarificationGroupMarkdown(group);
   }
   
   // Return formatted output, or empty code blocks if nothing was added
@@ -132,7 +154,7 @@ function buildClarificationsMarkdown(state: DebateState): string {
  * @param {string} text - The input string to search for a JSON object.
  * @returns {Record<string, any> | null} The parsed object if successful, or null if parsing fails.
  */
-function parseFirstJsonObject(text: string): Record<string, any> | null {
+function parseFirstJsonObject(text: string): Record<string, unknown> | null {
   const match = text.match(/\{[\s\S]*\}/);
   const json = match ? match[0] : text;
   try {
@@ -155,7 +177,7 @@ function parseFirstJsonObject(text: string): Record<string, any> | null {
  * @param {string} warnLabel - The label used in warnings, describing the metric or field involved.
  * @param {string} agentId - The agent identifier used in warning messages.
  */
-function pushIfValid(arr: number[], v: unknown, warnLabel: string, agentId: string) {
+function pushIfValid(arr: number[], v: unknown, warnLabel: string, agentId: string): void {
   const n = numOrUndefined(v);
   if (n === undefined) {
     writeStderr(`[${agentId}] Invalid or missing numeric score for ${warnLabel}; ignoring\n`);
@@ -189,7 +211,7 @@ function pushIfValid(arr: number[], v: unknown, warnLabel: string, agentId: stri
  * @returns {string} The markdown table as a string.
  */
 function renderMarkdownTable(agg: AggregatedAverages): string {
-  const f = (v: number | null) => v == null ? 'N/A' : v.toFixed(2);
+  const f = (v: number | null): string => v == null ? 'N/A' : v.toFixed(2);
   let table = '';
   table += `| Functional Completeness | Performance & Scalability | Security | Maintainability & Evolvability | Regulatory Compliance | Testability | Requirements Fulfillment | Overall Score |\n`;
   table += `|------------------------|---------------------------|----------|-------------------------------|------------------------|------------|-------------------------|---------------|\n`;
@@ -342,14 +364,10 @@ async function writeEvaluationResults(
   
   if (resolvedPath && resolvedPath.toLowerCase().endsWith(JSON_EXTENSION)) {
     const jsonOut = buildAggregatedJsonOutput(aggregatedAverages, perAgentResults);
-    try {
-      // Ensure parent directory exists
-      const parentDir = path.dirname(resolvedPath);
-      await fs.promises.mkdir(parentDir, { recursive: true });
-      await fs.promises.writeFile(resolvedPath, JSON.stringify(jsonOut, null, JSON_INDENT_SPACES), FILE_ENCODING_UTF8);
-    } catch (writeErr: any) {
-      throw writeErr;
-    }
+    // Ensure parent directory exists
+    const parentDir = path.dirname(resolvedPath);
+    await fs.promises.mkdir(parentDir, { recursive: true });
+    await fs.promises.writeFile(resolvedPath, JSON.stringify(jsonOut, null, JSON_INDENT_SPACES), FILE_ENCODING_UTF8);
   } else if (resolvedPath && resolvedPath.toLowerCase().endsWith(CSV_EXTENSION)) {
     await writeCsvOutput(resolvedPath, debatePath, aggregatedAverages);
   } else {
@@ -390,11 +408,12 @@ async function writeEvaluationResults(
  */
 function loadEvaluatorConfig(configPath: string): LoadedEvaluatorConfig {
   const resolvedPath = resolveFilePath(configPath);
-  const cfg = readJsonFile<any>(resolvedPath, 'Evaluator config file');
+  const cfg = readJsonFile<{ agents: unknown[] }>(resolvedPath, 'Evaluator config file');
   if (!cfg || !Array.isArray(cfg.agents) || cfg.agents.length === 0) {
     throw createValidationError('Invalid evaluator config: agents array required (length >= 1)', EXIT_INVALID_ARGS);
   }
   const configDir = path.dirname(resolvedPath);
+  // eslint-disable-next-line complexity
   const agents: EvaluatorConfig[] = cfg.agents.map((a: unknown) => {
     // Type guard and validation for raw agent config
     if (!a || typeof a !== 'object') {
@@ -481,7 +500,7 @@ function loadAndValidateDebateState(debatePath: string): EvaluatorInputs {
  * @param {string} agentId - The agent identifier used in warning messages.
  * @returns {ParsedEvaluation | null} The parsed evaluation object, or null if validation/parsing failed.
  */
-function validateAndParseEvaluatorResult(result: PromiseSettledResult<any>, agentId: string): ParsedEvaluation | null {
+function validateAndParseEvaluatorResult(result: PromiseSettledResult<{ rawText: string }>, agentId: string): ParsedEvaluation | null {
   if (!isFulfilled(result)) {
     writeStderr(`[${agentId}] Skipped due to error\n`);
     return null;
@@ -569,7 +588,7 @@ function buildEvaluatorAgents(enabledAgents: EvaluatorConfig[], configDir: strin
  * Errors:
  *   - Exits with explicit error codes and user-friendly messages on invalid arguments, missing files, or evaluation failures.
  */
-export function evalCommand(program: Command) {
+export function evalCommand(program: Command): void {
   program
     .command('eval')
     .requiredOption('-c, --config <path>', 'Path to evaluator configuration JSON')
@@ -578,14 +597,14 @@ export function evalCommand(program: Command) {
     .option('-v, --verbose', 'Verbose diagnostics')
     .option('-o, --output <path>', 'Output destination (json => aggregated JSON; otherwise Markdown)')
     .description('Evaluate a completed debate using evaluator agents')
-    .action(async (options: any) =>
+    .action(async (options: { config: string; debate: string; envFile?: string; verbose?: boolean; output?: string }) =>
     {
       try {
 
         loadEnvironmentFile(options.envFile, options.verbose);
 
         const { enabledAgents, configDir } = loadAndValidateEnabledAgents(options.config);
-        const evaluators = buildEvaluatorAgents(enabledAgents, configDir, options.verbose);
+        const evaluators = buildEvaluatorAgents(enabledAgents, configDir, options.verbose ?? false);
         const inputs = loadAndValidateDebateState(options.debate);
 
         // Run all in parallel
@@ -638,20 +657,21 @@ export function evalCommand(program: Command) {
         };
 
         await writeEvaluationResults(agg, perAgentParsed, options.output, options.debate);
-      } catch (err: any) {
-        const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
+      } catch (err: unknown) {
+        const errorWithCode = err as ErrorWithCode;
+        const code = (errorWithCode && typeof errorWithCode.code === 'number') ? errorWithCode.code : EXIT_GENERAL_ERROR;
         try {
-          writeStderr((err?.message || 'Unknown error') + '\n');
+          writeStderr((errorWithCode?.message || 'Unknown error') + '\n');
         } catch {
           // Ignore errors from writeStderr to prevent infinite recursion
         }
         // Rethrow for runCli catch to set process exit when direct run
         // Preserve original error if it already has a code, otherwise create new one
-        if (err && typeof err.code === 'number') {
-          throw err;
+        if (errorWithCode && typeof errorWithCode.code === 'number') {
+          throw errorWithCode;
         }
-        const error = new Error(err?.message || 'Unknown error');
-        (error as any).code = code;
+        const error = new Error(errorWithCode?.message || 'Unknown error') as ErrorWithCode;
+        error.code = code;
         throw error;
       }
     });

@@ -1,5 +1,5 @@
 // Core classes
-export { DebateOrchestrator } from './core/orchestrator';
+export { DebateOrchestrator, OrchestratorHooks } from './core/orchestrator';
 export { StateManager } from './core/state-manager';
 export { JudgeAgent } from './core/judge';
 export { Agent, AgentLogger } from './core/agent';
@@ -43,7 +43,7 @@ export { generateDebateReport } from './utils/report-generator';
 export { enhanceProblemWithContext } from './utils/context-enhancer';
 export { formatHistory, formatContextSection, prependContext, formatClarifications } from './utils/context-formatter';
 export { ContextSummarizer, LengthBasedSummarizer } from './utils/context-summarizer';
-export { EXIT_GENERAL_ERROR, EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EXIT_PROVIDER_ERROR } from './utils/exit-codes';
+export { EXIT_GENERAL_ERROR, EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EXIT_PROVIDER_ERROR, ErrorWithCode } from './utils/exit-codes';
 export { logInfo, logSuccess, logWarning, writeStderr, MessageType, MESSAGE_ICONS } from './utils/console';
 export { Logger } from './utils/logger';
 

@@ -10,7 +10,8 @@ import {
   AGENT_ROLES,
   CONTRIBUTION_TYPES,
   SystemConfig,
-  LLM_PROVIDERS
+  LLM_PROVIDERS,
+  DebateRound
 } from 'dialectic-core';
 
 import { runCli } from '../index';
@@ -59,9 +60,9 @@ describe('CLI report command', () => {
     process.env = { ...originalEnv };
     stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined): never => {
       throw new Error(`process.exit: ${code}`);
-    }) as any);
+    });
     mockedLoadEnvironmentFile.mockClear();
     
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'report-test-'));
@@ -75,7 +76,9 @@ describe('CLI report command', () => {
     
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   /**
@@ -151,7 +154,7 @@ describe('CLI report command', () => {
    */
   function getStdoutContent(): string {
     const stdoutCalls = (stdoutSpy as jest.Mock).mock.calls;
-    return stdoutCalls.map((call: any[]) => call[0]).join('');
+    return stdoutCalls.map((call: unknown[]) => call[0] as string).join('');
   }
 
   /**
@@ -245,7 +248,7 @@ describe('CLI report command', () => {
     it('should exit with invalid args when debate JSON has invalid id field', async () => {
       const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
       const invalidState = createMinimalDebateState();
-      invalidState.id = undefined as any;
+      invalidState.id = undefined as unknown as string;
       writeDebateStateToFile(debatePath, invalidState);
 
       await expect(runCli(['report', '--debate', debatePath]))
@@ -255,7 +258,7 @@ describe('CLI report command', () => {
     it('should exit with invalid args when debate JSON has invalid problem field', async () => {
       const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
       const invalidState = createMinimalDebateState();
-      invalidState.problem = undefined as any;
+      invalidState.problem = undefined as unknown as string;
       writeDebateStateToFile(debatePath, invalidState);
 
       await expect(runCli(['report', '--debate', debatePath]))
@@ -265,7 +268,7 @@ describe('CLI report command', () => {
     it('should exit with invalid args when debate JSON has invalid rounds field', async () => {
       const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
       const invalidState = createMinimalDebateState();
-      invalidState.rounds = undefined as any;
+      invalidState.rounds = undefined as unknown as DebateRound[];
       writeDebateStateToFile(debatePath, invalidState);
 
       await expect(runCli(['report', '--debate', debatePath]))

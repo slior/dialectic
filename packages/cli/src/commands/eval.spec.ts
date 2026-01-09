@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EvaluatorAgent, loadEnvironmentFile } from 'dialectic-core';
+import { EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, ErrorWithCode, EvaluatorAgent, loadEnvironmentFile } from 'dialectic-core';
 
 import { runCli } from '../index';
 
@@ -34,7 +34,7 @@ const mockCreateProvider = jest.fn();
 // Mock the provider-factory module using the moduleNameMapper path
 // This needs to happen before dialectic-core is mocked
 jest.mock('dialectic-core/providers/provider-factory', () => ({
-  createProvider: (...args: any[]) => mockCreateProvider(...args)
+  createProvider: (..._args: unknown[]): unknown => mockCreateProvider(..._args)
 }));
 
 // Mock env-loader
@@ -43,7 +43,7 @@ jest.mock('dialectic-core', () => {
   return {
     ...actual,
     loadEnvironmentFile: jest.fn(),
-    createProvider: (...args: any[]) => mockCreateProvider(...args)
+    createProvider: (..._args: unknown[]): unknown => mockCreateProvider(..._args)
   };
 });
 
@@ -53,7 +53,7 @@ const mockedCreateProvider = mockCreateProvider;
 /**
  * Creates a mock provider for testing.
  */
-function createMockProvider(): { complete: jest.Mock } {
+function createMockProvider(): { complete: jest.Mock<unknown> } {
   return { complete: jest.fn() };
 }
 
@@ -150,7 +150,7 @@ describe('CLI eval command', () => {
     stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit: ${code}`);
-    }) as any);
+    }) as unknown as jest.MockedFunction<typeof process.exit>);
     mockedLoadEnvironmentFile.mockClear();
     mockedLoadEnvironmentFile.mockReturnValue(undefined);
     mockedCreateProvider.mockClear();
@@ -166,7 +166,9 @@ describe('CLI eval command', () => {
     
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   describe('Required flags validation', () => {
@@ -413,7 +415,7 @@ describe('CLI eval command', () => {
       }));
 
       mockedCreateProvider.mockImplementation(() => {
-        const err: any = new Error('Missing API key for openai');
+        const err = new Error('Missing API key for openai') as ErrorWithCode;
         err.code = EXIT_CONFIG_ERROR;
         throw err;
       });
@@ -1547,9 +1549,9 @@ describe('CLI eval command', () => {
         resolvedSystemPrompt: ''
       };
       
-      fromConfigSpy.mockImplementation((_cfg: any, sysPrompt: string, _userPrompt: string) => {
-        (mockAgent as any).resolvedSystemPrompt = sysPrompt;
-        return mockAgent as any;
+      fromConfigSpy.mockImplementation((_cfg: unknown, sysPrompt: string): EvaluatorAgent => {
+        (mockAgent as unknown as { resolvedSystemPrompt: string }).resolvedSystemPrompt = sysPrompt;
+        return mockAgent as unknown as EvaluatorAgent;
       });
 
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);
@@ -1594,9 +1596,9 @@ describe('CLI eval command', () => {
         resolvedUserPromptTemplate: ''
       };
       
-      fromConfigSpy.mockImplementation((_cfg: any, _sysPrompt: string, userPrompt: string) => {
-        (mockAgent as any).resolvedUserPromptTemplate = userPrompt;
-        return mockAgent as any;
+      fromConfigSpy.mockImplementation((_cfg: unknown, _sysPrompt: string, userPrompt: string): EvaluatorAgent => {
+        (mockAgent as unknown as { resolvedUserPromptTemplate: string }).resolvedUserPromptTemplate = userPrompt;
+        return mockAgent as unknown as EvaluatorAgent;
       });
 
       await runCli(['eval', '--config', configPath, '--debate', debatePath]);

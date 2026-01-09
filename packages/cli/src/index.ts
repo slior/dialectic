@@ -57,7 +57,7 @@ function getPackageVersion(): string {
  * @param argv - The array of command-line arguments to parse (excluding 'node' and script name).
  * @throws Any error encountered during command parsing.
  */
-export async function runCli(argv: string[]) {
+export async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.name(PROGRAM_NAME).description('Multi-agent debate system').version(getPackageVersion());
 

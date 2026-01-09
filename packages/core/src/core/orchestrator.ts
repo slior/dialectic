@@ -36,7 +36,7 @@ function formatCritiqueActivity(agents: Agent[], critiquedAgentId: string): stri
  *
  * All hooks are optional; implement only those needed for your use case.
  */
-interface OrchestratorHooks {
+export interface OrchestratorHooks {
   /**
    * Called when a phase (proposal, critique, or refinement) completes within a round.
    * @param roundNumber - The current round number (1-indexed).

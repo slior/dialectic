@@ -31,7 +31,9 @@ function escapeRegExp(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const REQUIREMENTS_COVERAGE_SECTION_REGEX: RegExp = (() => {
+const MIN_REQUIREMENT_LENGTH = 10;
+
+const REQUIREMENTS_COVERAGE_SECTION_REGEX: RegExp = ((): RegExp => {
   // Source the title from core prompts to avoid hardcoding / drift between prompt + parser.
   const sectionTitlePattern = REQUIREMENTS_COVERAGE_SECTION_TITLE
     .split(/\s+/)
@@ -156,7 +158,7 @@ export function inferMajorRequirements(problem: string): string[] {
 
     if (hasMajorKeyword) {
       const cleaned = trimmed.replace(/^[-*•]\s*/, '').trim();
-      if (cleaned && cleaned.length > 10) {
+      if (cleaned && cleaned.length > MIN_REQUIREMENT_LENGTH) {
         requirements.push(cleaned);
       }
     }

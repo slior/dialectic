@@ -7,6 +7,7 @@ import {
   // Exit codes
   EXIT_INVALID_ARGS,
   EXIT_GENERAL_ERROR,
+  ErrorWithCode,
   // Console utilities
   writeStderr,
   logWarning,
@@ -49,9 +50,11 @@ import {
   // Core
   StateManager,
   DebateOrchestrator,
+  OrchestratorHooks,
   collectClarifications,
   // Utilities
   resolvePrompt,
+  PromptResolveResult,
   loadEnvironmentFile,
   createValidationError,
   writeFileWithDirectories,
@@ -84,6 +87,23 @@ const MAX_CONTEXT_LENGTH = 5000;
 
 // Problem resolution error messages
 const ERROR_BOTH_PROBLEM_SOURCES = 'Invalid arguments: provide exactly one of <problem> or --problemDescription';
+
+/**
+ * Checks if an error has a specific error code and rethrows it if it matches.
+ * This is used to preserve error codes from validation errors that should propagate.
+ * 
+ * @param error - The error to check
+ * @param expectedCode - The error code to check for (e.g., EXIT_INVALID_ARGS)
+ * @returns The error typed as ErrorWithCode if it doesn't match the expected code
+ * @throws The original error if it has the expected code
+ */
+function rethrowIfErrorCode(error: unknown, expectedCode: number): ErrorWithCode {
+  const errorWithCode = error as ErrorWithCode;
+  if (errorWithCode && typeof errorWithCode === 'object' && 'code' in errorWithCode && typeof errorWithCode.code === 'number' && errorWithCode.code === expectedCode) {
+    throw error;
+  }
+  return errorWithCode;
+}
 const ERROR_NO_PROBLEM_SOURCE = 'Invalid arguments: problem is required (provide <problem> or --problemDescription)';
 const ERROR_FILE_NOT_FOUND = 'Invalid arguments: problem description file not found';
 const ERROR_PATH_IS_DIRECTORY = 'Invalid arguments: problem description path is a directory';
@@ -163,50 +183,116 @@ function createAgentLogger(progressUI: DebateProgressUI, verbose: boolean): Agen
 }
 
 /**
+ * Orchestrator hooks implementation for CLI progress UI.
+ * All hooks are required since createOrchestratorHooks always provides all implementations.
+ * Uses Required<Pick<...>> to select only the hooks we implement and make them required.
+ */
+type OrchestratorHooksImplementation = Required<Pick<OrchestratorHooks,
+  | 'onRoundStart'
+  | 'onPhaseStart'
+  | 'onAgentStart'
+  | 'onAgentComplete'
+  | 'onPhaseComplete'
+  | 'onSummarizationStart'
+  | 'onSummarizationComplete'
+  | 'onSummarizationEnd'
+  | 'onSynthesisStart'
+  | 'onSynthesisComplete'
+>>;
+
+/**
  * Creates orchestrator hooks that drive the progress UI during debate execution.
  * 
  * @param progressUI - The progress UI instance to drive
  * @param options - CLI options containing verbose flag
  * @returns Object containing all orchestrator hook functions
  */
-function createOrchestratorHooks(progressUI: DebateProgressUI, options: any) {
+function createOrchestratorHooks(progressUI: DebateProgressUI, options: { verbose?: boolean }): OrchestratorHooksImplementation {
   const SUMMARY_ACTIVITY_LABEL = 'summarizing context';
   return {
-    onRoundStart: (roundNumber: number, _totalRounds: number) => {
+    // Note: totalRounds is available from progressUI.initialize(), so we only use roundNumber
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars 
+    onRoundStart: (roundNumber: number, _totalRounds: number): void => {
       progressUI.startRound(roundNumber);
     },
-    onPhaseStart: (_roundNumber: number, phase: ContributionType, expectedTaskCount: number) => {
+    onPhaseStart: (_roundNumber: number, phase: ContributionType, expectedTaskCount: number): void => {
       progressUI.startPhase(phase, expectedTaskCount);
     },
-    onAgentStart: (agentName: string, activity: string) => {
+    onAgentStart: (agentName: string, activity: string): void => {
       progressUI.startAgentActivity(agentName, activity);
     },
-    onAgentComplete: (agentName: string, activity: string) => {
+    onAgentComplete: (agentName: string, activity: string): void => {
       progressUI.completeAgentActivity(agentName, activity);
     },
-    onPhaseComplete: (_roundNumber: number, phase: ContributionType) => {
+    onPhaseComplete: (_roundNumber: number, phase: ContributionType): void => {
       progressUI.completePhase(phase);
     },
-    onSummarizationStart: (agentName: string) => {
+    onSummarizationStart: (agentName: string): void => {
       progressUI.startAgentActivity(agentName, SUMMARY_ACTIVITY_LABEL);
     },
-    onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
+    onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number): void => {
       progressUI.completeAgentActivity(agentName, SUMMARY_ACTIVITY_LABEL);
       if (options.verbose) {
         progressUI.log(`  [${agentName}] Summarized: ${beforeChars} → ${afterChars} chars`, MessageType.SUCCESS);
       }
     },
     // Ensure activity is cleared even when no summary is produced
-    onSummarizationEnd: (agentName: string) => {
+    onSummarizationEnd: (agentName: string): void => {
       progressUI.completeAgentActivity(agentName, SUMMARY_ACTIVITY_LABEL);
     },
-    onSynthesisStart: () => {
+    onSynthesisStart: (): void => {
       progressUI.startSynthesis();
     },
-    onSynthesisComplete: () => {
+    onSynthesisComplete: (): void => {
       progressUI.completeSynthesis();
     },
   };
+}
+
+/**
+ * Resolves the judge system prompt, either from a file or using the built-in default.
+ * 
+ * @param judgeName - Name of the judge (used for labeling)
+ * @param configDir - Configuration directory for resolving relative paths
+ * @param systemPromptPath - Optional path to the system prompt file
+ * @returns Prompt resolution result containing text, source, and optional absolute path
+ */
+function resolveJudgeSystemPromptWithDefault(
+  judgeName: string,
+  configDir: string | undefined,
+  systemPromptPath: string | undefined
+): PromptResolveResult {
+  const judgeDefault = JudgeAgent.defaultSystemPrompt();
+  return resolvePrompt({
+    label: judgeName,
+    configDir: configDir || process.cwd(),
+    ...(systemPromptPath !== undefined && { promptPath: systemPromptPath }),
+    defaultText: judgeDefault
+  });
+}
+
+/**
+ * Resolves the judge summary prompt, either from a file or using the built-in default.
+ * 
+ * @param judgeName - Name of the judge (used for labeling)
+ * @param configDir - Configuration directory for resolving relative paths
+ * @param summaryPromptPath - Optional path to the summary prompt file
+ * @param maxLength - Maximum length for the default summary prompt
+ * @returns Prompt resolution result containing text, source, and optional absolute path
+ */
+function resolveJudgeSummaryPromptWithDefault(
+  judgeName: string,
+  configDir: string | undefined,
+  summaryPromptPath: string | undefined,
+  maxLength: number
+): PromptResolveResult {
+  const judgeSummaryDefault = JudgeAgent.defaultSummaryPrompt('', maxLength);
+  return resolvePrompt({
+    label: `${judgeName} (summary)`,
+    configDir: configDir || process.cwd(),
+    ...(summaryPromptPath !== undefined && { promptPath: summaryPromptPath }),
+    defaultText: judgeSummaryDefault
+  });
 }
 
 /**
@@ -215,31 +301,15 @@ function createOrchestratorHooks(progressUI: DebateProgressUI, options: any) {
  * @param sysConfig - System configuration containing judge settings
  * @param systemSummaryConfig - System-wide summarization configuration
  * @param promptSources - Collection object to record prompt source metadata
+ * @param tracingContext - Optional tracing context
  * @returns Configured JudgeAgent instance
  */
-function createJudgeWithPromptResolution(
-  sysConfig: SystemConfig,
-  systemSummaryConfig: SummarizationConfig,
-  promptSources: { judge: JudgePromptMetadata },
-  tracingContext?: TracingContext
-): JudgeAgent {
-  // Judge prompt resolution
-  const judgeDefault = JudgeAgent.defaultSystemPrompt();
-  const jres = resolvePrompt({ 
-    label: sysConfig.judge!.name, 
-    configDir: sysConfig.configDir || process.cwd(), 
-    ...((sysConfig.judge!.systemPromptPath !== undefined) && { promptPath: sysConfig.judge!.systemPromptPath }), 
-    defaultText: judgeDefault 
-  });
+function createJudgeWithPromptResolution(sysConfig: SystemConfig, systemSummaryConfig: SummarizationConfig, 
+                                         promptSources: { judge: JudgePromptMetadata }, tracingContext?: TracingContext): JudgeAgent {
+
+  const jres = resolveJudgeSystemPromptWithDefault( sysConfig.judge!.name, sysConfig.configDir, sysConfig.judge!.systemPromptPath );
   
-  // Judge summary prompt resolution
-  const judgeSummaryDefault = JudgeAgent.defaultSummaryPrompt('', systemSummaryConfig.maxLength);
-  const jsres = resolvePrompt({ 
-    label: `${sysConfig.judge!.name} (summary)`, 
-    configDir: sysConfig.configDir || process.cwd(), 
-    ...((sysConfig.judge!.summaryPromptPath !== undefined) && { promptPath: sysConfig.judge!.summaryPromptPath }), 
-    defaultText: judgeSummaryDefault 
-  });
+  const jsres = resolveJudgeSummaryPromptWithDefault( sysConfig.judge!.name, sysConfig.configDir, sysConfig.judge!.summaryPromptPath, systemSummaryConfig.maxLength );
   
   const judgeProvider = createProvider(sysConfig.judge!.provider);
   const wrappedJudgeProvider = createTracingProvider(judgeProvider, tracingContext);
@@ -370,10 +440,17 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
  * @param logger - Optional logger callback for agent messages.
  * @returns A configured RoleBasedAgent instance.
  */
-function createAgentWithPromptResolution(
-  cfg: AgentConfig,  provider: LLMProvider,  configDir: string,
-  systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, logger?: AgentLogger ): Agent
-{
+interface CreateAgentParams {
+  cfg: AgentConfig;
+  provider: LLMProvider;
+  configDir: string;
+  systemSummaryConfig: SummarizationConfig;
+  collect: AgentPromptMetadataCollection;
+  logger?: AgentLogger | undefined;
+}
+
+function createAgentWithPromptResolution(params: CreateAgentParams): Agent {
+  const { cfg, provider, configDir, systemSummaryConfig, collect, logger } = params;
   const defaultText = RoleBasedAgent.defaultSystemPrompt(cfg.role);
   const res = resolvePrompt({
     label: cfg.name,
@@ -450,13 +527,21 @@ function createAgentWithPromptResolution(
  * @param logger - Optional logger callback for agent messages.
  * @returns Array of Agent instances.
  */
-function buildAgents(
-  agentConfigs: AgentConfig[], configDir: string, systemSummaryConfig: SummarizationConfig, collect: AgentPromptMetadataCollection, logger?: AgentLogger, tracingContext?: TracingContext
-): Agent[] {
+interface BuildAgentsParams {
+  agentConfigs: AgentConfig[];
+  configDir: string;
+  systemSummaryConfig: SummarizationConfig;
+  collect: AgentPromptMetadataCollection;
+  logger?: AgentLogger | undefined;
+  tracingContext?: TracingContext | undefined;
+}
+
+function buildAgents(params: BuildAgentsParams): Agent[] {
+  const { agentConfigs, configDir, systemSummaryConfig, collect, logger, tracingContext } = params;
   return agentConfigs.map((cfg) => {
     const provider = createProvider(cfg.provider);
     const wrappedProvider = createTracingProvider(provider, tracingContext);
-    const agent = createAgentWithPromptResolution(cfg, wrappedProvider, configDir, systemSummaryConfig, collect, logger);
+    const agent = createAgentWithPromptResolution({ cfg, provider: wrappedProvider, configDir, systemSummaryConfig, collect, logger });
     return createTracingAgent(agent, tracingContext);
   });
 }
@@ -470,7 +555,7 @@ function buildAgents(
  * @returns {DebateConfig} The debate configuration.
  * @throws {Error} If rounds is less than 1.
  */
-function debateConfigFromSysConfig(sysConfig: SystemConfig, options: any): DebateConfig {
+function debateConfigFromSysConfig(sysConfig: SystemConfig, options: { rounds?: string }): DebateConfig {
   const debateCfg: DebateConfig = {
     ...sysConfig.debate!,
     rounds: options.rounds ? parseInt(options.rounds, 10) : (sysConfig.debate?.rounds ?? DEFAULT_ROUNDS),
@@ -492,7 +577,7 @@ function debateConfigFromSysConfig(sysConfig: SystemConfig, options: any): Debat
  * @param {any} options - Command-line options containing optional agent roles filter.
  * @returns {AgentConfig[]} Array of filtered agent configurations.
  */
-function agentConfigsFromSysConfig(sysConfig: SystemConfig, options: any): AgentConfig[] {
+function agentConfigsFromSysConfig(sysConfig: SystemConfig, options: { agents?: string }): AgentConfig[] {
   let agentConfigs = sysConfig.agents.filter((a) => a.enabled !== false);
   
   if (options.agents) {
@@ -558,12 +643,10 @@ async function readAndValidateFileContent(filePath: string): Promise<string> {
 
     // Return raw content (preserve formatting)
     return content;
-  } catch (error: any) {
-    if (error.code === EXIT_INVALID_ARGS) {
-      throw error;
-    }
+  } catch (error: unknown) {
+    const errorWithCode = rethrowIfErrorCode(error, EXIT_INVALID_ARGS);
     // Handle read errors
-    throw createValidationError(`${ERROR_FILE_READ_FAILED}: ${error.message}`, EXIT_GENERAL_ERROR);
+    throw createValidationError(`${ERROR_FILE_READ_FAILED}: ${errorWithCode.message}`, EXIT_GENERAL_ERROR);
   }
 }
 
@@ -606,8 +689,9 @@ async function readContextFile(contextPath: string): Promise<string | undefined>
     }
 
     return trimmedContent;
-  } catch (error: any) {
-    warnUser(`Failed to read context file: ${filePath}. Error: ${error.message}. Continuing without context.`);
+  } catch (error: unknown) {
+    const errorWithCode = rethrowIfErrorCode(error, EXIT_INVALID_ARGS);
+    warnUser(`Failed to read context file: ${filePath}. Error: ${errorWithCode.message}. Continuing without context.`);
     return undefined;
   }
 }
@@ -621,7 +705,7 @@ async function readContextFile(contextPath: string): Promise<string | undefined>
  * @returns {Promise<string>} The resolved problem description.
  * @throws {Error} If validation fails or file operations fail.
  */
-async function resolveProblemDescription(problem: string | undefined, options: any): Promise<string> {
+async function resolveProblemDescription(problem: string | undefined, options: { problemDescription?: string }): Promise<string> {
 
  
   const hasFile = !!options.problemDescription;
@@ -643,7 +727,7 @@ async function resolveProblemDescription(problem: string | undefined, options: a
   }
 
   // Handle file-based problem description
-  const filePath = path.resolve(process.cwd(), options.problemDescription);
+  const filePath = path.resolve(process.cwd(), options.problemDescription!);
   validateFilePathExists(filePath);
   return await readAndValidateFileContent(filePath);
 }
@@ -695,7 +779,7 @@ function outputRoundSummary(round: DebateRound): void {
  * @param {any} options - Command-line options containing output path and verbose flag.
  * @returns {Promise<void>} A promise that resolves when output is complete.
  */
-async function outputResults(result: DebateResult, stateManager: StateManager, options: any): Promise<void> {
+async function outputResults(result: DebateResult, stateManager: StateManager, options: { output?: string; verbose?: boolean }): Promise<void> {
   const outputPath = options.output ? path.resolve(process.cwd(), options.output) : undefined;
   const finalText = result.solution.description + '\n';
   
@@ -737,17 +821,20 @@ async function outputResults(result: DebateResult, stateManager: StateManager, o
  * @param problemDescription - The full problem description text.
  * @param options - CLI options including report path and verbose flag.
  */
-async function generateReport(
-  result: DebateResult,
-  stateManager: StateManager,
-  agentConfigs: AgentConfig[],
-  judgeConfig: AgentConfig,
-  problemDescription: string,
-  options: any
-): Promise<void> {
+interface GenerateReportParams {
+  result: DebateResult;
+  stateManager: StateManager;
+  agentConfigs: AgentConfig[];
+  judgeConfig: AgentConfig;
+  problemDescription: string;
+  options: { report?: string | undefined; verbose?: boolean | undefined };
+}
+
+async function generateReport(params: GenerateReportParams): Promise<void> {
+  const { result, stateManager, agentConfigs, judgeConfig, problemDescription, options } = params;
   try {
     // Validate and normalize report path
-    let reportPath = path.resolve(process.cwd(), options.report);
+    let reportPath = path.resolve(process.cwd(), options.report!);
     
     // Enforce .md extension
     if (!reportPath.toLowerCase().endsWith(MARKDOWN_FILE_EXTENSION)) {
@@ -767,7 +854,7 @@ async function generateReport(
       agentConfigs,
       judgeConfig,
       problemDescription,
-      { verbose: options.verbose }
+      { verbose: options.verbose ?? false }
     );
 
     // Write report file (handles path normalization and directory creation)
@@ -775,8 +862,9 @@ async function generateReport(
     
     // Notify user
     infoUser(`Generated report: ${writtenPath}`);
-  } catch (error: any) {
-    warnUser(`Failed to generate report: ${error.message}`);
+  } catch (error: unknown) {
+    const errorWithCode = error as ErrorWithCode;
+    warnUser(`Failed to generate report: ${errorWithCode.message}`);
     // Don't throw - report generation failure shouldn't fail the debate
   }
 }
@@ -787,7 +875,7 @@ async function generateReport(
  * @param options - Command-line options containing optional problemDescription.
  * @returns The filename if provided, undefined if problem is an inline string.
  */
-function extractProblemFileName(options: any): string | undefined {
+function extractProblemFileName(options: { problemDescription?: string }): string | undefined {
   if (options.problemDescription) {
     return path.basename(options.problemDescription);
   }
@@ -800,7 +888,7 @@ function extractProblemFileName(options: any): string | undefined {
  * @param options - Command-line options containing optional context path.
  * @returns The filename if provided, undefined if not provided.
  */
-function extractContextFileName(options: any): string | undefined {
+function extractContextFileName(options: { context?: string }): string | undefined {
   if (options.context) {
     return path.basename(options.context);
   }
@@ -822,16 +910,20 @@ function extractContextFileName(options: any): string | undefined {
  * @param sysConfig - System configuration containing judge config.
  * @returns Tracing context if successfully initialized, undefined otherwise.
  */
-function initializeTracingContext(
-  debateCfg: DebateConfig,
-  debateId: string,
-  debateIdDate: Date,
-  options: any,
-  resolvedConfigPath: string,
-  clarificationRequested: boolean,
-  agentConfigs: AgentConfig[],
-  sysConfig: SystemConfig
-): TracingContext | undefined {
+interface InitializeTracingContextParams {
+  debateCfg: DebateConfig;
+  debateId: string;
+  debateIdDate: Date;
+  options: { problemDescription?: string; context?: string; verbose?: boolean, config?: string };
+  clarificationRequested: boolean;
+  agentConfigs: AgentConfig[];
+  sysConfig: SystemConfig;
+}
+
+function initializeTracingContext(params: InitializeTracingContextParams): TracingContext | undefined {
+  // const { debateCfg, debateId, debateIdDate, options, resolvedConfigPath, clarificationRequested, agentConfigs, sysConfig } = params;
+  const { debateCfg, debateId, debateIdDate, options, clarificationRequested, agentConfigs, sysConfig } = params;
+  const resolvedConfigPath = options.config ? path.resolve(process.cwd(), options.config) : DEFAULT_CONFIG_PATH;
   if (debateCfg.trace !== TRACE_OPTIONS.LANGFUSE) {
     return undefined;
   }
@@ -865,14 +957,158 @@ function initializeTracingContext(
       infoUser('Langfuse tracing enabled');
     }
     return tracingContext;
-  } catch (error: any) {
-    warnUser(`Langfuse tracing initialization failed: ${error.message}. Continuing without tracing.`);
+  } catch (error: unknown) {
+    const errorWithCode = error as ErrorWithCode;
+    warnUser(`Langfuse tracing initialization failed: ${errorWithCode.message}. Continuing without tracing.`);
     return undefined;
   }
 }
 
+/**
+ * Outputs verbose debate configuration information to stderr.
+ * 
+ * @param verbose - Whether verbose mode is enabled
+ * @param agentConfigs - Array of agent configurations
+ * @param promptSources - Collection of prompt source metadata for agents and judge
+ * @param sysConfig - System configuration containing judge settings
+ * @param systemSummaryConfig - System-wide summarization configuration
+ */
+function outputVerboseDebateInfo(
+  verbose: boolean,
+  agentConfigs: AgentConfig[],
+  promptSources: { agents: AgentPromptMetadata[]; judge: JudgePromptMetadata },
+  sysConfig: SystemConfig,
+  systemSummaryConfig: SummarizationConfig
+): void {
+  if (!verbose) {
+    return;
+  }
 
-export function debateCommand(program: Command) {
+  writeStderr('Running debate (verbose)\n');
+  writeStderr('Active Agents:\n');
+  agentConfigs.forEach(a => {
+    const used = promptSources.agents.find(p => p.agentId === a.id);
+    writeStderr(`  • ${a.name} (${a.model})\n`);
+    writeStderr(`    - System prompt: ${used?.source === 'file' ? (used.path || 'file') : 'built-in default'}\n`);
+  });
+  writeStderr(`Judge: ${sysConfig.judge!.name} (${sysConfig.judge!.model})\n`);
+  writeStderr(`  - System prompt: ${promptSources.judge.source === 'file' ? (promptSources.judge.path || 'file') : 'built-in default'}\n`);
+  writeStderr('\nSummarization:\n');
+  writeStderr(`  - Enabled: ${systemSummaryConfig.enabled}\n`);
+  writeStderr(`  - Threshold: ${systemSummaryConfig.threshold} characters\n`);
+  writeStderr(`  - Max summary length: ${systemSummaryConfig.maxLength} characters\n`);
+  writeStderr(`  - Method: ${systemSummaryConfig.method}\n`);
+  writeStderr('\n');
+}
+
+/**
+ * Flushes the Langfuse trace if tracing context is provided.
+ * Errors during flushing are logged as warnings but do not fail the operation.
+ * 
+ * @param tracingContext - Optional tracing context to flush
+ */
+async function flushTracingContext(tracingContext: TracingContext | undefined): Promise<void> {
+  if (!tracingContext) {
+    return;
+  }
+
+  try {
+    await tracingContext.langfuse.flushAsync();
+  } catch (error: unknown) {
+    const errorWithCode = error as ErrorWithCode;
+    logWarning(`Failed to flush Langfuse trace: ${errorWithCode.message}`);
+  }
+}
+
+/**
+ * Generates a debate report if the report option is specified.
+ * 
+ * @param options - Command options containing optional report path
+ * @param result - The debate result containing the debate ID and metadata
+ * @param stateManager - The state manager to retrieve the full debate state
+ * @param agentConfigs - Array of agent configurations for the report
+ * @param judgeConfig - Judge configuration for the report
+ * @param problemDescription - The full problem description text
+ */
+//eslint-disable-next-line max-params
+async function generateReportIfRequested(
+  options: DebateCommandOptions, result: DebateResult, stateManager: StateManager,
+  agentConfigs: AgentConfig[], judgeConfig: AgentConfig, problemDescription: string
+): Promise<void> {
+  if (!options.report) {
+    return;
+  }
+
+  await generateReport({ result, stateManager, agentConfigs, judgeConfig, problemDescription, options });
+}
+
+/**
+ * Gets the system-wide summarization configuration, using defaults if not specified in the debate config.
+ * 
+ * @param debateCfg - Debate configuration that may contain summarization settings
+ * @returns Summarization configuration, using defaults if not provided
+ */
+function getSystemSummaryConfig(debateCfg: DebateConfig): SummarizationConfig {
+  return debateCfg.summarization || {
+    enabled: DEFAULT_SUMMARIZATION_ENABLED,
+    threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+    maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+    method: DEFAULT_SUMMARIZATION_METHOD,
+  };
+}
+
+/**
+ * Determines if the clarifications phase was requested, either via command-line option or system configuration.
+ * 
+ * @param options - Command options that may contain the clarify flag
+ * @param sysConfig - System configuration that may have interactiveClarifications enabled
+ * @returns True if clarifications were requested, false otherwise
+ */
+function isClarificationRequested(options: DebateCommandOptions, sysConfig: SystemConfig): boolean {
+  return options.clarify === true || sysConfig.debate?.interactiveClarifications === true;
+}
+
+/**
+ * Collects clarifications from agents if the clarifications phase was requested.
+ * 
+ * @param clarificationRequested - Whether clarifications were requested
+ * @param resolvedProblem - The resolved problem statement
+ * @param agents - Array of agents to collect questions from
+ * @param sysConfig - System configuration containing clarifications settings
+ * @returns Promise resolving to collected clarifications, or undefined if not requested
+ */
+async function collectFinalClarifications(
+  clarificationRequested: boolean,
+  resolvedProblem: string,
+  agents: Agent[],
+  sysConfig: SystemConfig
+): Promise<AgentClarifications[] | undefined> {
+  if (!clarificationRequested) {
+    return undefined;
+  }
+
+  const maxPer = sysConfig.debate?.clarificationsMaxPerAgent ?? DEFAULT_CLARIFICATIONS_MAX_PER_AGENT;
+  return await collectAndAnswerClarifications(resolvedProblem, agents, maxPer);
+}
+
+/**
+ * Options for the debate command.
+ */
+interface DebateCommandOptions {
+  agents?: string;
+  rounds?: string;
+  config?: string;
+  output?: string;
+  problemDescription?: string;
+  context?: string;
+  envFile?: string;
+  verbose?: boolean;
+  report?: string;
+  clarify?: boolean;
+}
+
+// eslint-disable-next-line max-lines-per-function
+export function debateCommand(program: Command): void {
   program
     .command('debate')
     .argument('[problem]', 'Problem statement to debate (provide exactly one of this or --problemDescription)')
@@ -886,7 +1122,7 @@ export function debateCommand(program: Command) {
     .option('-v, --verbose', 'Verbose output')
     .option('--report <path>', 'Generate markdown report file')
     .option('--clarify', 'Run a one-time pre-debate clarifications phase')
-    .action(async (problem: string | undefined, options: any) => {
+    .action(async (problem: string | undefined, options: DebateCommandOptions): Promise<void> => {
       try {
         // Load environment variables from .env file
         loadEnvironmentFile(options.envFile, options.verbose);
@@ -895,9 +1131,6 @@ export function debateCommand(program: Command) {
         
         // Read context file if provided
         const contextString = options.context ? await readContextFile(options.context) : undefined;
-
-        // Track resolved config path for trace metadata
-        const resolvedConfigPath = options.config ? path.resolve(process.cwd(), options.config) : DEFAULT_CONFIG_PATH;
         
         const sysConfig = await loadConfig(options.config);
         const debateCfg = debateConfigFromSysConfig(sysConfig, options);
@@ -908,19 +1141,13 @@ export function debateCommand(program: Command) {
           judge: { id: sysConfig.judge!.id, source: PROMPT_SOURCES.BUILT_IN },
         };
 
-        // Get system-wide summarization config (use defaults if not in config)
-        const systemSummaryConfig: SummarizationConfig = debateCfg.summarization || {
-          enabled: DEFAULT_SUMMARIZATION_ENABLED,
-          threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
-          maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
-          method: DEFAULT_SUMMARIZATION_METHOD,
-        };
+        const systemSummaryConfig = getSystemSummaryConfig(debateCfg);
 
         // Initialize progress UI early so it can be used for agent logging
         const progressUI = new DebateProgressUI();
         progressUI.initialize(debateCfg.rounds);
         
-        const agentLogger = createAgentLogger(progressUI, options.verbose || false); // Create logger wrapper that routes through progress UI
+        const agentLogger = createAgentLogger(progressUI, options.verbose || false);
 
         const stateManager = new StateManager();
         
@@ -930,42 +1157,31 @@ export function debateCommand(program: Command) {
         const debateId = generateDebateId(debateIdDate);
         
         // Determine if clarification was requested (calculate once, reuse for trace metadata and clarifications phase)
-        const clarificationRequested = options.clarify === true || sysConfig.debate?.interactiveClarifications === true;
+        const clarificationRequested = isClarificationRequested(options, sysConfig);
         
         // Initialize tracing context if enabled
-        const tracingContext = initializeTracingContext( debateCfg, debateId, debateIdDate, options,
-                                                          resolvedConfigPath, clarificationRequested, agentConfigs, sysConfig );
+        const tracingContext = initializeTracingContext({
+          debateCfg, debateId, debateIdDate,
+          options,  clarificationRequested,
+          agentConfigs, sysConfig
+        });
 
-        const agents = buildAgents(agentConfigs, sysConfig.configDir || process.cwd(), systemSummaryConfig, promptSources, agentLogger, tracingContext);
+        const agents = buildAgents({
+          agentConfigs,
+          configDir: sysConfig.configDir || process.cwd(),
+          systemSummaryConfig,
+          collect: promptSources,
+          logger: agentLogger,
+          tracingContext
+        });
 
         // Create judge with prompt resolution
         const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources, tracingContext);
 
         // Clarifications phase (optional)
-        let finalClarifications: AgentClarifications[] | undefined = undefined;
-        if (clarificationRequested) {
-          const maxPer = sysConfig.debate?.clarificationsMaxPerAgent ?? DEFAULT_CLARIFICATIONS_MAX_PER_AGENT;
-          finalClarifications = await collectAndAnswerClarifications(resolvedProblem, agents, maxPer);
-        }
+        const finalClarifications = await collectFinalClarifications(clarificationRequested, resolvedProblem, agents, sysConfig);
 
-        // Verbose header before run
-        if (options.verbose) {
-          writeStderr('Running debate (verbose)\n');
-          writeStderr('Active Agents:\n');
-          agentConfigs.forEach(a => {
-            const used = promptSources.agents.find(p => p.agentId === a.id);
-            writeStderr(`  • ${a.name} (${a.model})\n`);
-            writeStderr(`    - System prompt: ${used?.source === 'file' ? (used.path || 'file') : 'built-in default'}\n`);
-          });
-          writeStderr(`Judge: ${sysConfig.judge!.name} (${sysConfig.judge!.model})\n`);
-          writeStderr(`  - System prompt: ${promptSources.judge.source === 'file' ? (promptSources.judge.path || 'file') : 'built-in default'}\n`);
-          writeStderr('\nSummarization:\n');
-          writeStderr(`  - Enabled: ${systemSummaryConfig.enabled}\n`);
-          writeStderr(`  - Threshold: ${systemSummaryConfig.threshold} characters\n`);
-          writeStderr(`  - Max summary length: ${systemSummaryConfig.maxLength} characters\n`);
-          writeStderr(`  - Method: ${systemSummaryConfig.method}\n`);
-          writeStderr('\n');
-        }
+        outputVerboseDebateInfo(options.verbose || false, agentConfigs, promptSources, sysConfig, systemSummaryConfig); // Verbose header before run
 
         // Create orchestrator hooks to drive progress UI
         const hooks = createOrchestratorHooks(progressUI, options);
@@ -979,13 +1195,7 @@ export function debateCommand(program: Command) {
 
         // Flush trace if tracing was enabled
         // Note: Traces are automatically ended when all spans are ended
-        if (tracingContext) {
-          try {
-            await tracingContext.langfuse.flushAsync();
-          } catch (error: any) {
-            logWarning(`Failed to flush Langfuse trace: ${error.message}`);
-          }
-        }
+        await flushTracingContext(tracingContext);
 
         // Persist prompt sources once per debate
         await stateManager.setPromptSources(result.debateId, promptSources);
@@ -996,14 +1206,13 @@ export function debateCommand(program: Command) {
         await outputResults(result, stateManager, options);
 
         // Generate report if requested
-        if (options.report) {
-          await generateReport(result, stateManager, agentConfigs, sysConfig.judge!, resolvedProblem, options);
-        }
-      } catch (err: any) {
-        const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
-        writeStderr((err?.message || 'Unknown error') + '\n');
+        await generateReportIfRequested(options, result, stateManager, agentConfigs, sysConfig.judge!, resolvedProblem);
+      } catch (err: unknown) {
+        const errorWithCode = err as ErrorWithCode;
+        const code = (errorWithCode && typeof errorWithCode.code === 'number') ? errorWithCode.code : EXIT_GENERAL_ERROR;
+        writeStderr((errorWithCode?.message || 'Unknown error') + '\n');
         // Rethrow for runCli catch to set process exit when direct run
-        throw Object.assign(new Error(err?.message || 'Unknown error'), { code });
+        throw Object.assign(new Error(errorWithCode?.message || 'Unknown error'), { code });
       }
     });
 }

@@ -1,0 +1,371 @@
+# TypeScript Typing Rules
+
+This document defines rules for proper TypeScript typing practices to maintain type safety and code quality throughout the codebase.
+
+## 1. Avoid `any` Type
+
+**Rule:** Never use `any` type unless absolutely necessary for third-party library compatibility or complex mocking scenarios.
+
+### Replace `any` with Specific Types
+
+**❌ Bad:**
+```typescript
+function handleError(err: any) {
+  const code = err?.code || EXIT_GENERAL_ERROR;
+}
+
+// In Commander.js actions
+.action(async (options: any) => {
+  // ...
+});
+```
+
+**✅ Good:**
+```typescript
+// Use ErrorWithCode for errors with code properties
+function handleError(err: ErrorWithCode) {
+  const code = err.code ?? EXIT_GENERAL_ERROR;
+}
+
+// Define proper interface for command options
+interface ReportCommandOptions {
+  debate: string;
+  config?: string;
+  output?: string;
+  verbose?: boolean;
+}
+
+.action(async (options: ReportCommandOptions) => {
+  // ...
+});
+```
+
+### Error Handling with Code Properties
+
+**❌ Bad:**
+```typescript
+catch (err: any) {
+  const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
+}
+```
+
+**✅ Good:**
+```typescript
+catch (err: unknown) {
+  const errorWithCode = err as ErrorWithCode;
+  const code = (errorWithCode && typeof errorWithCode.code === 'number') 
+    ? errorWithCode.code 
+    : EXIT_GENERAL_ERROR;
+}
+```
+
+## 2. Use Named Types Instead of Inline Types
+
+**Rule:** Extract repeated inline type definitions into named types or interfaces.
+
+### Inline Type Definitions
+
+**❌ Bad:**
+```typescript
+function processOptions(options: {
+  debate: string;
+  config?: string;
+  output?: string;
+  verbose?: boolean;
+}) {
+  // ...
+}
+
+// Same type repeated elsewhere
+function validateOptions(options: {
+  debate: string;
+  config?: string;
+  output?: string;
+  verbose?: boolean;
+}) {
+  // ...
+}
+```
+
+**✅ Good:**
+```typescript
+interface ReportCommandOptions {
+  debate: string;
+  config?: string;
+  output?: string;
+  verbose?: boolean;
+}
+
+function processOptions(options: ReportCommandOptions) {
+  // ...
+}
+
+function validateOptions(options: ReportCommandOptions) {
+  // ...
+}
+```
+
+### Repeated Type Patterns
+
+**❌ Bad:**
+```typescript
+const error1 = err as Error & { code?: number };
+const error2 = error as Error & { code?: number };
+const error3 = testError as Error & { code?: number };
+```
+
+**✅ Good:**
+```typescript
+// Define once in a shared location (e.g., packages/core/src/utils/exit-codes.ts)
+export type ErrorWithCode = Error & { code?: number };
+
+// Use everywhere
+const error1 = err as ErrorWithCode;
+const error2 = error as ErrorWithCode;
+const error3 = testError as ErrorWithCode;
+```
+
+## 3. Type-Safe Type Assertions
+
+**Rule:** When type assertions are necessary, use `as unknown as Type` instead of `as any` for better type safety.
+
+### Incompatible Type Casts
+
+**❌ Bad:**
+```typescript
+// Direct incompatible cast
+invalidState.id = undefined as string; // TypeScript error
+
+// Using any bypasses all type safety
+invalidState.id = undefined as any;
+```
+
+**✅ Good:**
+```typescript
+// Use unknown as intermediate type (type-safe)
+invalidState.id = undefined as unknown as string;
+```
+
+**Why:** `unknown` requires explicit type checking before use, making it safer than `any` while still allowing incompatible type casts when necessary (e.g., in test code that intentionally creates invalid data).
+
+### Process.exit Mocking
+
+**❌ Bad:**
+```typescript
+exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+  throw new Error(`process.exit: ${code}`);
+}) as any);
+```
+
+**✅ Good:**
+```typescript
+// Option 1: Match the exact signature
+exitSpy = jest.spyOn(process, 'exit').mockImplementation(
+  (code?: string | number | null | undefined): never => {
+    throw new Error(`process.exit: ${code}`);
+  }
+);
+
+// Option 2: If signature matching doesn't work, use unknown
+exitSpy = jest.spyOn(process, 'exit').mockImplementation(
+  ((code?: number) => {
+    throw new Error(`process.exit: ${code}`);
+  }) as unknown as jest.MockedFunction<typeof process.exit>
+);
+```
+
+## 4. Error Handling Patterns
+
+**Rule:** Use consistent error handling patterns with proper types.
+
+### Error with Code Property
+
+**Pattern:** When errors may have a numeric `code` property (for exit codes), use `ErrorWithCode` type.
+
+**❌ Bad:**
+```typescript
+catch (error: any) {
+  const code = typeof error?.code === 'number' ? error.code : EXIT_GENERAL_ERROR;
+  const message = error?.message || 'Unknown error';
+}
+```
+
+**✅ Good:**
+```typescript
+catch (error: unknown) {
+  const errorWithCode = error as ErrorWithCode;
+  const code = (errorWithCode && typeof errorWithCode.code === 'number')
+    ? errorWithCode.code
+    : EXIT_GENERAL_ERROR;
+  const message = errorWithCode.message || 'Unknown error';
+}
+```
+
+### Repeating Error Handling Logic
+
+**Rule:** Extract repeated error handling patterns into helper functions.
+
+**❌ Bad:**
+```typescript
+// Repeated in multiple catch blocks
+catch (error: unknown) {
+  const errorWithCode = error as Error & { code?: number };
+  if (errorWithCode && typeof errorWithCode === 'object' && 'code' in errorWithCode 
+      && typeof errorWithCode.code === 'number' && errorWithCode.code === EXIT_INVALID_ARGS) {
+    throw error;
+  }
+  // Handle error...
+}
+```
+
+**✅ Good:**
+```typescript
+// Define helper function once
+function rethrowIfErrorCode(error: unknown, expectedCode: number): ErrorWithCode {
+  const errorWithCode = error as ErrorWithCode;
+  if (errorWithCode && typeof errorWithCode === 'object' && 'code' in errorWithCode 
+      && typeof errorWithCode.code === 'number' && errorWithCode.code === expectedCode) {
+    throw error;
+  }
+  return errorWithCode;
+}
+
+// Use everywhere
+catch (error: unknown) {
+  const errorWithCode = rethrowIfErrorCode(error, EXIT_INVALID_ARGS);
+  // Handle error...
+}
+```
+
+## 5. Type Definitions Location
+
+**Rule:** Place shared types in appropriate locations based on scope.
+
+### File-Level Types
+- **When:** Type is only used within a single file
+- **Where:** Define at the top of the file, before functions that use it
+- **Example:**
+```typescript
+interface ReportCommandOptions {
+  debate: string;
+  config?: string;
+}
+
+export function reportCommand(program: Command): void {
+  // Uses ReportCommandOptions
+}
+```
+
+### Package-Level Types
+- **When:** Type is used across multiple files in the same package
+- **Where:** Define in a shared types file (e.g., `types/` directory) or utility file
+- **Example:**
+```typescript
+// packages/core/src/utils/exit-codes.ts
+export type ErrorWithCode = Error & { code?: number };
+```
+
+### Cross-Package Types
+- **When:** Type is used across multiple packages
+- **Where:** Define in the core package and export through the main index
+- **Example:**
+```typescript
+// packages/core/src/utils/exit-codes.ts
+export type ErrorWithCode = Error & { code?: number };
+
+// packages/core/src/index.ts
+export { ErrorWithCode } from './utils/exit-codes';
+```
+
+## 8. Type Assertion Guidelines
+
+**Rule:** Use type assertions sparingly and prefer type guards when possible.
+
+### Prefer Type Guards
+
+**❌ Bad:**
+```typescript
+function processError(err: unknown) {
+  const error = err as Error;
+  console.log(error.message);
+}
+```
+
+**✅ Good:**
+```typescript
+function processError(err: unknown) {
+  if (err instanceof Error) {
+    console.log(err.message);
+  } else {
+    console.log(String(err));
+  }
+}
+```
+
+### When Type Assertions Are Acceptable
+
+Type assertions are acceptable when:
+1. **Third-party library types:** Working with libraries that return `any`
+2. **Runtime validation:** After runtime checks that TypeScript can't infer
+3. **Test code:** Creating intentionally invalid data for testing
+4. **Complex type transformations:** When type guards would be overly complex
+
+**Example:**
+```typescript
+// After runtime validation
+if (typeof value === 'object' && value !== null && 'code' in value) {
+  const errorWithCode = value as ErrorWithCode; // Safe after validation
+}
+```
+
+## 9. Function Parameter Types
+
+**Rule:** Always provide explicit types for function parameters, especially in public APIs.
+
+**❌ Bad:**
+```typescript
+function processData(data: any, options: any): any {
+  // ...
+}
+```
+
+**✅ Good:**
+```typescript
+interface ProcessOptions {
+  validate: boolean;
+  transform?: (item: DataItem) => DataItem;
+}
+
+function processData(data: DataItem[], options: ProcessOptions): ProcessedData {
+  // ...
+}
+```
+
+## 10. ESLint Disable Comments
+
+**Rule:** When `any` or type assertions are necessary, add explanatory comments.
+
+**✅ Good:**
+```typescript
+// Using require() here is intentional: this is test mock setup code that needs to access
+// the mocked readline module at runtime. We prefer keeping all mock-related code co-located
+// rather than using import statements, which would execute at module load time.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const readlineModule = require('readline');
+
+// Intentionally create invalid state for testing - bypass type safety
+invalidState.id = undefined as unknown as string;
+```
+
+## Summary Checklist
+
+When writing or reviewing TypeScript code, check:
+
+- [ ] No `any` types (except with explicit eslint-disable and justification)
+- [ ] Repeated type patterns extracted to named types
+- [ ] Error handling uses `ErrorWithCode` instead of `any`
+- [ ] Commander.js options have proper interfaces
+- [ ] Inline types extracted to named types when repeated
+- [ ] Function parameters have explicit types
+- [ ] Type guards preferred over type assertions when possible
+- [ ] ESLint disable comments include explanations

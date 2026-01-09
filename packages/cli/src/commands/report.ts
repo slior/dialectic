@@ -12,6 +12,7 @@ import {
   createValidationError,
   readJsonFile,
   writeFileWithDirectories,
+  ErrorWithCode,
 } from 'dialectic-core';
 
 import { infoUser } from '../index';
@@ -191,6 +192,16 @@ async function writeReport(reportContent: string, outputPath?: string): Promise<
 }
 
 /**
+ * Options for the report command.
+ */
+interface ReportCommandOptions {
+  debate: string;
+  config?: string;
+  output?: string;
+  verbose?: boolean;
+}
+
+/**
  * Registers the 'report' CLI command, which generates a markdown report from a saved debate state.
  * 
  * This command loads a debate state JSON file, loads the corresponding configuration file,
@@ -215,7 +226,7 @@ async function writeReport(reportContent: string, outputPath?: string): Promise<
  *   - Exits with explicit error codes and user-friendly messages on invalid arguments,
  *     missing files, or report generation failures.
  */
-export function reportCommand(program: Command) {
+export function reportCommand(program: Command): void {
   program
     .command('report')
     .requiredOption('--debate <path>', 'Path to debate JSON file (DebateState)')
@@ -223,7 +234,7 @@ export function reportCommand(program: Command) {
     .option('-o, --output <path>', 'Path to output markdown file (default: stdout)')
     .option('-v, --verbose', 'Verbose mode for report generation')
     .description('Generate a markdown report from a saved debate state')
-    .action(async (options: any) => {
+    .action(async (options: ReportCommandOptions) => {
       try {
         // Load and validate debate state
         const debateState = loadAndValidateDebateState(options.debate);
@@ -266,11 +277,12 @@ export function reportCommand(program: Command) {
         
         // Write report
         await writeReport(reportContent, options.output);
-      } catch (err: any) {
-        const code = typeof err?.code === 'number' ? err.code : EXIT_GENERAL_ERROR;
-        writeStderr((err?.message || 'Unknown error') + '\n');
+      } catch (err: unknown) {
+        const errorWithCode = err as ErrorWithCode;
+        const code = (errorWithCode && typeof errorWithCode.code === 'number') ? errorWithCode.code : EXIT_GENERAL_ERROR;
+        writeStderr((errorWithCode.message || 'Unknown error') + '\n');
         // Rethrow for runCli catch to set process exit when direct run
-        throw Object.assign(new Error(err?.message || 'Unknown error'), { code });
+        throw Object.assign(new Error(errorWithCode.message || 'Unknown error'), { code });
       }
     });
 }
