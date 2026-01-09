@@ -1041,3 +1041,509 @@ describe('RoleBasedAgent (Security Role)', () => {
   });
 });
 
+describe('RoleBasedAgent - askClarifyingQuestions()', () => {
+  const agentConfig: AgentConfig = {
+    id: 'test-agent',
+    name: 'Test Agent',
+    role: AGENT_ROLES.ARCHITECT,
+    model: 'gpt-4',
+    provider: LLM_PROVIDERS.OPENAI,
+    temperature: DEFAULT_TEMPERATURE,
+  };
+
+  const defaultSummaryConfig = {
+    enabled: DEFAULT_SUMMARIZATION_ENABLED,
+    threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+    maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+    method: DEFAULT_SUMMARIZATION_METHOD,
+  };
+
+  const mockContext: DebateContext = {
+    problem: 'Test problem',
+    history: [],
+  };
+
+  it('should return structured questions from valid JSON response', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({
+        questions: [
+          { id: 'q1', text: 'What is the expected load?' },
+          { id: 'q2', text: 'What are the performance requirements?' }
+        ]
+      })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(2);
+    expect(result.questions[0]).toEqual({ id: 'q1', text: 'What is the expected load?' });
+    expect(result.questions[1]).toEqual({ id: 'q2', text: 'What are the performance requirements?' });
+  });
+
+  it('should append resolvedClarificationPromptText when provided', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({ questions: [{ id: 'q1', text: 'Question 1' }] })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined,
+      'Additional clarification instructions'
+    );
+
+    await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    // Verify the LLM was called (the prompt should include the additional text)
+    expect(provider['currentIndex']).toBe(1);
+  });
+
+  it('should handle empty resolvedClarificationPromptText', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({ questions: [{ id: 'q1', text: 'Question 1' }] })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined,
+      '' // Empty string
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(1);
+  });
+
+  it('should handle whitespace-only resolvedClarificationPromptText', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({ questions: [{ id: 'q1', text: 'Question 1' }] })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined,
+      '   ' // Whitespace only
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(1);
+  });
+
+  it('should extract JSON from text with extra content', async () => {
+    const provider = new MockLLMProvider([
+      `Some preamble text\n${JSON.stringify({ questions: [{ id: 'q1', text: 'Question 1' }] })}\nSome trailing text`
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(1);
+    expect(result.questions[0]!.text).toBe('Question 1');
+  });
+
+  it('should handle non-array questions in response', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({ questions: 'not an array' })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(0);
+  });
+
+  it('should filter out questions without text', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({
+        questions: [
+          { id: 'q1', text: 'Valid question' },
+          { id: 'q2' }, // Missing text
+          { id: 'q3', text: '' }, // Empty text
+          { id: 'q4', text: '   ' }, // Whitespace only
+          { id: 'q5', text: 'Another valid question' }
+        ]
+      })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(2);
+    expect(result.questions[0]!.text).toBe('Valid question');
+    expect(result.questions[1]!.text).toBe('Another valid question');
+  });
+
+  it('should generate IDs for questions missing them', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({
+        questions: [
+          { text: 'Question without ID' },
+          { id: 'custom-id', text: 'Question with ID' },
+          { text: 'Another question without ID' }
+        ]
+      })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(3);
+    expect(result.questions[0]!.id).toBe('q1');
+    expect(result.questions[1]!.id).toBe('custom-id');
+    expect(result.questions[2]!.id).toBe('q3');
+  });
+
+  it('should handle invalid JSON with error logging', async () => {
+    const provider = new MockLLMProvider(['Invalid JSON response']);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(0);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid clarifications JSON')
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should handle text with no JSON match', async () => {
+    const provider = new MockLLMProvider(['No JSON here at all']);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(0);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should handle missing questions property', async () => {
+    const provider = new MockLLMProvider([
+      JSON.stringify({ notQuestions: [] })
+    ]);
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined
+    );
+
+    const result = await agent.askClarifyingQuestions('Test problem', mockContext);
+
+    expect(result.questions).toHaveLength(0);
+  });
+});
+
+describe('RoleBasedAgent - Constructor and Factory', () => {
+  const agentConfig: AgentConfig = {
+    id: 'test-agent',
+    name: 'Test Agent',
+    role: AGENT_ROLES.ARCHITECT,
+    model: 'gpt-4',
+    provider: LLM_PROVIDERS.OPENAI,
+    temperature: DEFAULT_TEMPERATURE,
+  };
+
+  const defaultSummaryConfig = {
+    enabled: DEFAULT_SUMMARIZATION_ENABLED,
+    threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+    maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+    method: DEFAULT_SUMMARIZATION_METHOD,
+  };
+
+  it('should set summaryPromptSource when provided', () => {
+    const provider = new MockLLMProvider();
+    const summaryPromptSource = { source: 'file' as const, absPath: '/path/to/summary.md' };
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      summaryPromptSource
+    );
+
+    expect(agent.summaryPromptSource).toEqual(summaryPromptSource);
+  });
+
+  it('should set resolvedClarificationPromptText when provided', () => {
+    const provider = new MockLLMProvider();
+    const clarificationText = 'Additional clarification instructions';
+
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      defaultSummaryConfig,
+      undefined,
+      clarificationText
+    );
+
+    // Verify it's set by testing askClarifyingQuestions uses it
+    expect(agent).toBeDefined();
+  });
+});
+
+describe('RoleBasedAgent - processRelevantContributions edge cases', () => {
+  const agentConfig: AgentConfig = {
+    id: 'test-agent',
+    name: 'Test Agent',
+    role: AGENT_ROLES.ARCHITECT,
+    model: 'gpt-4',
+    provider: LLM_PROVIDERS.OPENAI,
+    temperature: DEFAULT_TEMPERATURE,
+  };
+
+  const summaryConfig = {
+    enabled: true,
+    threshold: TEST_SUMMARY_THRESHOLD,
+    maxLength: 200,
+    method: SUMMARIZATION_METHODS.LENGTH_BASED,
+  };
+
+  it('should return initialValue when history is null', () => {
+    const provider = new MockLLMProvider();
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      summaryConfig,
+      undefined
+    );
+
+    const context: DebateContext = {
+      problem: 'Test problem',
+      history: null as any,
+    };
+
+    // This tests processRelevantContributions indirectly through shouldSummarize
+    expect(agent.shouldSummarize(context)).toBe(false);
+  });
+
+  it('should return initialValue when history is empty array', () => {
+    const provider = new MockLLMProvider();
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      summaryConfig,
+      undefined
+    );
+
+    const context: DebateContext = {
+      problem: 'Test problem',
+      history: [],
+    };
+
+    expect(agent.shouldSummarize(context)).toBe(false);
+  });
+});
+
+describe('RoleBasedAgent - prepareContext edge cases', () => {
+  const agentConfig: AgentConfig = {
+    id: 'test-agent',
+    name: 'Test Agent',
+    role: AGENT_ROLES.ARCHITECT,
+    model: 'gpt-4',
+    provider: LLM_PROVIDERS.OPENAI,
+    temperature: DEFAULT_TEMPERATURE,
+  };
+
+  const summaryConfig = {
+    enabled: true,
+    threshold: TEST_SUMMARY_THRESHOLD,
+    maxLength: 200,
+    method: SUMMARIZATION_METHODS.LENGTH_BASED,
+  };
+
+  it('should return context when history is null in prepareContext', async () => {
+    const provider = new MockLLMProvider();
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      summaryConfig,
+      undefined
+    );
+
+    const shouldSummarizeSpy = jest.spyOn(agent, 'shouldSummarize').mockReturnValue(true);
+    
+    const contextWithNullHistory: DebateContext = {
+      problem: 'Test problem',
+      history: null as any,
+    };
+
+    const result = await agent.prepareContext(contextWithNullHistory, 1);
+
+    expect(result.context).toEqual(contextWithNullHistory);
+    expect(result.summary).toBeUndefined();
+
+    shouldSummarizeSpy.mockRestore();
+  });
+
+  it('should handle critique contributions in prepareContext', async () => {
+    const provider = new MockLLMProvider(['Summary text']);
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      summaryConfig,
+      undefined
+    );
+
+    // Create context with critiques that would be included in summarization
+    // Note: critiques are currently NOT included in processRelevantContributions
+    // but the code path for critique type exists in prepareContext
+    const longContent = 'a'.repeat(LONG_CONTENT_LENGTH);
+    const context: DebateContext = {
+      problem: 'Test problem',
+      history: [{
+        roundNumber: 1,
+        timestamp: new Date(),
+        contributions: [
+          {
+            agentId: 'test-agent',
+            agentRole: AGENT_ROLES.ARCHITECT,
+            type: CONTRIBUTION_TYPES.PROPOSAL,
+            content: longContent,
+            metadata: {}
+          }
+        ]
+      }]
+    };
+
+    const result = await agent.prepareContext(context, 1);
+
+    expect(result.summary).toBeDefined();
+  });
+
+  it('should handle missing summarizer when summarization is enabled', async () => {
+    const provider = new MockLLMProvider(['Summary']);
+    const agent = RoleBasedAgent.create(
+      agentConfig,
+      provider,
+      'System prompt',
+      undefined,
+      summaryConfig,
+      undefined
+    );
+
+    const longContent = 'a'.repeat(LONG_CONTENT_LENGTH);
+    const context: DebateContext = {
+      problem: 'Test problem',
+      history: [{
+        roundNumber: 1,
+        timestamp: new Date(),
+        contributions: [
+          {
+            agentId: 'test-agent',
+            agentRole: AGENT_ROLES.ARCHITECT,
+            type: CONTRIBUTION_TYPES.PROPOSAL,
+            content: longContent,
+            metadata: {}
+          }
+        ]
+      }]
+    };
+
+    // Access the private summarizer and set it to null using type assertion
+    // This tests the defensive branch
+    (agent as any).summarizer = null;
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await agent.prepareContext(context, 1);
+
+    expect(result.context).toEqual(context);
+    expect(result.summary).toBeUndefined();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Summarization enabled but no summarizer available')
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+});

@@ -1,0 +1,198 @@
+---
+description: Raise unit test coverage for a TypeScript file to above 90% in all metrics using Jest
+---
+
+# Raise Unit Test Coverage
+
+Analyze a TypeScript file, identify uncovered code, and create unit tests to raise coverage to above 90% in all metrics (statements, branches, functions, lines).
+
+## Input Parameters
+
+The command accepts the following parameters:
+
+- **file_test_name** (required)
+  - The name of the TypeScript source file to analyze and test
+  - Can be a relative path (e.g., `packages/core/src/agents/prompts/kiss-prompts.ts`)
+  - Can be just the filename if the file is well-known in the project
+  - Must be a TypeScript file (`.ts` extension)
+
+## Goal
+
+Raise test coverage for the specified file to **above 90%** in all coverage metrics:
+- Statements coverage
+- Branches coverage
+- Functions coverage
+- Lines coverage
+
+## Implementation Instructions
+
+When executing this command, follow these steps precisely:
+
+1. **Locate the Source File**
+   - Find the TypeScript file specified by `file_test_name`
+   - Verify the file exists and is readable
+   - If the file path is ambiguous, search the codebase to locate it
+
+2. **Check for Existing Test File**
+   - Look for an existing test file (`.spec.ts` or `.test.ts`) for the source file
+   - Test files are typically co-located with source files in the same directory
+   - If a test file exists, read it to understand existing test patterns
+
+3. **Analyze Current Coverage**
+   - Run Jest with coverage to get current coverage metrics for the file
+   - Identify uncovered lines, branches, and functions
+   - Note which code paths are not tested
+
+4. **Study Existing Test Patterns**
+   - Review similar test files in the project (e.g., other prompt test files, similar component tests)
+   - Identify common patterns:
+     - Test structure and organization
+     - Mock creation helpers
+     - Test constants and fixtures
+     - Assertion patterns
+   - Follow the same patterns in your new tests
+
+5. **Identify Uncovered Code**
+   - Analyze the source file to understand:
+     - All exported functions and methods
+     - All conditional branches (if/else, ternary, switch)
+     - All parameter combinations
+     - Edge cases (undefined, null, empty strings, etc.)
+   - Focus on code that is currently uncovered
+
+6. **Create or Update Test File**
+   - If no test file exists, create one following the naming convention (`.spec.ts`)
+   - If a test file exists, add tests for uncovered code
+   - Organize tests using `describe` blocks matching the source file structure
+   - Use descriptive test names that explain what is being tested
+
+7. **Write Minimal Tests**
+   - Write the minimum number of tests needed to reach >90% coverage
+   - Focus on uncovered code paths first
+   - Test all function parameters and their combinations
+   - Test edge cases (undefined, null, empty values, boundary conditions)
+   - Test all conditional branches
+   - Ensure each test has a clear purpose
+
+8. **Follow Project Patterns**
+   - Use the same test structure as existing tests
+   - Use similar helper functions and mock factories
+   - Follow the same naming conventions
+   - Use the same assertion styles
+   - Match the organization and grouping of similar test files
+
+9. **Verify Coverage**
+   - Run Jest with coverage targeting the specific file:
+     ```bash
+     npm test -- --coverage --collectCoverageFrom=<file_path> <test_file>
+     ```
+   - Verify all metrics are above 90%:
+     - Statements: >90%
+     - Branches: >90%
+     - Functions: >90%
+     - Lines: >90%
+   - If any metric is below 90%, identify what's missing and add tests
+
+10. **Ensure All Tests Pass**
+    - Run the full test suite to ensure no regressions:
+      ```bash
+      npm test
+      ```
+    - Fix any failing tests
+    - Ensure all existing tests still pass
+    - Verify the new tests pass
+
+11. **Code Quality**
+    - Ensure test code follows project style guidelines
+    - Use clear, descriptive test names
+    - Keep tests focused and readable
+    - Remove any commented-out or unnecessary code
+    - Follow DRY principles (extract common setup to helpers)
+
+## Test File Structure
+
+Follow the structure used in similar test files:
+
+```typescript
+import { moduleToTest } from './module-to-test';
+import type { SomeType } from '../../types/some.types';
+
+// Test constants
+const TEST_VALUE = 'test value';
+const TEST_AGENT_ID = 'agent-1';
+
+// Helper functions for creating mocks
+function createMockContext(): SomeContext {
+  return {
+    // mock structure
+  };
+}
+
+describe('Module Name', () => {
+  describe('functionName', () => {
+    it('should do something specific', () => {
+      // Arrange
+      const input = TEST_VALUE;
+      
+      // Act
+      const result = moduleToTest.functionName(input);
+      
+      // Assert
+      expect(result).toBeDefined();
+    });
+  });
+});
+```
+
+## Coverage Metrics to Target
+
+- **Statements**: >90% - All executable statements covered
+- **Branches**: >90% - All conditional branches covered (if/else, ternary, switch)
+- **Functions**: >90% - All functions called
+- **Lines**: >90% - All lines executed
+
+## Common Test Scenarios
+
+For each function/method, test:
+- Basic functionality with valid inputs
+- All parameter combinations
+- Optional parameters (undefined, missing)
+- Edge cases (empty strings, null, zero, large values)
+- Error conditions (if applicable)
+- Context handling (if applicable)
+- Return value validation
+- Side effects (if applicable)
+
+## Verification Checklist
+
+Before completing the task:
+- [ ] Test file created or updated
+- [ ] All uncovered code paths have tests
+- [ ] Coverage metrics all above 90%
+- [ ] All new tests pass
+- [ ] All existing tests still pass
+- [ ] Test code follows project patterns
+- [ ] Test names are descriptive
+- [ ] No unnecessary or duplicate tests
+
+## Example Usage
+
+Basic usage:
+```
+Raise unit test coverage for packages/core/src/agents/prompts/kiss-prompts.ts
+```
+
+With just filename:
+```
+Raise unit test coverage for kiss-prompts.ts
+```
+
+## Output
+
+After successful execution:
+1. Test file created or updated with comprehensive tests
+2. Coverage metrics all above 90% for the target file
+3. All tests pass (new and existing)
+4. Test code follows project patterns and conventions
+
+The file now has comprehensive test coverage meeting the project's quality standards.
