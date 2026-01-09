@@ -1,0 +1,16 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "web-ui",
+  "sourceRoot": "packages/web-ui/src",
+  "projectType": "application",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-script",
+      "options": {
+        "script": "lint"
+      },
+      "cache": false
+    }
+  },
+  "tags": ["scope:web-ui", "type:application"]
+}
