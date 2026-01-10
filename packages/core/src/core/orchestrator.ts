@@ -1,12 +1,13 @@
-import { Agent } from './agent';
-import { JudgeAgent } from './judge';
-import { StateManager } from './state-manager';
+import { AgentRole, Critique } from '../types/agent.types';
 import { DebateConfig, DebateContext, DebateResult, DebateState, DebateRound, Contribution, Solution, CONTRIBUTION_TYPES, ContributionType, AgentClarifications } from '../types/debate.types';
 import { TracingContext } from '../types/tracing.types';
 import { logWarning } from '../utils/console';
-import { AgentRole, Critique } from '../types/agent.types';
 import { enhanceProblemWithContext } from '../utils/context-enhancer';
 import { isFulfilled } from '../utils/promise';
+
+import { Agent } from './agent';
+import { JudgeAgent } from './judge';
+import { StateManager } from './state-manager';
 
 // Constants for agent activity descriptions used in progress tracking
 const ACTIVITY_PROPOSING = 'proposing';

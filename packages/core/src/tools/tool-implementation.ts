@@ -1,6 +1,6 @@
-import { ToolSchema, ToolResult, TOOL_RESULT_STATUS, ToolResultStatus } from '../types/tool.types';
-import { DebateContext, DebateState } from '../types/debate.types';
 import { CHAT_ROLES } from '../providers/llm-provider';
+import { DebateContext, DebateState } from '../types/debate.types';
+import { ToolSchema, ToolResult, TOOL_RESULT_STATUS, ToolResultStatus } from '../types/tool.types';
 
 /**
  * Interface for tool implementations.

@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+
 import { PromptSource, PROMPT_SOURCES } from '../types/agent.types';
+
 import { logWarning } from './console';
 
 export type PromptResolveResult = PromptSource & { text: string };

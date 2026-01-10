@@ -1,7 +1,8 @@
-import { collectClarifications } from './clarifications';
-import { Agent } from './agent';
-import { ClarificationQuestionsResponse } from '../types/debate.types';
 import { AgentConfig, AGENT_ROLES } from '../types/agent.types';
+import { ClarificationQuestionsResponse } from '../types/debate.types';
+
+import { Agent } from './agent';
+import { collectClarifications } from './clarifications';
 
 describe('collectClarifications', () => {
   const TEST_PROBLEM = 'Design a rate limiting system';

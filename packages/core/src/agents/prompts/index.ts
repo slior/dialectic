@@ -1,12 +1,13 @@
+import { AGENT_ROLES, AgentRole } from '../../types/agent.types';
+
 import { architectPrompts } from './architect-prompts';
-import { performancePrompts } from './performance-prompts';
-import { securityPrompts } from './security-prompts';
-import { testingPrompts } from './testing-prompts';
+import { dataModelingPrompts } from './data-modeling-prompts';
 import { generalistPrompts } from './generalist-prompts';
 import { kissPrompts } from './kiss-prompts';
-import { dataModelingPrompts } from './data-modeling-prompts';
+import { performancePrompts } from './performance-prompts';
 import { RolePrompts } from './prompt-types';
-import { AGENT_ROLES, AgentRole } from '../../types/agent.types';
+import { securityPrompts } from './security-prompts';
+import { testingPrompts } from './testing-prompts';
 
 /**
  * Internal registry mapping agent roles to their corresponding prompt configurations.

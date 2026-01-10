@@ -1,10 +1,10 @@
+import { LLM_PROVIDERS } from './agent.types';
 import {
   isEnabledEvaluator,
   clampScoreToRange,
   round2,
   EvaluatorConfig,
 } from './eval.types';
-import { LLM_PROVIDERS } from './agent.types';
 
 // Test constants
 const EVALUATOR_ID_1 = 'eval-1';

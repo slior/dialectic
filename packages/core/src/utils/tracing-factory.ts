@@ -1,11 +1,13 @@
 import { Langfuse } from 'langfuse';
-import { TracingContext, TRACE_OPTIONS, TraceMetadata } from '../types/tracing.types';
-import { DebateConfig } from '../types/debate.types';
+
 import { Agent } from '../core/agent';
 import { LLMProvider } from '../providers/llm-provider';
-import { TracingLLMProvider } from './tracing-provider';
-import { TracingDecoratorAgent } from './tracing-decorator-agent';
+import { DebateConfig } from '../types/debate.types';
+import { TracingContext, TRACE_OPTIONS, TraceMetadata } from '../types/tracing.types';
+
 import { logWarning } from './console';
+import { TracingDecoratorAgent } from './tracing-decorator-agent';
+import { TracingLLMProvider } from './tracing-provider';
 
 /**
  * Default Langfuse base URL if not specified in environment.

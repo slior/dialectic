@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { Contribution, DebateRound, DebateState, Solution, DebateSummary, DEBATE_STATUS, AgentClarifications } from '../types/debate.types';
 import { generateDebateId } from '../utils/id';
 

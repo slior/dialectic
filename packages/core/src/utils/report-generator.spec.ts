@@ -1,4 +1,4 @@
-import { generateDebateReport } from './report-generator';
+import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
 import {
   DebateState,
   Contribution,
@@ -7,7 +7,8 @@ import {
   Solution,
   AgentClarifications,
 } from '../types/debate.types';
-import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
+
+import { generateDebateReport } from './report-generator';
 
 // Test constants
 const TEST_AGENT_ID = 'agent-1';

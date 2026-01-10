@@ -1,6 +1,7 @@
 import type { Langfuse } from 'langfuse';
-import type { DebateConfig } from './debate.types';
+
 import type { AgentConfig } from './agent.types';
+import type { DebateConfig } from './debate.types';
 
 /**
  * String literal constants for trace options.

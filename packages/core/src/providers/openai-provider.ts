@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
-import { CompletionRequest, CompletionResponse, LLMProvider, CHAT_ROLES } from './llm-provider';
+
 import { ToolSchema, ToolCall } from '../types/tool.types';
+
+import { CompletionRequest, CompletionResponse, LLMProvider, CHAT_ROLES } from './llm-provider';
 
 export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;

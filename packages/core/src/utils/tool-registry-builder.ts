@@ -1,8 +1,9 @@
-import { AgentConfig } from '../types/agent.types';
-import { ToolRegistry } from '../tools/tool-registry';
-import { ToolImplementation } from '../tools/tool-implementation';
-import { ToolSchema } from '../types/tool.types';
 import { ContextSearchTool } from '../tools/context-search-tool';
+import { ToolImplementation } from '../tools/tool-implementation';
+import { ToolRegistry } from '../tools/tool-registry';
+import { AgentConfig } from '../types/agent.types';
+import { ToolSchema } from '../types/tool.types';
+
 import { logWarning } from './console';
 
 /**

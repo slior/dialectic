@@ -1,11 +1,11 @@
+import { DEFAULT_JUDGE_SUMMARY_PROMPT } from '../agents/prompts/judge-prompts';
+import { LLMProvider } from '../providers/llm-provider';
 import { AgentConfig, PromptSource } from '../types/agent.types';
 import { DebateContext, DebateRound, Solution, DebateSummary, ContextPreparationResult, SummarizationConfig, CONTRIBUTION_TYPES } from '../types/debate.types';
 import { TracingContext, LangfuseSpan, LangfuseGeneration, SPAN_LEVEL } from '../types/tracing.types';
-import { LLMProvider } from '../providers/llm-provider';
-import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
-import { DEFAULT_JUDGE_SUMMARY_PROMPT } from '../agents/prompts/judge-prompts';
-import { logWarning } from '../utils/console';
 import { getErrorMessage } from '../utils/common';
+import { logWarning } from '../utils/console';
+import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
 
 /**
  * Default system instructions for the judge when synthesizing a final solution.

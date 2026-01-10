@@ -1,7 +1,7 @@
 import { LLMProvider, CompletionResponse } from '../providers/llm-provider';
 import { createProvider } from '../providers/provider-factory';
-import { writeStderr } from '../utils/console';
 import { EvaluatorConfig, EvaluatorInputs } from '../types/eval.types';
+import { writeStderr } from '../utils/console';
 
 export interface EvaluatorResult {
   id: string;

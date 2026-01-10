@@ -1,7 +1,9 @@
-import { RolePrompts } from './prompt-types';
-import { prependContext } from '../../utils/context-formatter';
-import { appendSharedInstructions, INSTRUCTION_TYPES } from './shared';
 import type { DebateContext } from '../../types/debate.types';
+import { prependContext } from '../../utils/context-formatter';
+
+import { RolePrompts } from './prompt-types';
+import { appendSharedInstructions, INSTRUCTION_TYPES } from './shared';
+
 
 /**
  * Prompts for the Performance role, specializing in system optimization and efficiency.

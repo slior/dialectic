@@ -1,6 +1,7 @@
-import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
-import { ToolSchema } from '../types/tool.types';
 import { DebateContext, Contribution, DebateState } from '../types/debate.types';
+import { ToolSchema } from '../types/tool.types';
+
+import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
 
 /**
  * Maximum length for content snippets returned by context search.

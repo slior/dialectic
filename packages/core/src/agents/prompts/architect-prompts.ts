@@ -1,7 +1,9 @@
-import { RolePrompts } from './prompt-types';
-import { prependContext } from '../../utils/context-formatter';
-import { appendSharedInstructions, INSTRUCTION_TYPES } from './shared';
 import type { DebateContext } from '../../types/debate.types';
+import { prependContext } from '../../utils/context-formatter';
+
+import { RolePrompts } from './prompt-types';
+import { appendSharedInstructions, INSTRUCTION_TYPES } from './shared';
+
 
 
 const BASE_SYSTEM_PROMPT = `You are an expert software architect specializing in distributed systems and scalable architecture design.

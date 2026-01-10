@@ -1,11 +1,11 @@
-import { AgentConfig, Proposal, Critique, ContributionMetadata, DEFAULT_TOOL_CALL_LIMIT } from '../types/agent.types';
-import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { LLMProvider, ChatMessage, CHAT_ROLES, CompletionRequest } from '../providers/llm-provider';
 import { CompletionResponse, CompletionUsage } from '../providers/llm-provider';
+import { createToolResult, ToolImplementation } from '../tools/tool-implementation';
 import { ToolRegistry } from '../tools/tool-registry';
+import { AgentConfig, Proposal, Critique, ContributionMetadata, DEFAULT_TOOL_CALL_LIMIT } from '../types/agent.types';
+import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { ToolCall, ToolResult, TOOL_RESULT_STATUS, ToolSchema } from '../types/tool.types';
 import { writeStderr } from '../utils/console';
-import { createToolResult, ToolImplementation } from '../tools/tool-implementation';
 
 /**
  * Optional logger callback for agent messages.

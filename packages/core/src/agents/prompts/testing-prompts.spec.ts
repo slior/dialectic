@@ -1,5 +1,6 @@
-import { testingPrompts } from './testing-prompts';
 import type { DebateContext } from '../../types/debate.types';
+
+import { testingPrompts } from './testing-prompts';
 
 // Test constants
 const TEST_PROBLEM = 'Design a comprehensive testing strategy for a distributed system';

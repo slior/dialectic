@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { getDebatesDir } from './paths';
 
 // Mock fs module

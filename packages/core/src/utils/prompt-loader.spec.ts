@@ -1,6 +1,7 @@
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
+
 import { resolvePrompt } from 'dialectic-core';
 
 // Test constants

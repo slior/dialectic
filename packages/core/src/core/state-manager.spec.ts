@@ -1,6 +1,7 @@
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
+
 import { StateManager, DEBATE_STATUS, DebateSummary, SUMMARIZATION_METHODS, AGENT_ROLES } from 'dialectic-core';
 
 // Test constants

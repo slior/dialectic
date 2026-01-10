@@ -1,5 +1,6 @@
-import { dataModelingPrompts } from './data-modeling-prompts';
 import type { DebateContext } from '../../types/debate.types';
+
+import { dataModelingPrompts } from './data-modeling-prompts';
 
 // Test constants
 const TEST_PROBLEM = 'Design a database schema for an e-commerce system';

@@ -1,5 +1,6 @@
-import { kissPrompts } from './kiss-prompts';
 import type { DebateContext } from '../../types/debate.types';
+
+import { kissPrompts } from './kiss-prompts';
 
 // Test constants
 const TEST_PROBLEM = 'Design a scalable authentication system';

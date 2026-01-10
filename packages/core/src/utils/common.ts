@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+
 import { round2 } from '../types/eval.types';
+
 import { EXIT_INVALID_ARGS } from './exit-codes';
 
 const FILE_ENCODING_UTF8 = 'utf-8';

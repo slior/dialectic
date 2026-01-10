@@ -1,12 +1,14 @@
 import { Agent, AgentLogger } from '../core/agent';
-import { AgentConfig, Proposal, Critique, PromptSource, AgentRole } from '../types/agent.types';
-import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { LLMProvider } from '../providers/llm-provider';
-import { getPromptsForRole, RolePrompts } from './prompts';
-import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
-import { logWarning } from '../utils/console';
-import type { SummarizationConfig } from '../types/config.types';
 import { ToolRegistry } from '../tools/tool-registry';
+import { AgentConfig, Proposal, Critique, PromptSource, AgentRole } from '../types/agent.types';
+import type { SummarizationConfig } from '../types/config.types';
+import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
+import { logWarning } from '../utils/console';
+import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
+
+import { getPromptsForRole, RolePrompts } from './prompts';
+
 
 
 /**

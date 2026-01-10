@@ -1,5 +1,6 @@
-import { TracingContext } from '../types/tracing.types';
 import { AgentConfig } from '../types/agent.types';
+import { TracingContext } from '../types/tracing.types';
+
 import { formatTimestampForTraceName } from './id';
 
 /**

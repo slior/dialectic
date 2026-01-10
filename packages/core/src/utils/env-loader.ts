@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { writeStderr } from './console';
+
 import dotenv from 'dotenv';
+
+import { writeStderr } from './console';
 
 // Constants for environment file loading
 const DEFAULT_ENV_FILENAME = '.env';

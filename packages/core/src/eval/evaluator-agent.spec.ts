@@ -1,6 +1,7 @@
 import { EvaluatorAgent, EvaluatorConfig, EvaluatorInputs, LLMProvider, CompletionRequest, CompletionResponse, CompletionUsage, LLM_PROVIDERS } from 'dialectic-core';
-import * as consoleUtils from '../utils/console';
+
 import * as providerFactory from '../providers/provider-factory';
+import * as consoleUtils from '../utils/console';
 
 // Test constants
 const FIXED_TEMPERATURE = 0.1;

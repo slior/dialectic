@@ -1,5 +1,5 @@
-import { DebateState, Contribution, CONTRIBUTION_TYPES } from '../types/debate.types';
 import { AgentConfig } from '../types/agent.types';
+import { DebateState, Contribution, CONTRIBUTION_TYPES } from '../types/debate.types';
 
 // File-level constants to avoid magic strings and improve maintainability
 const CODE_FENCE_LANG = 'text';

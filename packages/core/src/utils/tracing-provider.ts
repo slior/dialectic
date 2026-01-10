@@ -1,5 +1,6 @@
 import { LLMProvider, CompletionRequest, CompletionResponse } from '../providers/llm-provider';
 import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
+
 import { logWarning } from './console';
 import { getSpanParent } from './tracing-utils';
 

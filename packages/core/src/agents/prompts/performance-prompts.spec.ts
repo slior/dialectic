@@ -1,5 +1,6 @@
-import { performancePrompts } from './performance-prompts';
 import type { DebateContext } from '../../types/debate.types';
+
+import { performancePrompts } from './performance-prompts';
 
 // Test constants
 const TEST_PROBLEM = 'Design a high-performance caching system';

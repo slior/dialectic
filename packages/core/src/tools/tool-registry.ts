@@ -1,5 +1,6 @@
-import { ToolImplementation } from './tool-implementation';
 import { ToolSchema } from '../types/tool.types';
+
+import { ToolImplementation } from './tool-implementation';
 
 /**
  * Registry for managing tool implementations.

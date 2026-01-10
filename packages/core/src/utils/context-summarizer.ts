@@ -1,6 +1,6 @@
+import { LLMProvider } from '../providers/llm-provider';
 import type { AgentRole, LLM_PROVIDERS } from '../types/agent.types';
 import type { SummarizationConfig, SummarizationMetadata } from '../types/debate.types';
-import { LLMProvider } from '../providers/llm-provider';
 
 /**
  * Default model to use for summarization.

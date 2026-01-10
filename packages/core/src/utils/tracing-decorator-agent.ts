@@ -1,14 +1,16 @@
+import { getPromptsForRole } from '../agents/prompts';
 import { Agent, AgentLLMResponse } from '../core/agent';
+import { LLMProvider } from '../providers/llm-provider';
+import { ToolImplementation } from '../tools/tool-implementation';
 import { Proposal, Critique } from '../types/agent.types';
 import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
-import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
-import { logWarning } from './console';
 import { ToolCall, ToolResult, TOOL_RESULT_STATUS } from '../types/tool.types';
-import { ToolImplementation } from '../tools/tool-implementation';
+import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
+
+import { logWarning } from './console';
 import { TracingLLMProvider } from './tracing-provider';
 import { getSpanParent } from './tracing-utils';
-import { getPromptsForRole } from '../agents/prompts';
-import { LLMProvider } from '../providers/llm-provider';
+
 
 /**
  * Decorator agent that wraps a RoleBasedAgent and adds Langfuse tracing

@@ -1,5 +1,6 @@
-import { generalistPrompts } from './generalist-prompts';
 import type { DebateContext } from '../../types/debate.types';
+
+import { generalistPrompts } from './generalist-prompts';
 
 // Test constants
 const TEST_PROBLEM = 'Design a scalable authentication system';

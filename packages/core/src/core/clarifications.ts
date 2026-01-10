@@ -1,5 +1,6 @@
-import { Agent } from './agent';
 import { AgentClarifications } from '../types/debate.types';
+
+import { Agent } from './agent';
 
 /**
  * Collects clarifying questions from each agent, enforcing a per-agent limit and returning
