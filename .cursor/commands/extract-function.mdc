@@ -1,0 +1,304 @@
+---
+description: Extract a block of code into a reusable function or method
+---
+
+# Extract Function
+
+Extract a selected block of code into a well-named, properly documented function or method. This refactoring improves code organization, reusability, and maintainability without changing behavior.
+
+## Input Parameters
+
+The command accepts the following parameters:
+
+- **code_block** (required)
+  - The specific block of code to extract (provided as a code selection or line range)
+  - Must be a contiguous block of code within a single function or method
+  - Should be a logical unit that performs a specific task
+
+## Goal
+
+Extract the selected code block into:
+- A **file-level function** if the code is inside a standalone function
+- A **private class method** if the code is inside a class method
+
+The extracted function should:
+- Have a clear, descriptive name based on what it does
+- Include proper JSDoc documentation
+- Have well-typed (named types) parameters and return value
+- Maintain the exact same behavior as the original code
+- Be placed appropriately in the file (before the function that uses it)
+
+## Implementation Instructions
+
+When executing this command, follow these steps precisely:
+
+1. **Analyze the Code Block**
+   - Read the selected code block carefully
+   - Understand what the code does and its purpose
+   - Identify all variables used in the block
+   - Determine which variables come from:
+     - Function/method parameters (these become function parameters)
+     - Local variables defined before the block (these become function parameters)
+     - Variables defined within the block (these stay in the block or become return values)
+     - Class properties (if in a class method, these may need to be passed as parameters)
+
+2. **Determine Function Location**
+   - Check if the code is inside a class method or a standalone function
+   - If inside a class: create a **private method** (e.g., `private methodName(...)`)
+   - If inside a standalone function: create a **file-level function** (e.g., `function functionName(...)`)
+   - Place the new function **before** the function that will use it
+
+3. **Identify Parameters**
+   - List all variables that are:
+     - Read from (but not written to) in the extracted block
+     - Defined before the block and used within it
+   - These become function parameters
+   - Use proper TypeScript types for each parameter
+   - If a variable is optional, make the parameter optional (e.g., `param?: Type`)
+
+4. **Determine Return Type**
+   - Check if the code block:
+     - Assigns to a variable that's used after the block → return that value
+     - Modifies variables in place → return `void` or return the modified value
+     - Only performs side effects → return `void`
+   - Use proper TypeScript return type annotation
+   - If the code assigns to a variable, return that value and update the caller to use the return value
+
+5. **Name the Function**
+   - Choose a descriptive name that clearly indicates what the function does
+   - Use verb-based names (e.g., `formatClarificationItem`, `resolveConfigPath`, `collectFinalClarifications`)
+   - Follow existing naming conventions in the file
+   - Avoid generic names like `helper`, `process`, `handle` - be specific
+
+6. **Write JSDoc Documentation**
+   - Add a clear description of what the function does
+   - Document each parameter with `@param` tags:
+     ```typescript
+     /**
+      * Formats a clarification item as Markdown.
+      * 
+      * @param item - The clarification item containing id, question, and answer
+      * @param options - Optional formatting options
+      * @returns Markdown string for the clarification item
+      */
+     ```
+   - Document the return value with `@returns` tag
+   - Include any important notes about behavior or edge cases
+
+7. **Create the Function**
+   - Write the function signature with proper types:
+     ```typescript
+     function functionName(param1: Type1, param2: Type2): ReturnType {
+       // extracted code here
+     }
+     ```
+   - Copy the code block into the function body
+   - Replace references to variables that are now parameters
+   - If the code assigns to a variable, return that value instead
+
+8. **Update the Original Location**
+   - Replace the extracted code block with a call to the new function
+   - Pass all necessary parameters
+   - If the function returns a value, assign it to the variable that was previously assigned in the block
+   - Ensure the behavior is identical to the original code
+
+9. **Verify Behavior Preservation**
+   - Check that all variables are correctly passed as parameters
+   - Verify that return values are properly handled
+   - Ensure no logic was accidentally changed
+   - Confirm that the code flow remains the same
+
+10. **Check for Code Quality**
+    - Ensure the function name is clear and descriptive
+    - Verify all types are properly defined (no `any` types)
+    - Check that JSDoc is complete and accurate
+    - Make sure the function is placed in the correct location
+    - Verify the code follows project style guidelines
+
+## Common Patterns
+
+### Pattern 1: Extracting a Conditional Block
+
+**Before:**
+```typescript
+if (options.verbose) {
+  writeStderr('Running debate (verbose)\n');
+  writeStderr('Active Agents:\n');
+  agentConfigs.forEach(a => {
+    writeStderr(`  • ${a.name} (${a.model})\n`);
+  });
+}
+```
+
+**After:**
+```typescript
+/**
+ * Outputs verbose debate configuration information to stderr.
+ * 
+ * @param verbose - Whether verbose mode is enabled
+ * @param agentConfigs - Array of agent configurations
+ */
+function outputVerboseDebateInfo(verbose: boolean, agentConfigs: AgentConfig[]): void {
+  if (!verbose) {
+    return;
+  }
+  writeStderr('Running debate (verbose)\n');
+  writeStderr('Active Agents:\n');
+  agentConfigs.forEach(a => {
+    writeStderr(`  • ${a.name} (${a.model})\n`);
+  });
+}
+
+// Usage:
+outputVerboseDebateInfo(options.verbose || false, agentConfigs);
+```
+
+### Pattern 2: Extracting a Value Assignment
+
+**Before:**
+```typescript
+const systemSummaryConfig: SummarizationConfig = debateCfg.summarization || {
+  enabled: DEFAULT_SUMMARIZATION_ENABLED,
+  threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+  maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+  method: DEFAULT_SUMMARIZATION_METHOD,
+};
+```
+
+**After:**
+```typescript
+/**
+ * Gets the system-wide summarization configuration, using defaults if not specified.
+ * 
+ * @param debateCfg - Debate configuration that may contain summarization settings
+ * @returns Summarization configuration, using defaults if not provided
+ */
+function getSystemSummaryConfig(debateCfg: DebateConfig): SummarizationConfig {
+  return debateCfg.summarization || {
+    enabled: DEFAULT_SUMMARIZATION_ENABLED,
+    threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
+    maxLength: DEFAULT_SUMMARIZATION_MAX_LENGTH,
+    method: DEFAULT_SUMMARIZATION_METHOD,
+  };
+}
+
+// Usage:
+const systemSummaryConfig = getSystemSummaryConfig(debateCfg);
+```
+
+### Pattern 3: Extracting a Loop Body
+
+**Before:**
+```typescript
+for (const item of group.items) {
+  if (!item || !item.id || !item.question || item.answer === undefined) {
+    continue;
+  }
+  out += `Question (${item.id}):\n\n\`\`\`text\n${item.question}\n\`\`\`\n\n`;
+  out += `Answer:\n\n\`\`\`text\n${item.answer}\n\`\`\`\n\n`;
+}
+```
+
+**After:**
+```typescript
+/**
+ * Formats a single clarification item as Markdown.
+ * 
+ * @param item - The clarification item containing id, question, and answer
+ * @returns Markdown string for the clarification item, or empty string if item is invalid
+ */
+function formatClarificationItemMarkdown(item: { id?: string; question?: string; answer?: string }): string {
+  if (!item || !item.id || !item.question || item.answer === undefined) {
+    return '';
+  }
+  return `Question (${item.id}):\n\n\`\`\`text\n${item.question}\n\`\`\`\n\nAnswer:\n\n\`\`\`text\n${item.answer}\n\`\`\`\n\n`;
+}
+
+// Usage:
+for (const item of group.items) {
+  out += formatClarificationItemMarkdown(item);
+}
+```
+
+## Type Safety Guidelines
+
+- **Never use `any` types** - Always use proper TypeScript types
+- **Use existing types** - Import and reuse types from the codebase when available
+- **Create interfaces for complex objects** - If passing objects with multiple properties, consider creating an interface
+- **Use optional parameters** - Mark parameters as optional (`param?: Type`) if they might be undefined
+- **Use union types** - If a parameter can be multiple types, use union types (e.g., `string | undefined`)
+
+## Function Placement
+
+- **File-level functions**: Place before the function that uses them
+- **Class methods**: Place as private methods within the class, typically before public methods
+- **Group related functions**: If multiple related functions exist, group them together
+
+## Naming Conventions
+
+- Use **camelCase** for function names
+- Use **verb-based names** that describe the action (e.g., `format`, `resolve`, `collect`, `generate`)
+- Be **specific** - avoid generic names like `helper`, `process`, `handle`
+- Match **existing patterns** in the file - look at other function names for consistency
+
+## Documentation Requirements
+
+Every extracted function must have:
+- A clear description of what it does
+- `@param` tags for each parameter with type and description
+- `@returns` tag describing the return value
+- Any important notes about behavior, edge cases, or side effects
+
+## Verification Checklist
+
+Before completing the task:
+- [ ] Function has a clear, descriptive name
+- [ ] All parameters are properly typed
+- [ ] Return type is correctly specified
+- [ ] JSDoc documentation is complete
+- [ ] Function is placed in the correct location
+- [ ] Original code is replaced with function call
+- [ ] All variables are correctly passed as parameters
+- [ ] Return values are properly handled
+- [ ] Behavior is identical to original code
+- [ ] No linting errors introduced
+- [ ] Code follows project style guidelines
+
+## Example Usage
+
+Extract a conditional block:
+```
+Extract this code block into a function:
+if (options.verbose) {
+  writeStderr('Running debate (verbose)\n');
+  // ... more code
+}
+```
+
+Extract a value assignment:
+```
+Extract this into a function:
+const systemSummaryConfig = debateCfg.summarization || {
+  enabled: DEFAULT_SUMMARIZATION_ENABLED,
+  // ... defaults
+};
+```
+
+Extract a loop body:
+```
+Extract the loop body into a function:
+for (const item of group.items) {
+  // ... code to extract
+}
+```
+
+## Output
+
+After successful execution:
+1. A new function or method is created with proper types and documentation
+2. The original code block is replaced with a call to the new function
+3. The behavior of the code remains exactly the same
+4. The code is more maintainable and reusable
+5. All types are properly defined and documented
+
+The extracted function improves code organization and follows best practices for maintainability.
