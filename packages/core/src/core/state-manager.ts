@@ -172,7 +172,8 @@ export class StateManager {
    * This method sets the debate's status to FAILED, updates the updatedAt timestamp, and saves the state.
    * If the debate does not exist, this method does nothing.
    */
-  async failDebate(debateId: string, _error: Error): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async failDebate(debateId: string, _error: Error): Promise<void> { //TODO: consider using the error, or remove it. 
     const state = this.debates.get(debateId);
     if (!state) return;
     state.status = DEBATE_STATUS.FAILED;
@@ -305,7 +306,7 @@ export class StateManager {
   /**
    * Ensures the base directory exists on disk.
    */
-  private ensureDirectoryExists() {
+  private ensureDirectoryExists(): void {
     if (!fs.existsSync(this.baseDir)) {
       // Use recursive mkdir to create nested directories if needed
       fs.mkdirSync(this.baseDir, { recursive: true });

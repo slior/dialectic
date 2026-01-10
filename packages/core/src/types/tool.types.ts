@@ -22,6 +22,19 @@ export interface ToolSchema {
 }
 
 /**
+ * OpenAI SDK tool format for function calling.
+ * Matches the structure expected by OpenAI's API.
+ */
+export interface OpenAITool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: ToolSchema['parameters'];
+  };
+}
+
+/**
  * Represents a tool call request from an LLM.
  * Matches OpenAI's function calling response format.
  */

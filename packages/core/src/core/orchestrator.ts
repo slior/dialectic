@@ -352,7 +352,7 @@ export class DebateOrchestrator {
    * @param roundNumber - Current round number for progress tracking.
    * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
    */
-  private async proposalPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) {
+  private async proposalPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>): Promise<void> {
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.PROPOSAL, this.agents.length);
 
     // Determine previous round once (if applicable). beginRound() appended the current round,
@@ -393,7 +393,7 @@ export class DebateOrchestrator {
    * @param roundNumber - Current round number for progress tracking.
    * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
    */
-  private async critiquePhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) {
+  private async critiquePhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>): Promise<void> {
     // Get proposals from last round
     const lastRound: DebateRound | undefined = state.rounds[state.rounds.length - 1];
     const proposals = (lastRound?.contributions || []).filter((c) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
@@ -433,7 +433,7 @@ export class DebateOrchestrator {
    * @param roundNumber - Current round number for progress tracking.
    * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
    */
-  private async refinementPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) {
+  private async refinementPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>): Promise<void> {
     const prevRound: DebateRound | undefined = state.rounds[state.rounds.length - 1];
 
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.REFINEMENT, this.agents.length);

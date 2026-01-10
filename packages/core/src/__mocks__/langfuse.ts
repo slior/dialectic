@@ -1,7 +1,15 @@
 // Mock for langfuse package to avoid ESM import issues in Jest
+//it's ok to not use some of the variables here because we're mocking the whole class.
 export class Langfuse {
-  constructor(_config?: any) {}
-  trace(_config?: any) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  constructor(_config?: unknown) {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  trace(_config?: unknown): {
+    id: string;
+    span: jest.Mock;
+    generation: jest.Mock;
+    currentSpan: jest.Mock;
+  } {
     const mockGeneration = {
       end: jest.fn(),
     };
@@ -16,7 +24,7 @@ export class Langfuse {
       currentSpan: jest.fn().mockReturnValue(mockSpan),
     };
   }
-  flushAsync() {
+  flushAsync(): Promise<void> {
     return Promise.resolve();
   }
 }

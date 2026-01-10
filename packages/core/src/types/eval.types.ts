@@ -75,15 +75,19 @@ export function isEnabledEvaluator(cfg: EvaluatorConfig): boolean {
   return cfg.enabled !== false;
 }
 
+const MIN_SCORE = 1;
+const MAX_SCORE = 10;
+const ROUNDING_MULTIPLIER = 100;
+
 export function clampScoreToRange(val: unknown): number | undefined {
   if (typeof val !== 'number' || !Number.isFinite(val)) return undefined;
-  if (val < 1) return 1;
-  if (val > 10) return 10;
+  if (val < MIN_SCORE) return MIN_SCORE;
+  if (val > MAX_SCORE) return MAX_SCORE;
   return val;
 }
 
 export function round2(val: number): number {
-  return Math.round((val + Number.EPSILON) * 100) / 100;
+  return Math.round((val + Number.EPSILON) * ROUNDING_MULTIPLIER) / ROUNDING_MULTIPLIER;
 }
 
 

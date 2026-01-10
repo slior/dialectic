@@ -1,4 +1,10 @@
-import { RoleBasedAgent, LLMProvider, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, ToolSchema, DebateContext, DebateState, CompletionRequest, CompletionResponse, ToolRegistry, ToolImplementation, ToolCall, CONTRIBUTION_TYPES, SUMMARIZATION_METHODS, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, createProvider } from 'dialectic-core';
+import {
+  RoleBasedAgent, LLMProvider, AgentConfig, AGENT_ROLES, LLM_PROVIDERS,
+  ToolSchema, DebateContext, DebateState, CompletionRequest, CompletionResponse,
+  ToolRegistry, ToolImplementation, CONTRIBUTION_TYPES, SUMMARIZATION_METHODS,
+  DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH,
+  DEFAULT_SUMMARIZATION_METHOD, createProvider,
+} from 'dialectic-core';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;
@@ -19,13 +25,15 @@ jest.mock('openai', () => {
     default: class OpenAIMock {
       public chat = {
         completions: {
-          create: async (_: any) => ({ 
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          create: async (_: unknown): Promise<unknown> => ({ 
             choices: [{ message: { content: 'Security solution text' } }],
             usage: { total_tokens: MOCK_TOTAL_TOKENS, prompt_tokens: MOCK_PROMPT_TOKENS, completion_tokens: MOCK_COMPLETION_TOKENS }
           }),
         },
       };
-      constructor(_opts: any) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      constructor(_opts: unknown) {}
     },
   };
 });
@@ -39,11 +47,12 @@ class MockLLMProvider implements LLMProvider {
     this.responses = responses;
   }
 
-  async complete(_request: any): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async complete(_request: unknown): Promise<CompletionResponse> {
     const response = this.responses[this.currentIndex % this.responses.length];
     this.currentIndex++;
     return {
-      text: response,
+      text: response ?? '',
       usage: { totalTokens: MOCK_COMPLETION_TOKENS }
     };
   }
@@ -64,21 +73,23 @@ class TestTool implements ToolImplementation {
     },
   };
 
-  execute(_args: any, _context?: DebateContext, _state?: DebateState): string {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  execute(_args: unknown, _context?: DebateContext, _state?: DebateState): string {
     return JSON.stringify({ status: 'success', result: { output: 'test' } });
   }
 }
 
 // Mock provider for tool calling tests
 class MockProvider implements LLMProvider {
-  private responses: Array<{ text: string; toolCalls?: ToolCall[] }> = [];
+  private responses: CompletionResponse[] = [];
   private callCount = 0;
 
-  setResponses(responses: Array<{ text: string; toolCalls?: ToolCall[] }>) {
+  setResponses(responses: CompletionResponse[]): void {
     this.responses = responses;
     this.callCount = 0;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_request: CompletionRequest): Promise<CompletionResponse> {
     const response = this.responses[this.callCount] || { text: 'Final' };
     this.callCount++;
@@ -475,7 +486,8 @@ describe('RoleBasedAgent - prepareContext()', () => {
 
   it('should fallback to full history on error with warning', async () => {
     class FailingProvider implements LLMProvider {
-      async complete(_request: any): Promise<any> {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      async complete(_request: unknown): Promise<CompletionResponse> {
         throw new Error('LLM failure');
       }
     }

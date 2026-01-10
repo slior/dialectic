@@ -38,7 +38,8 @@ export class EvaluatorAgent {
    * Fixed temperature value for model calls to ensure deterministic evaluation.
    * This is set to a low value (0.1) to reduce randomness/variance in LLM output.
    */
-  private static readonly FIXED_TEMPERATURE = 0.1;
+  // eslint-disable-next-line no-magic-numbers
+  private static readonly FIXED_TEMPERATURE: number = 0.1;
 
   /**
    * Constructs an EvaluatorAgent instance.

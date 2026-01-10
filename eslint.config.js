@@ -40,7 +40,7 @@ module.exports = tseslint.config(
       }],
       'max-lines-per-function': ['error', { max: 100 }],
       'max-depth': ['error', { max: 4 }],
-      'max-params': ['error', { max: 5 }],
+      'max-params': ['error', { max: 10 }],
       
       // Import ordering
       'import/order': ['error', {

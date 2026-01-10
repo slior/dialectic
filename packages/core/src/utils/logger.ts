@@ -30,6 +30,7 @@ export class Logger {
   }
 
   separator(): void {
-    console.log('━'.repeat(60));
+    const SEPARATOR_LENGTH = 60;
+    console.log('━'.repeat(SEPARATOR_LENGTH));
   }
 }

@@ -34,11 +34,11 @@ class MockLLMProvider implements LLMProvider {
     this.usage = usage ?? undefined;
   }
 
-  setResponse(text: string) {
+  setResponse(text: string): void {
     this.responseText = text;
   }
 
-  setFailure(shouldFail: boolean, error?: Error) {
+  setFailure(shouldFail: boolean, error?: Error): void {
     this.shouldFail = shouldFail;
     this.failError = error || new Error('Mock provider error');
   }
@@ -213,7 +213,7 @@ describe('EvaluatorAgent', () => {
         // Mock provider with delay
         const delayedProvider = new MockLLMProvider('Result');
         const originalComplete = delayedProvider.complete.bind(delayedProvider);
-        delayedProvider.complete = async (request: CompletionRequest) => {
+        delayedProvider.complete = async (request: CompletionRequest): Promise<CompletionResponse> => {
           await new Promise(resolve => setTimeout(resolve, 10));
           return originalComplete(request);
         };
@@ -261,6 +261,7 @@ describe('EvaluatorAgent', () => {
           TEST_SYSTEM_PROMPT,
           TEST_USER_PROMPT_TEMPLATE
         );
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { requirementsInfo, ...inputs } = createMockEvaluatorInputs();
 
         await agent.evaluate(inputs);

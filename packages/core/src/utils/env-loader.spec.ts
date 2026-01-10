@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { loadEnvironmentFile } from 'dialectic-core';
+import dotenv from 'dotenv';
 
 // Mock fs and path modules
 jest.mock('fs');
@@ -14,7 +15,6 @@ const mockedPath = path as jest.Mocked<typeof path>;
 jest.mock('dotenv', () => ({
   config: jest.fn()
 }));
-import dotenv from 'dotenv';
 const mockedDotenv = dotenv as jest.Mocked<typeof dotenv>;
 
 // Test constants

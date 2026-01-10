@@ -2,7 +2,14 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { DebateOrchestrator, DebateConfig, DebateRound, DebateState, Solution, Agent, StateManager, AgentConfig, Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult } from 'dialectic-core';
+import { DebateConfig, DebateRound, DebateState, Solution, AgentConfig, 
+          Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult } from 'dialectic-core';
+
+import { Agent } from './agent';
+import { JudgeAgent } from './judge';
+import { DebateOrchestrator } from './orchestrator';
+import { StateManager } from './state-manager';
+
 
 // Test constants
 const DEFAULT_TIMEOUT_MS = 300000;
@@ -66,7 +73,10 @@ function createMockAgentWithToolMetadata(id: string, role: any, toolCalls?: Tool
   } as unknown as Agent;
 }
 
+// Partial mock of JudgeAgent for testing - only implements the methods needed by the orchestrator
+// Using double cast (as unknown as JudgeAgent) because this is intentionally a partial mock
 const mockJudge = {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   synthesize: async (_problem: string, _rounds: DebateRound[]) => ({
     description: 'final',
     tradeoffs: [],
@@ -74,10 +84,11 @@ const mockJudge = {
     confidence: 80,
     synthesizedBy: 'judge',
   } as Solution),
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   prepareContext: async (_rounds: DebateRound[]) => ({ context: { problem: '', history: [] } }),
-} as unknown as any;
+} as unknown as JudgeAgent;
 
-function createMockStateManager() {
+function createMockStateManager(): StateManager {
   const state: DebateState = {
     id: 'deb-test',
     problem: '',
@@ -90,6 +101,7 @@ function createMockStateManager() {
 
   return {
     createDebate: async (problem: string) => ({ ...state, problem }),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     beginRound: async (_id: string) => {
       const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
       state.rounds.push(round);
@@ -97,6 +109,7 @@ function createMockStateManager() {
       state.updatedAt = new Date();
       return round;
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addContribution: async (_id: string, contrib: any) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
@@ -112,7 +125,7 @@ function createMockStateManager() {
   } as unknown as StateManager;
 }
 
-function createMockStateManagerWithToolSupport() {
+function createMockStateManagerWithToolSupport(): StateManager {
   const state: DebateState = {
     id: 'deb-test',
     problem: 'Test problem',
@@ -125,6 +138,7 @@ function createMockStateManagerWithToolSupport() {
 
   return {
     createDebate: async (problem: string) => ({ ...state, problem }),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     beginRound: async (_id: string) => {
       const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
       state.rounds.push(round);
@@ -132,25 +146,30 @@ function createMockStateManagerWithToolSupport() {
       state.updatedAt = new Date();
       return round;
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addContribution: async (_id: string, contrib: any) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       round.contributions.push(contrib);
       state.updatedAt = new Date();
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addSummary: async (_id: string, _summary: any) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       if (!round.summaries) round.summaries = {};
       state.updatedAt = new Date();
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addJudgeSummary: async (_id: string, _summary: any) => {
       state.updatedAt = new Date();
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     completeDebate: async (_id: string, _solution: any) => {
       state.status = 'completed';
       state.updatedAt = new Date();
     },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     getDebate: async (_id: string) => state,
   } as unknown as StateManager;
 }
@@ -166,28 +185,33 @@ class MockAgent extends Agent {
     }
   }
 
-  setPreparedSummary(summary: DebateSummary) {
+  setPreparedSummary(summary: DebateSummary): void {
     this.summaryToReturn = summary;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
     return { content: 'Mock proposal', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async critique(_proposal: Proposal, _context: DebateContext): Promise<Critique> {
     return { content: 'Mock critique', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async refine(_originalProposal: Proposal, _critiques: Critique[], _context: DebateContext): Promise<Proposal> {
     return { content: 'Mock refinement', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSummarize(_context: DebateContext): boolean {
     return this.summaryToReturn !== undefined;
   }
 
   async prepareContext(
     context: DebateContext,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _roundNumber: number
   ): Promise<ContextPreparationResult> {
     if (this.summaryToReturn) {
@@ -199,6 +223,7 @@ class MockAgent extends Agent {
     return { context };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<{ questions: { id?: string; text: string }[] }> {
     return { questions: [] };
   }
@@ -218,26 +243,32 @@ class MockJudge extends Agent {
     super(config, {} as unknown as any);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
     return { content: 'Judge proposal', metadata: {} };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async critique(_proposal: Proposal, _context: DebateContext): Promise<Critique> {
     return { content: 'Judge critique', metadata: {} };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async refine(_originalProposal: Proposal, _critiques: Critique[], _context: DebateContext): Promise<Proposal> {
     return { content: 'Judge refinement', metadata: {} };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSummarize(_context: DebateContext): boolean {
     return false;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async prepareContext(context: DebateContext, _roundNumber: number): Promise<{ context: DebateContext }> {
     return { context };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async synthesize(_context: DebateContext): Promise<any> {
     return {
       description: 'Final solution',
@@ -249,6 +280,7 @@ class MockJudge extends Agent {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<{ questions: { id?: string; text: string }[] }> {
     return { questions: [] };
   }
@@ -266,7 +298,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge, sm, cfg);
     await expect(orchestrator.runDebate('Design a caching system')).resolves.toBeDefined();
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
@@ -289,7 +321,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge, sm, cfg);
     await expect(orchestrator.runDebate('Design a rate limiting system')).resolves.toBeDefined();
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
@@ -311,7 +343,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge, sm, cfg);
     await orchestrator.runDebate('Design X');
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
@@ -348,14 +380,16 @@ describe('DebateOrchestrator (Flow 1)', () => {
     };
     const sm = {
       createDebate: async (problem: string) => ({ ...state, problem }),
-      beginRound: async (_id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    beginRound: async (_id: string) => {
         const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
         state.rounds.push(round);
         state.currentRound = round.roundNumber;
         state.updatedAt = new Date();
         return round;
       },
-      addContribution: async (_id: string, contrib: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+    addContribution: async (_id: string, contrib: any) => {
         const round = state.rounds[state.currentRound - 1];
         if (!round) throw new Error('No active round');
         // Drop refinement for a2 in round 1 only
@@ -384,7 +418,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge, sm, cfg);
     await orchestrator.runDebate('Design Y');
 
     const r1 = state.rounds[0];
@@ -416,7 +450,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge, sm, cfg);
     await orchestrator.runDebate('Test problem');
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
@@ -440,7 +474,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator(agents, mockJudge as any, sm, cfg);
+    const orchestrator = new DebateOrchestrator(agents, mockJudge, sm, cfg);
     await orchestrator.runDebate('Test problem');
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
@@ -461,7 +495,9 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
   });
 
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {
+      // Ignore cleanup errors
+    }
   });
 
   const config: DebateConfig = {
@@ -499,7 +535,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
     const prepareContextSpy1 = jest.spyOn(agent1, 'prepareContext');
     const prepareContextSpy2 = jest.spyOn(agent2, 'prepareContext');
 
-    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as unknown as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as unknown as JudgeAgent, stateManager, config);
     
     const state = await stateManager.createDebate('Test problem');
     
@@ -548,7 +584,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
       onSummarizationComplete
     };
 
-    const orchestrator = new DebateOrchestrator([agent], judge as any, stateManager, config, hooks);
+    const orchestrator = new DebateOrchestrator([agent], judge as unknown as JudgeAgent, stateManager, config, hooks);
     
     const state = await stateManager.createDebate('Test problem');
     await stateManager.beginRound(state.id);
@@ -587,7 +623,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
 
     const addSummarySpy = jest.spyOn(stateManager, 'addSummary');
 
-    const orchestrator = new DebateOrchestrator([agent], judge as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent], judge as unknown as JudgeAgent, stateManager, config);
     
     const state = await stateManager.createDebate('Test problem');
     await stateManager.beginRound(state.id);
@@ -621,7 +657,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
     const judge = new MockJudge();
     const stateManager = new StateManager(tmpDir);
 
-    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as unknown as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as unknown as JudgeAgent, stateManager, config);
     
     const state = await stateManager.createDebate('Test problem');
     
@@ -641,7 +677,9 @@ describe('DebateOrchestrator - runDebate integration with summarization', () => 
   });
 
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {
+      // Ignore cleanup errors
+    }
   });
 
   it('should call summarization phase before proposal phase', async () => {
@@ -668,7 +706,7 @@ describe('DebateOrchestrator - runDebate integration with summarization', () => 
 
     const prepareContextSpy = jest.spyOn(agent, 'prepareContext');
 
-    const orchestrator = new DebateOrchestrator([agent], judge as unknown as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent], judge as unknown as JudgeAgent, stateManager, config);
     
     await orchestrator.runDebate('Test problem');
 
@@ -711,7 +749,7 @@ describe('DebateOrchestrator - runDebate integration with summarization', () => 
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator([agent], judge as unknown as any, stateManager, config);
+    const orchestrator = new DebateOrchestrator([agent], judge as unknown as JudgeAgent, stateManager, config);
     
     const result = await orchestrator.runDebate('Test problem');
 
@@ -944,7 +982,9 @@ describe('DebateOrchestrator - Critique Activity String', () => {
   });
 
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {
+      // Ignore cleanup errors
+    }
   });
 
   it('should include critiqued agent name in critique activity string', async () => {
@@ -982,7 +1022,7 @@ describe('DebateOrchestrator - Critique Activity String', () => {
       timeoutPerRound: DEFAULT_TIMEOUT_MS,
     };
 
-    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as any, stateManager, config, hooks);
+    const orchestrator = new DebateOrchestrator([agent1, agent2], judge as unknown as JudgeAgent, stateManager, config, hooks);
     
     await orchestrator.runDebate('Test problem');
 

@@ -16,7 +16,7 @@ const UNKNOWN_LABEL = 'unknown';
  * @returns Formatted date string.
  */
 function formatLocalTime(date: Date): string {
-  const pad = (n: number) => n.toString().padStart(2, '0');
+  const pad = (n: number): string => n.toString().padStart(2, '0');
   const year = date.getFullYear();
   const month = pad(date.getMonth() + 1);
   const day = pad(date.getDate());
@@ -42,6 +42,48 @@ function extractFirstLine(text: string): string {
 }
 
 /**
+ * Returns a value or NA_TEXT if the value is falsy or undefined.
+ * Optionally converts the value to a string using a converter function.
+ * 
+ * @param value - The value to check (can be any type).
+ * @param converter - Optional function to convert the value to a string (e.g., toString, String, JSON.stringify).
+ * @returns The value (converted if converter provided) or NA_TEXT if value is falsy/undefined.
+ */
+function valOrNA<T>(value: T | undefined | null, converter?: (val: T) => string): string {
+  if (value === undefined || value === null) {
+    return NA_TEXT;
+  }
+  
+  if (converter) {
+    return converter(value);
+  }
+  
+  // For falsy values (empty string, 0, false), return NA_TEXT
+  // For truthy values, convert to string
+  return value ? String(value) : NA_TEXT;
+}
+
+/**
+ * Formats a single agent configuration as a markdown table row.
+ * @param agent - Agent configuration.
+ * @returns Markdown table row string.
+ */
+function formatAgentTableRow(agent: AgentConfig): string {
+  const id = valOrNA(agent.id);
+  const name = valOrNA(agent.name);
+  const role = valOrNA(agent.role);
+  const model = valOrNA(agent.model);
+  const provider = valOrNA(agent.provider);
+  const temperature = valOrNA(agent.temperature, (v) => v.toString());
+  const enabled = valOrNA(agent.enabled, (v) => v.toString());
+  const systemPromptPath = valOrNA(agent.systemPromptPath, String);
+  const summaryPromptPath = valOrNA(agent.summaryPromptPath, String);
+  const summarization = valOrNA(agent.summarization, JSON.stringify);
+  
+  return `| ${id} | ${name} | ${role} | ${model} | ${provider} | ${temperature} | ${enabled} | ${systemPromptPath} | ${summaryPromptPath} | ${summarization} |\n`;
+}
+
+/**
  * Formats agent configuration as a markdown table.
  * @param agents - Array of agent configurations.
  * @returns Markdown table string.
@@ -56,18 +98,7 @@ function formatAgentsTable(agents: AgentConfig[]): string {
   table += '|----|------|------|-------|----------|-------------|----------|------------------|-------------------|---------------|\n';
 
   for (const agent of agents) {
-    const id = agent.id || NA_TEXT;
-    const name = agent.name || NA_TEXT;
-    const role = agent.role || NA_TEXT;
-    const model = agent.model || NA_TEXT;
-    const provider = agent.provider || NA_TEXT;
-    const temperature = agent.temperature !== undefined ? agent.temperature.toString() : NA_TEXT;
-    const enabled = agent.enabled !== undefined ? agent.enabled.toString() : NA_TEXT;
-    const systemPromptPath = agent.systemPromptPath !== undefined ? String(agent.systemPromptPath) : NA_TEXT;
-    const summaryPromptPath = agent.summaryPromptPath !== undefined ? String(agent.summaryPromptPath) : NA_TEXT;
-    const summarization = agent.summarization !== undefined ? JSON.stringify(agent.summarization) : NA_TEXT;
-    
-    table += `| ${id} | ${name} | ${role} | ${model} | ${provider} | ${temperature} | ${enabled} | ${systemPromptPath} | ${summaryPromptPath} | ${summarization} |\n`;
+    table += formatAgentTableRow(agent);
   }
 
   return table;
@@ -83,17 +114,17 @@ function formatJudgeTable(judge: AgentConfig): string {
   let table = '| ID | Name | Role | Model | Provider | Temperature | Enabled | SystemPromptPath | SummaryPromptPath | Summarization |\n';
   table += '|----|------|------|-------|----------|-------------|----------|------------------|-------------------|---------------|\n';
 
-  const id = judge.id || NA_TEXT;
-  const name = judge.name || NA_TEXT;
-  const role = judge.role || NA_TEXT;
-  const model = judge.model || NA_TEXT;
-  const provider = judge.provider || NA_TEXT;
-  const temperature = judge.temperature !== undefined ? judge.temperature.toString() : NA_TEXT;
+  const id = valOrNA(judge.id);
+  const name = valOrNA(judge.name);
+  const role = valOrNA(judge.role);
+  const model = valOrNA(judge.model);
+  const provider = valOrNA(judge.provider);
+  const temperature = valOrNA(judge.temperature, (v) => v.toString());
   // Guard for optional property without unsafe cast
-  const enabled = 'enabled' in judge ? String((judge as unknown as { enabled?: unknown }).enabled) : NA_TEXT;
-  const systemPromptPath = judge.systemPromptPath !== undefined ? String(judge.systemPromptPath) : NA_TEXT;
-  const summaryPromptPath = judge.summaryPromptPath !== undefined ? String(judge.summaryPromptPath) : NA_TEXT;
-  const summarization = judge.summarization !== undefined ? JSON.stringify(judge.summarization) : NA_TEXT;
+  const enabled = 'enabled' in judge ? valOrNA((judge as unknown as { enabled?: unknown }).enabled, String) : NA_TEXT;
+  const systemPromptPath = valOrNA(judge.systemPromptPath, String);
+  const summaryPromptPath = valOrNA(judge.summaryPromptPath, String);
+  const summarization = valOrNA(judge.summarization, JSON.stringify);
   
   table += `| ${id} | ${name} | ${role} | ${model} | ${provider} | ${temperature} | ${enabled} | ${systemPromptPath} | ${summaryPromptPath} | ${summarization} |\n`;
 
@@ -109,8 +140,8 @@ function formatContributionMetadata(contribution: Contribution, verbose: boolean
   if (!verbose)
     return '';
 
-  const latency = contribution.metadata.latencyMs !== undefined  ? contribution.metadata.latencyMs.toString()  : NA_TEXT;
-  const tokens = contribution.metadata.tokensUsed !== undefined  ? contribution.metadata.tokensUsed.toString()  : NA_TEXT;
+  const latency = valOrNA(contribution.metadata.latencyMs, (v) => v.toString());
+  const tokens = valOrNA(contribution.metadata.tokensUsed, (v) => v.toString());
 
   return ` (latency=${latency}ms, tokens=${tokens})`;
 }

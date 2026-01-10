@@ -451,12 +451,8 @@ export abstract class Agent {
    * @param allToolResults - Array to add the result to for the overall collection.
    */
   protected executeTool(
-    tool: ToolImplementation,
-    args: Record<string, unknown>,
-    toolCall: ToolCall,
-    context: DebateContext | undefined,
-    state: DebateState | undefined,
-    toolResultsForThisIteration: ToolResult[],
+    tool: ToolImplementation, args: Record<string, unknown>, toolCall: ToolCall,
+    context: DebateContext | undefined, state: DebateState | undefined, toolResultsForThisIteration: ToolResult[],
     allToolResults: ToolResult[]
   ): void {
     try {

@@ -5,7 +5,7 @@ try {
 } catch {
   // If chalk is not available, create a pass-through mock
   chalk = new Proxy({}, {
-    get: () => (text: string) => text
+    get: (): ((text: string) => string) => (text: string) => text
   });
 }
 

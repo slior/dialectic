@@ -28,7 +28,9 @@ describe('resolvePrompt', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), TMP_DIR_PREFIX));
   });
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {
+      // Ignore cleanup errors
+    }
   });
 
   it('returns built-in when no path provided', () => {

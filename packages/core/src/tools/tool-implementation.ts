@@ -19,7 +19,7 @@ export interface ToolImplementation {
    * @param state - Optional debate state providing access to full debate rounds (takes precedence over context.history).
    * @returns JSON string with status and result/error: `{"status":"success","result":{...}}` or `{"status":"error","error":"..."}`
    */
-  execute(args: any, context?: DebateContext, state?: DebateState): string;
+  execute(args: Record<string, unknown>, context?: DebateContext, state?: DebateState): string;
 }
 
 /**
@@ -43,7 +43,8 @@ export function createToolErrorJson(errorMessage: string): string {
  * @param result - The result data to include in the success response.
  * @returns JSON string with status "success" and the result data.
  */
-export function createToolSuccessJson(result: any): string {
+// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+export function createToolSuccessJson(result: unknown): string {
   return JSON.stringify({
     status: TOOL_RESULT_STATUS.SUCCESS,
     result,
@@ -59,13 +60,14 @@ export function createToolSuccessJson(result: any): string {
  * @param error - Optional error message (for error).
  * @returns ToolResult object with properly formatted content.
  */
+
 export function createToolResult(
   callId: string,
   status: ToolResultStatus,
-  result?: any,
+  result?: unknown,
   error?: string
 ): ToolResult {
-  const content: any = { status };
+  const content: Record<string, unknown> = { status };
   if (status === TOOL_RESULT_STATUS.SUCCESS && result !== undefined) {
     content.result = result;
   } else if (status === TOOL_RESULT_STATUS.ERROR && error !== undefined) {

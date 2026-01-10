@@ -1,5 +1,5 @@
-import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES } from 'dialectic-core';
-
+import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES, CompletionRequest, CompletionResponse } from 'dialectic-core';
+//TODO: change the imports to import from source instead of dialectic-core.
 // Test constants
 const DEFAULT_SUMMARY_TEMPERATURE = 0.3;
 const CUSTOM_TEMPERATURE = 0.55;
@@ -18,7 +18,8 @@ class MockLLMProvider implements LLMProvider {
     this.shouldFail = shouldFail;
   }
 
-  async complete(_request: any): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async complete(_request: CompletionRequest): Promise<CompletionResponse> {
     if (this.shouldFail) {
       throw new Error('Mock LLM failure');
     }
@@ -120,7 +121,8 @@ describe('LengthBasedSummarizer', () => {
 
   it('should handle missing token usage from LLM', async () => {
     class NoTokenProvider implements LLMProvider {
-      async complete(_request: any): Promise<any> {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      async complete(_request: CompletionRequest): Promise<CompletionResponse> {
         return { text: 'Summary' };
       }
     }

@@ -1,4 +1,4 @@
-import { Agent, ToolRegistry, ToolImplementation, ToolCall, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState } from 'dialectic-core';
+import { Agent, ToolRegistry, ToolImplementation, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState } from 'dialectic-core';
 
 // Test constants
 const DEFAULT_TOOL_CALL_LIMIT = 10;
@@ -23,24 +23,27 @@ class MockTool implements ToolImplementation {
     },
   };
 
-  execute(args: any, _context?: DebateContext, _state?: DebateState): string {
-    if (args.input === 'error') {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  execute(args: Record<string, unknown>, _context?: DebateContext, _state?: DebateState): string {
+    const input = typeof args.input === 'string' ? args.input : '';
+    if (input === 'error') {
       return JSON.stringify({ status: 'error', error: 'Mock error' });
     }
-    return JSON.stringify({ status: 'success', result: { output: `Processed: ${args.input}` } });
+    return JSON.stringify({ status: 'success', result: { output: `Processed: ${input}` } });
   }
 }
 
 // Mock provider that returns tool calls
 class MockProviderWithTools implements LLMProvider {
   private callCount = 0;
-  private toolCallResponses: Array<{ text: string; toolCalls?: ToolCall[] }> = [];
+  private toolCallResponses: CompletionResponse[] = [];
 
-  setResponses(responses: Array<{ text: string; toolCalls?: ToolCall[] }>) {
+  setResponses(responses: CompletionResponse[]): void {
     this.toolCallResponses = responses;
     this.callCount = 0;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_request: CompletionRequest): Promise<CompletionResponse> {
     const response = this.toolCallResponses[this.callCount] || { text: 'Final response' };
     this.callCount++;
@@ -59,37 +62,45 @@ class MockProviderWithTools implements LLMProvider {
 
 // Mock agent class for testing
 class TestAgent extends Agent {
+  // eslint-disable-next-line max-params, @typescript-eslint/no-explicit-any
   constructor(config: any, provider: LLMProvider, toolRegistry?: ToolRegistry, toolCallLimit?: number, logger?: any) {
     super(config, provider, toolRegistry, toolCallLimit, logger);
     (this as any).toolRegistry = toolRegistry;
     (this as any).toolCallLimit = toolCallLimit ?? 10;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async propose(_problem: string, _context: DebateContext): Promise<any> {
     throw new Error('Not implemented in test');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async critique(_proposal: any, _context: DebateContext): Promise<any> {
     throw new Error('Not implemented in test');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async refine(_original: any, _critiques: any[], _context: DebateContext): Promise<any> {
     throw new Error('Not implemented in test');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSummarize(_context: DebateContext): boolean {
     return false;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async prepareContext(_context: DebateContext, _roundNumber: number): Promise<any> {
     return { context: _context };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<any> {
     return { questions: [] };
   }
 
   // Expose callLLM for testing
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async testCallLLM(systemPrompt: string, userPrompt: string, context?: DebateContext): Promise<any> {
     return (this as any).callLLM(systemPrompt, userPrompt, context);
   }
@@ -504,7 +515,7 @@ describe('Agent Tool Calling', () => {
   describe('Logger Functionality', () => {
     it('should call logger for tool execution messages', async () => {
       const loggedMessages: Array<{ message: string; onlyVerbose?: boolean }> = [];
-      const logger = (message: string, onlyVerbose?: boolean) => {
+      const logger = (message: string, onlyVerbose?: boolean): void => {
         loggedMessages.push(onlyVerbose !== undefined ? { message, onlyVerbose } : { message });
       };
 
@@ -541,7 +552,7 @@ describe('Agent Tool Calling', () => {
 
     it('should call logger for tool warning messages', async () => {
       const loggedMessages: Array<{ message: string; onlyVerbose?: boolean }> = [];
-      const logger = (message: string, onlyVerbose?: boolean) => {
+      const logger = (message: string, onlyVerbose?: boolean): void => {
         loggedMessages.push(onlyVerbose !== undefined ? { message, onlyVerbose } : { message });
       };
 
@@ -588,7 +599,7 @@ describe('Agent Tool Calling', () => {
 
     it('should respect onlyVerbose parameter - logs when onlyVerbose=false', () => {
       const loggedMessages: string[] = [];
-      const logger = (message: string, onlyVerbose?: boolean) => {
+      const logger = (message: string, onlyVerbose?: boolean): void => {
         if (onlyVerbose === false || (onlyVerbose === true && false)) {
           loggedMessages.push(message);
         }
@@ -632,7 +643,7 @@ describe('Agent Tool Calling', () => {
     it('should respect onlyVerbose parameter - logs when onlyVerbose=true and verbose=true', () => {
       const loggedMessages: string[] = [];
       const verbose = true;
-      const logger = (message: string, onlyVerbose?: boolean) => {
+      const logger = (message: string, onlyVerbose?: boolean): void => {
         if (onlyVerbose === false || (onlyVerbose === true && verbose)) {
           loggedMessages.push(message);
         }
@@ -674,11 +685,14 @@ describe('Agent Tool Calling', () => {
     });
 
     it('should fallback to writeStderr when logger not provided', async () => {
-      const originalWriteStderr = require('../utils/console').writeStderr;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const consoleUtils = require('../utils/console');
+      const originalWriteStderr = consoleUtils.writeStderr;
       const stderrCalls: string[] = [];
       
       // Mock writeStderr
-      require('../utils/console').writeStderr = (msg: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      require('../utils/console').writeStderr = (msg: string): void => {
         stderrCalls.push(msg);
       };
 
@@ -711,12 +725,13 @@ describe('Agent Tool Calling', () => {
       expect(executionMessages.length).toBeGreaterThan(0);
 
       // Restore original
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       require('../utils/console').writeStderr = originalWriteStderr;
     });
 
     it('should log all 7 tool-related messages through logger', async () => {
       const loggedMessages: Array<{ message: string; onlyVerbose?: boolean }> = [];
-      const logger = (message: string, onlyVerbose?: boolean) => {
+      const logger = (message: string, onlyVerbose?: boolean): void => {
         loggedMessages.push(onlyVerbose !== undefined ? { message, onlyVerbose } : { message });
       };
 

@@ -1,4 +1,4 @@
-import { DebateContext, Contribution, DebateState } from '../types/debate.types';
+import { DebateContext, Contribution, DebateState, DebateRound } from '../types/debate.types';
 import { ToolSchema } from '../types/tool.types';
 
 import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
@@ -52,6 +52,64 @@ export class ContextSearchTool implements ToolImplementation {
    * @returns JSON string with status and matches array.
    */
   execute(args: { term?: string }, context?: DebateContext, state?: DebateState): string {
+    const validationError = this.verifyToolArguments(args, context);
+    if (validationError) {
+      return validationError;
+    }
+
+    // After validation, context and args.term are guaranteed to be defined
+    const validatedContext = context!;
+    const validatedTerm = args.term!;
+
+    // Determine history source: prefer state.rounds, fall back to context.history
+    const history = state?.rounds ?? validatedContext.history;
+
+    if (!history || history.length === 0) {
+      return createToolSuccessJson({
+        matches: [],
+      });
+    }
+
+    const searchTerm = validatedTerm.toLowerCase();
+    const matches: ContextSearchMatch[] = [];
+
+    // Search through all rounds and contributions
+    for (const round of history) {
+      this.searchRound(round, searchTerm, matches);
+    }
+
+    return createToolSuccessJson({
+      matches,
+    });
+  }
+
+  /**
+   * Searches a single round for contributions matching the search term.
+   * Adds any matches found to the provided matches array.
+   * 
+   * @param round - The debate round to search.
+   * @param searchTerm - The lowercase search term to find.
+   * @param matches - Array to add matches to.
+   */
+  private searchRound(round: DebateRound, searchTerm: string, matches: ContextSearchMatch[]): void {
+    if (!round.contributions) return;
+
+    for (const contribution of round.contributions) {
+      const match = this.processContributionMatch(contribution, searchTerm, round.roundNumber);
+      if (match) {
+        matches.push(match);
+      }
+    }
+  }
+
+  /**
+   * Verifies that the tool arguments and context are valid.
+   * 
+   * @param args - Tool arguments containing the search term.
+   * @param context - Optional debate context containing history to search.
+   * @returns Error JSON string if validation fails, null if validation passes.
+   */
+  private verifyToolArguments(args: { term?: string }, context?: DebateContext): string | null {
     if (!context) {
       return createToolErrorJson('Context is required for context search');
     }
@@ -60,33 +118,7 @@ export class ContextSearchTool implements ToolImplementation {
       return createToolErrorJson('Search term is required and must be a string');
     }
 
-    // Determine history source: prefer state.rounds, fall back to context.history
-    const history = state?.rounds ?? context.history;
-
-    if (!history || history.length === 0) {
-      return createToolSuccessJson({
-        matches: [],
-      });
-    }
-
-    const searchTerm = args.term.toLowerCase();
-    const matches: ContextSearchMatch[] = [];
-
-    // Search through all rounds and contributions
-    for (const round of history) {
-      if (!round.contributions) continue;
-
-      for (const contribution of round.contributions) {
-        const match = this.processContributionMatch(contribution, searchTerm, round.roundNumber);
-        if (match) {
-          matches.push(match);
-        }
-      }
-    }
-
-    return createToolSuccessJson({
-      matches,
-    });
+    return null;
   }
 
   /**

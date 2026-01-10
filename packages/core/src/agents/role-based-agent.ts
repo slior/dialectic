@@ -3,7 +3,7 @@ import { LLMProvider } from '../providers/llm-provider';
 import { ToolRegistry } from '../tools/tool-registry';
 import { AgentConfig, Proposal, Critique, PromptSource, AgentRole } from '../types/agent.types';
 import type { SummarizationConfig } from '../types/config.types';
-import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
+import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse, DebateState, Contribution } from '../types/debate.types';
 import { logWarning } from '../utils/console';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
 
@@ -241,7 +241,7 @@ export class RoleBasedAgent extends Agent {
    */
   private processRelevantContributions<T>(
     context: DebateContext,
-    callback: (contribution: any, roundNumber: number) => T,
+    callback: (contribution: Contribution, roundNumber: number) => T,
     initialValue: T,
     reducer: (accumulator: T, current: T) => T
   ): T {
@@ -326,6 +326,7 @@ export class RoleBasedAgent extends Agent {
    * @param roundNumber - The current round number (1-indexed).
    * @returns The context preparation result.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async prepareContext(context: DebateContext, _roundNumber: number): Promise<ContextPreparationResult>
   {
     // Check if summarization is needed

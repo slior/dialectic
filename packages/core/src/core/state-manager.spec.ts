@@ -20,7 +20,9 @@ describe('StateManager promptSources', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'debate-state-'));
   });
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {
+      // Ignore cleanup errors
+    }
   });
 
   it('persists promptSources in debate state file', async () => {
@@ -82,7 +84,10 @@ describe('StateManager - addSummary()', () => {
   });
 
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); }
+    catch {
+      // Ignore cleanup errors
+    }
   });
 
   it('should add summary to current round', async () => {
@@ -267,7 +272,9 @@ describe('StateManager updateUserFeedback', () => {
   });
   
   afterEach(() => {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {
+      // Ignore cleanup errors
+    }
   });
 
   it('should update userFeedback for existing debate', async () => {

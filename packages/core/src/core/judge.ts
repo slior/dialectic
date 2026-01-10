@@ -1,5 +1,5 @@
 import { DEFAULT_JUDGE_SUMMARY_PROMPT } from '../agents/prompts/judge-prompts';
-import { LLMProvider } from '../providers/llm-provider';
+import { LLMProvider, CompletionUsage } from '../providers/llm-provider';
 import { AgentConfig, PromptSource } from '../types/agent.types';
 import { DebateContext, DebateRound, Solution, DebateSummary, ContextPreparationResult, SummarizationConfig, CONTRIBUTION_TYPES } from '../types/debate.types';
 import { TracingContext, LangfuseSpan, LangfuseGeneration, SPAN_LEVEL } from '../types/tracing.types';
@@ -39,6 +39,16 @@ interface JudgeSynthesisOutput {
   openQuestions: string[];
   confidence: number;
 }
+
+/**
+ * Langfuse usage format for token tracking.
+ */
+type LangfuseUsage = {
+  input: number | null;
+  output: number | null;
+  total: number | null;
+  unit: 'TOKENS';
+};
 
 /**
  * JudgeAgent is responsible for synthesizing the best solution from the debate history.
@@ -155,6 +165,85 @@ export class JudgeAgent {
   }
 
   /**
+   * Creates a Langfuse span with judge metadata.
+   * 
+   * @param tracingContext - The tracing context for creating the span.
+   * @param spanName - Name for the span.
+   * @returns The created Langfuse span.
+   * @private
+   */
+  private createJudgeSpan(tracingContext: TracingContext, spanName: string): LangfuseSpan {
+    return tracingContext.trace.span({
+      name: spanName,
+      metadata: {
+        judgeName: this.config.name,
+        judgeId: this.config.id,
+        debateId: tracingContext.trace.id || 'unknown',
+      },
+    });
+  }
+
+  /**
+   * Creates a Langfuse generation with judge metadata.
+   * 
+   * @param span - The parent span to create the generation under.
+   * @param systemPrompt - The system prompt for the LLM.
+   * @param userPrompt - The user prompt for the LLM.
+   * @param temperature - Temperature setting for the LLM.
+   * @returns The created Langfuse generation.
+   * @private
+   */
+  private createJudgeGeneration(span: LangfuseSpan, systemPrompt: string, userPrompt: string, temperature: number): LangfuseGeneration {
+    return span.generation({
+      name: 'llm-generation-0',
+      input: { systemPrompt, userPrompt, model: this.config.model, temperature },
+      metadata: {
+        model: this.config.model,
+        temperature,
+        provider: this.config.provider,
+      },
+    });
+  }
+
+  /**
+   * Converts usage information to Langfuse format.
+   * 
+   * @param usage - Optional completion usage object with token counts.
+   * @returns Langfuse usage object, or undefined if usage is not provided.
+   * @private
+   */
+  private convertUsageToLangfuse(usage?: CompletionUsage): LangfuseUsage | undefined {
+    if (!usage) {
+      return undefined;
+    }
+    return {
+      input: usage.inputTokens ?? null,
+      output: usage.outputTokens ?? null,
+      total: usage.totalTokens ?? null,
+      unit: 'TOKENS' as const,
+    };
+  }
+
+  /**
+   * Converts a total token count to Langfuse format.
+   * 
+   * @param totalTokens - Total token count.
+   * @returns Langfuse usage object, or undefined if totalTokens is not provided.
+   * @private
+   */
+  private convertTotalTokensToLangfuse(totalTokens?: number): LangfuseUsage | undefined {
+    if (totalTokens == null) {
+      return undefined;
+    }
+    return {
+      input: null,
+      output: null,
+      total: totalTokens,
+      unit: 'TOKENS' as const,
+    };
+  }
+
+  /**
    * Synthesizes a solution with Langfuse tracing enabled.
    * Creates spans and generations for observability, with fallback to non-tracing execution on errors.
    * 
@@ -178,14 +267,7 @@ export class JudgeAgent {
     
     try {
       // Create span - if this fails, we'll fall back to non-tracing execution
-      span = tracingContext.trace.span({
-        name: spanName,
-        metadata: {
-          judgeName: this.config.name,
-          judgeId: this.config.id,
-          debateId: tracingContext.trace.id || 'unknown',
-        },
-      });
+      span = this.createJudgeSpan(tracingContext, spanName);
     } catch (tracingError: unknown) {
       logWarning(`Langfuse tracing failed for judge synthesize (span creation): ${getErrorMessage(tracingError)}`);
       // Fallback to non-tracing execution
@@ -195,20 +277,7 @@ export class JudgeAgent {
     try {
       // Create generation - if this fails, we'll end the span and fall back
       // span is guaranteed to be defined here (if it wasn't, we would have returned early)
-      generation = span!.generation({
-        name: 'llm-generation-0',
-        input: {
-          systemPrompt,
-          userPrompt: prompt,
-          model: this.config.model,
-          temperature,
-        },
-        metadata: {
-          model: this.config.model,
-          temperature,
-          provider: this.config.provider,
-        },
-      });
+      generation = this.createJudgeGeneration(span!, systemPrompt, prompt, temperature);
     } catch (tracingError: unknown) {
       const errorMessage = getErrorMessage(tracingError);
       logWarning(`Langfuse tracing failed for judge synthesize (generation creation): ${errorMessage}`);
@@ -226,13 +295,7 @@ export class JudgeAgent {
     try {
       const res = await this.provider.complete({ model: this.config.model, temperature, systemPrompt, userPrompt: prompt, });
 
-      // Convert usage to langfuse format
-      const langfuseUsage = res.usage ? {
-        input: res.usage.inputTokens ?? null,
-        output: res.usage.outputTokens ?? null,
-        total: res.usage.totalTokens ?? null,
-        unit: 'TOKENS' as const,
-      } : undefined;
+      const langfuseUsage = this.convertUsageToLangfuse(res.usage);
 
       // generation and span are guaranteed to be defined here (if they weren't, we would have returned early)
       generation!.end({
@@ -244,9 +307,10 @@ export class JudgeAgent {
 
       const solution = this.buildSolutionFromSynthesisText(res.text);
 
+      const MAX_METADATA_DESCRIPTION_LENGTH = 200;
       span!.end({
         output: {
-          solutionDescription: solution.description.substring(0, 200), // Truncate for metadata
+          solutionDescription: solution.description.substring(0, MAX_METADATA_DESCRIPTION_LENGTH), // Truncate for metadata
         },
       });
 
@@ -384,14 +448,7 @@ export class JudgeAgent {
       
       try {
         // Create span - if this fails, we'll fall back to non-tracing execution
-        span = tracingContext.trace.span({
-          name: spanName,
-          metadata: {
-            judgeName: this.config.name,
-            judgeId: this.config.id,
-            debateId: tracingContext.trace.id || 'unknown',
-          },
-        });
+        span = this.createJudgeSpan(tracingContext, spanName);
       } catch (tracingError: unknown) {
         logWarning(`Langfuse tracing failed for judge prepareContext (span creation): ${getErrorMessage(tracingError)}`);
         // Fallback to non-tracing execution
@@ -441,25 +498,10 @@ export class JudgeAgent {
 
     let generation: LangfuseGeneration | undefined;
     
-    try {
-      // Create generation - if this fails, we'll fall back to non-tracing execution
-      generation = parentSpan.generation({
-        name: 'llm-generation-0',
-        input: {
-          systemPrompt: this.resolvedSystemPrompt,
-          userPrompt: summaryPrompt,
-          model: this.config.model,
-          temperature: this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
-        },
-        metadata: {
-          model: this.config.model,
-          temperature: this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
-          provider: this.config.provider,
-        },
-      });
+    try { // Create generation - if this fails, we'll fall back to non-tracing execution
+      generation = this.createJudgeGeneration( parentSpan, this.resolvedSystemPrompt, summaryPrompt, this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE );
     } catch (tracingError: unknown) {
       logWarning(`Langfuse tracing failed for judge prepareContext (generation creation): ${getErrorMessage(tracingError)}`);
-      // Fallback to non-tracing execution
       return this.executeSummarization(rounds);
     }
 
@@ -474,12 +516,7 @@ export class JudgeAgent {
       );
 
       // Convert usage to langfuse format
-      const langfuseUsage = result.metadata.tokensUsed ? {
-        input: null,
-        output: null,
-        total: result.metadata.tokensUsed,
-        unit: 'TOKENS' as const,
-      } : undefined;
+      const langfuseUsage = this.convertTotalTokensToLangfuse(result.metadata.tokensUsed);
 
       // generation is guaranteed to be defined here (if it wasn't, we would have returned early)
       generation!.end({
@@ -712,8 +749,10 @@ Respond with ONLY the JSON object, no other text.`;
    * @returns Clamped confidence score.
    */
   private clampConfidence(n: number): number {
-    if (n < 0) return 0;
-    if (n > 100) return 100;
+    const MIN_CONFIDENCE = 0;
+    const MAX_CONFIDENCE = 100;
+    if (n < MIN_CONFIDENCE) return MIN_CONFIDENCE;
+    if (n > MAX_CONFIDENCE) return MAX_CONFIDENCE;
     return n;
   }
 
@@ -726,6 +765,7 @@ Respond with ONLY the JSON object, no other text.`;
    */
   private applyHardCaps(confidence: number, unfulfilledMajor: string[]): number {
     if (unfulfilledMajor.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
       return Math.min(confidence, CONFIDENCE_CAP_WHEN_MAJORS_UNMET);
     }
     return confidence;

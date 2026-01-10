@@ -45,6 +45,7 @@ describe('OpenRouterProvider', () => {
     it('should create OpenAI client with OpenRouter configuration', () => {
       // Create a new provider to test constructor
       new OpenRouterProvider('test-api-key');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const OpenAI = require('openai').default;
       expect(OpenAI).toHaveBeenCalledWith({
         apiKey: 'test-api-key',

@@ -7,11 +7,13 @@ import type { DebateContext, DebateRound, AgentClarifications } from '../types/d
  * @param history - Array of debate rounds to format.
  * @returns A formatted string representation of the debate history.
  */
+const MAX_PREVIEW_LENGTH = 100;
+
 export function formatHistory(history: DebateRound[]): string {
   return history.map(round => {
     const contributions = round.contributions.map(c => {
       const firstLine = c.content.split('\n')[0] || '';
-      const preview = firstLine.length > 100 ? firstLine.substring(0, 100) + '...' : firstLine;
+      const preview = firstLine.length > MAX_PREVIEW_LENGTH ? firstLine.substring(0, MAX_PREVIEW_LENGTH) + '...' : firstLine;
       return `  [${c.agentRole}] ${c.type}: ${preview}`;
     }).join('\n');
     return `Round ${round.roundNumber}:\n${contributions}`;
