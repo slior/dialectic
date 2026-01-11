@@ -17,8 +17,6 @@ jest.mock('dialectic-core', () => {
   };
 });
 
-import { Test, TestingModule } from '@nestjs/testing';
-import { DebateService } from './debate.service';
 import {
   StateManager,
   DebateOrchestrator,
@@ -38,7 +36,10 @@ import {
   collectClarifications,
   resolvePrompt,
   buildToolRegistry,
+  LLMProvider,
 } from 'dialectic-core';
+
+import { DebateService } from './debate.service';
 
 // Test constants
 const DEFAULT_ROUNDS = 3;
@@ -59,7 +60,7 @@ const TEST_AGENT_NAME_PERFORMANCE = 'Performance Engineer';
 const TEST_AGENT_NAME_KISS = 'Simplicity Advocate';
 const TEST_JUDGE_NAME = 'Technical Judge';
 const MOCK_SYSTEM_PROMPT = 'Mock system prompt';
-const MOCK_PROVIDER = {} as any;
+const MOCK_PROVIDER = {} as unknown as LLMProvider;
 
 /**
  * Creates mock agent configurations for testing.

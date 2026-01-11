@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+
+import { DebateController } from './debate.controller';
 import { DebateGateway } from './debate.gateway';
 import { DebateService } from './debate.service';
-import { DebateController } from './debate.controller';
 
 /**
  * NestJS module for debate functionality.

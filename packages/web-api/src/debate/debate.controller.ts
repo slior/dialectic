@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Param, Body, HttpCode, HttpStatus, NotFoundException, BadRequestException, Res } from '@nestjs/common';
+import { StateManager, DebateState } from 'dialectic-core';
 import { Response } from 'express';
-import { StateManager } from 'dialectic-core';
 
 // Feedback value constants
 const FEEDBACK_POSITIVE = 1;
@@ -11,6 +11,14 @@ const FEEDBACK_NEGATIVE = -1;
  */
 interface SubmitFeedbackDto {
   feedback: number;
+}
+
+/**
+ * Response DTO for feedback submission.
+ */
+interface SubmitFeedbackResponse {
+  success: boolean;
+  message: string;
 }
 
 /**
@@ -38,7 +46,7 @@ export class DebateController {
    */
   @Post(':id/feedback')
   @HttpCode(HttpStatus.OK)
-  async submitFeedback(@Param('id') id: string, @Body() dto: SubmitFeedbackDto) {
+  async submitFeedback(@Param('id') id: string, @Body() dto: SubmitFeedbackDto): Promise<SubmitFeedbackResponse> {
     // Validate feedback value
     if (dto.feedback !== FEEDBACK_POSITIVE && dto.feedback !== FEEDBACK_NEGATIVE) {
       throw new BadRequestException(`Feedback must be ${FEEDBACK_POSITIVE} (positive) or ${FEEDBACK_NEGATIVE} (negative)`);
@@ -61,7 +69,7 @@ export class DebateController {
    * @throws {NotFoundException} If debate is not found.
    */
   @Get(':id/download')
-  async downloadDebate( @Param('id') id: string, @Res({ passthrough: true }) res: Response ) {
+  async downloadDebate( @Param('id') id: string, @Res({ passthrough: true }) res: Response ): Promise<DebateState> {
     try {
       const debate = await this.stateManager.getDebate(id);
       if (!debate) {

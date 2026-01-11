@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { DebateModule } from './debate.module';
+
 import { DebateGateway } from './debate.gateway';
+import { DebateModule } from './debate.module';
 import { DebateService } from './debate.service';
 
 describe('DebateModule', () => {

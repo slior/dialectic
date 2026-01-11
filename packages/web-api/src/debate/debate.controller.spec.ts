@@ -1,10 +1,14 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
-import { DebateController } from './debate.controller';
-import { StateManager, DebateState, DEBATE_STATUS } from 'dialectic-core';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+
+import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { StateManager } from 'dialectic-core';
+
+import { DebateController } from './debate.controller';
+
+
 
 // Mock dialectic-core dependencies
 jest.mock('dialectic-core', () => {
@@ -15,7 +19,6 @@ jest.mock('dialectic-core', () => {
 });
 
 // Test constants
-const TEST_DEBATE_ID = 'deb-test-123';
 const TEST_PROBLEM = 'Test problem';
 const TEST_FEEDBACK_POSITIVE = 1;
 const TEST_FEEDBACK_NEGATIVE = -1;
@@ -44,7 +47,9 @@ describe('DebateController', () => {
   afterEach(() => {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
+    } catch {
+      // Ignore cleanup errors
+    }
   });
 
   describe('POST /api/debates/:id/feedback', () => {

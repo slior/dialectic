@@ -9,10 +9,6 @@ jest.mock('dialectic-core', () => {
   };
 });
 
-import { Test, TestingModule } from '@nestjs/testing';
-import { Socket } from 'socket.io';
-import { DebateGateway } from './debate.gateway';
-import { DebateService } from './debate.service';
 import {
   AgentClarifications,
   DebateResult,
@@ -23,6 +19,22 @@ import {
   logSuccess,
   logWarning,
 } from 'dialectic-core';
+import { Socket } from 'socket.io';
+
+import { DebateGateway } from './debate.gateway';
+import { DebateService } from './debate.service';
+
+/**
+ * Agent configuration input type for testing (matches AgentConfigInput from gateway).
+ */
+interface AgentConfigInput {
+  id: string;
+  name: string;
+  role: string;
+  model: string;
+  provider: string;
+  temperature: number;
+}
 
 // Test constants
 const DEFAULT_ROUNDS = 3;
@@ -46,7 +58,6 @@ const TEST_PHASE_PROPOSAL = CONTRIBUTION_TYPES.PROPOSAL;
 const TEST_PHASE_CRITIQUE = CONTRIBUTION_TYPES.CRITIQUE;
 const TEST_PHASE_REFINEMENT = CONTRIBUTION_TYPES.REFINEMENT;
 const TEST_ACTIVITY_PROPOSING = 'proposing';
-const TEST_ACTIVITY_CRITIQUING = 'critiquing';
 const TEST_AGENT_NAME_PERFORMANCE = 'Performance Engineer';
 const TEST_BEFORE_CHARS = 10000;
 const TEST_AFTER_CHARS = 5000;
@@ -57,7 +68,7 @@ const TEST_EXPECTED_COUNT = 3;
 /**
  * Creates mock agent configuration inputs for testing.
  */
-function createMockAgentConfigInputs() {
+function createMockAgentConfigInputs(): AgentConfigInput[] {
   return [
     {
       id: TEST_AGENT_ID_ARCHITECT,

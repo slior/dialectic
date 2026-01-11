@@ -1,10 +1,14 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import * as dotenv from 'dotenv';
 import * as path from 'path';
+
+import { NestFactory } from '@nestjs/core';
+import * as dotenv from 'dotenv';
+
+import { AppModule } from './app.module';
 import { getCorsOrigins } from './utils/cors';
 
-async function bootstrap() {
+const DEFAULT_PORT = 3001;
+
+async function bootstrap(): Promise<void> {
   // Load environment variables from workspace root
   dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
   dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -19,7 +23,7 @@ async function bootstrap() {
     credentials: true,
   });
   
-  const port = process.env.PORT || 3001;
+  const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : DEFAULT_PORT;
   await app.listen(port);
   console.log(`Dialectic Web API running on http://localhost:${port}`);
   console.log(`CORS enabled for origins: ${corsOrigins.join(', ')}`);

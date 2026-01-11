@@ -1,27 +1,17 @@
 import {
-  WebSocketGateway,
-  SubscribeMessage,
-  MessageBody,
-  ConnectedSocket,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
+  WebSocketGateway, SubscribeMessage, MessageBody,
+  ConnectedSocket, OnGatewayConnection, OnGatewayDisconnect,
 } from '@nestjs/websockets';
-import { Socket } from 'socket.io';
-import { DebateService, OrchestratorHooks } from './debate.service';
 import {
-  AgentClarifications,
-  DebateResult,
-  ContributionType,
-  Contribution,
-  CONTRIBUTION_TYPES,
-  AgentConfig,
-  AgentRole,
-  LLM_PROVIDERS,
-  logInfo,
-  logSuccess,
-  logWarning,
+  AgentClarifications, DebateResult, ContributionType, Contribution,
+  CONTRIBUTION_TYPES, AgentConfig, AgentRole, LLM_PROVIDERS,
+  logInfo, logSuccess, logWarning,
 } from 'dialectic-core';
+import { Socket } from 'socket.io';
+
 import { getCorsOrigins } from '../utils/cors';
+
+import { DebateService, OrchestratorHooks } from './debate.service';
 
 /**
  * Agent configuration input from client (matches AgentConfigInput from UI).
@@ -50,6 +40,35 @@ interface StartDebateDto {
  */
 interface SubmitClarificationsDto {
   answers: Record<string, string>;
+}
+
+/**
+ * Formatted contribution for WebSocket transmission.
+ */
+interface FormattedContribution {
+  agentId: string;
+  agentRole: string;
+  type: ContributionType;
+  content: string;
+  targetAgentId?: string;
+}
+
+/**
+ * Formatted round for WebSocket transmission.
+ */
+interface FormattedRound {
+  roundNumber: number;
+  contributions: FormattedContribution[];
+}
+
+/**
+ * Formatted debate result for WebSocket transmission.
+ */
+interface FormattedDebateResult {
+  debateId: string;
+  solution: DebateResult['solution'];
+  rounds: FormattedRound[];
+  metadata: DebateResult['metadata'];
 }
 
 // Configuration constants
@@ -149,7 +168,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    *
    * @param client - The connected WebSocket client socket.
    */
-  handleConnection(client: Socket) {
+  handleConnection(client: Socket): void {
     this.connectedClients.add(client.id);
     const message = LOG_MESSAGES.CLIENT_CONNECTED(client.id);
     logInfo(message);
@@ -167,7 +186,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    *
    * @param client - The disconnected WebSocket client socket.
    */
-  handleDisconnect(client: Socket) {
+  handleDisconnect(client: Socket): void {
     this.connectedClients.delete(client.id);
     const message = LOG_MESSAGES.CLIENT_DISCONNECTED(client.id);
     logInfo(message);
@@ -189,6 +208,98 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
       temperature: input.temperature,
       enabled: true, // Ensure enabled is set
     }));
+  }
+
+  /**
+   * Validates that a string property is non-empty after trimming.
+   *
+   * @param value - The string value to validate.
+   * @param errorMessage - The error message to return if validation fails.
+   * @returns Error message if invalid, undefined if valid.
+   */
+  private validateNonEmptyString(value: string | undefined, errorMessage: string): string | undefined {
+    if (!value || !value.trim()) {
+      return errorMessage;
+    }
+    return undefined;
+  }
+
+  /**
+   * Validates agent property values (id, name, role, model, provider, temperature).
+   *
+   * @param agent - The agent configuration to validate.
+   * @returns Error message if invalid, undefined if valid.
+   */
+  private validateAgentProperties(agent: AgentConfigInput): string | undefined {
+    const idError = this.validateNonEmptyString(agent.id, ERROR_MESSAGES.AGENT_ID_REQUIRED);
+    if (idError) {
+      return idError;
+    }
+
+    const nameError = this.validateNonEmptyString(agent.name, ERROR_MESSAGES.AGENT_NAME_REQUIRED);
+    if (nameError) {
+      return nameError;
+    }
+
+    if (!agent.role) {
+      return ERROR_MESSAGES.AGENT_ROLE_REQUIRED;
+    }
+
+    const modelError = this.validateNonEmptyString(agent.model, ERROR_MESSAGES.AGENT_MODEL_REQUIRED);
+    if (modelError) {
+      return modelError;
+    }
+
+    if (!agent.provider) {
+      return ERROR_MESSAGES.AGENT_PROVIDER_REQUIRED;
+    }
+    if (isNaN(agent.temperature) || agent.temperature < MIN_TEMPERATURE || agent.temperature > MAX_TEMPERATURE) {
+      return ERROR_MESSAGES.TEMPERATURE_OUT_OF_RANGE(MIN_TEMPERATURE, MAX_TEMPERATURE);
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Validates that agent ID and name are not duplicates of existing agents.
+   *
+   * @param agent - The agent configuration to validate.
+   * @param ids - Set of existing agent IDs to check for duplicates.
+   * @param names - Set of existing agent names to check for duplicates.
+   * @returns Error message if duplicate found, undefined if valid.
+   */
+  private validateNonDuplicateIDAndName(agent: AgentConfigInput, ids: Set<string>, names: Set<string>): string | undefined {
+    if (ids.has(agent.id)) {
+      return ERROR_MESSAGES.DUPLICATE_AGENT_ID(agent.id);
+    }
+    if (names.has(agent.name)) {
+      return ERROR_MESSAGES.DUPLICATE_AGENT_NAME(agent.name);
+    }
+    return undefined;
+  }
+
+  /**
+   * Validates a single agent configuration and checks for duplicate IDs/names.
+   *
+   * @param agent - The agent configuration to validate.
+   * @param ids - Set of existing agent IDs to check for duplicates.
+   * @param names - Set of existing agent names to check for duplicates.
+   * @returns Error message if invalid, undefined if valid.
+   */
+  private validateSingleAgent(agent: AgentConfigInput, ids: Set<string>, names: Set<string>): string | undefined {
+    const propertyError = this.validateAgentProperties(agent);
+    if (propertyError) {
+      return propertyError;
+    }
+
+    const duplicateError = this.validateNonDuplicateIDAndName(agent, ids, names);
+    if (duplicateError) {
+      return duplicateError;
+    }
+
+    ids.add(agent.id);
+    names.add(agent.name);
+    return undefined;
   }
 
   /**
@@ -215,37 +326,58 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const names = new Set<string>();
 
     for (const agent of agents) {
-      if (!agent.id || !agent.id.trim()) {
-        return ERROR_MESSAGES.AGENT_ID_REQUIRED;
+      const validationError = this.validateSingleAgent(agent, ids, names);
+      if (validationError) {
+        return validationError;
       }
-      if (!agent.name || !agent.name.trim()) {
-        return ERROR_MESSAGES.AGENT_NAME_REQUIRED;
-      }
-      if (!agent.role) {
-        return ERROR_MESSAGES.AGENT_ROLE_REQUIRED;
-      }
-      if (!agent.model || !agent.model.trim()) {
-        return ERROR_MESSAGES.AGENT_MODEL_REQUIRED;
-      }
-      if (!agent.provider) {
-        return ERROR_MESSAGES.AGENT_PROVIDER_REQUIRED;
-      }
-      if (isNaN(agent.temperature) || agent.temperature < MIN_TEMPERATURE || agent.temperature > MAX_TEMPERATURE) {
-        return ERROR_MESSAGES.TEMPERATURE_OUT_OF_RANGE(MIN_TEMPERATURE, MAX_TEMPERATURE);
-      }
-
-      if (ids.has(agent.id)) {
-        return ERROR_MESSAGES.DUPLICATE_AGENT_ID(agent.id);
-      }
-      if (names.has(agent.name)) {
-        return ERROR_MESSAGES.DUPLICATE_AGENT_NAME(agent.name);
-      }
-
-      ids.add(agent.id);
-      names.add(agent.name);
     }
 
     return undefined;
+  }
+
+  /**
+   * Validates debate parameters (problem and rounds) and emits errors to client if validation fails.
+   *
+   * @param problem - The problem description to validate.
+   * @param rounds - Optional number of rounds to validate.
+   * @param client - The WebSocket client socket to emit errors to.
+   * @returns True if validation passed, false if validation failed (error emitted to client).
+   */
+  private validateDebateParameters(problem: string | undefined, rounds: number | undefined, client: Socket): boolean {
+    if (!problem || problem.trim().length === 0) {
+      this.emitError(client, ERROR_MESSAGES.PROBLEM_REQUIRED);
+      return false;
+    }
+
+    const validatedRounds = rounds ?? DEFAULT_ROUNDS;
+    if (validatedRounds < MIN_ROUNDS) {
+      this.emitError(client, ERROR_MESSAGES.INVALID_ROUNDS);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Validates agents for debate start and emits errors to client if validation fails.
+   *
+   * @param agents - Array of agent configurations to validate, or undefined.
+   * @param client - The WebSocket client socket to emit errors to.
+   * @returns True if validation passed, false if validation failed (error emitted to client).
+   */
+  private validateAgentsForDebateStart(agents: AgentConfigInput[] | undefined, client: Socket): boolean {
+    if (!agents || agents.length === 0) {
+      this.emitError(client, ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
+      return false;
+    }
+
+    const agentValidationError = this.validateAgents(agents);
+    if (agentValidationError) {
+      this.emitError(client, agentValidationError);
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -256,36 +388,19 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * @param client - The WebSocket client socket.
    */
   @SubscribeMessage('startDebate')
-  async handleStartDebate(
-    @MessageBody() dto: StartDebateDto,
-    @ConnectedSocket() client: Socket
-  ) {
+  async handleStartDebate(@MessageBody() dto: StartDebateDto, @ConnectedSocket() client: Socket): Promise<void> {
     if (this.debateInProgress) {
       this.emitError(client, ERROR_MESSAGES.DEBATE_IN_PROGRESS);
       return;
     }
 
-    if (!dto.problem || dto.problem.trim().length === 0) {
-      this.emitError(client, ERROR_MESSAGES.PROBLEM_REQUIRED);
+    if (!this.validateDebateParameters(dto.problem, dto.rounds, client)) {
       return;
     }
 
-    // Validate agents
-    if (!dto.agents || dto.agents.length === 0) {
-      this.emitError(client, ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
-      return;
-    }
-
-    const agentValidationError = this.validateAgents(dto.agents);
-    if (agentValidationError) {
-      this.emitError(client, agentValidationError);
-      return;
-    }
-
-    // Validate rounds if provided
     const rounds = dto.rounds ?? DEFAULT_ROUNDS;
-    if (rounds < MIN_ROUNDS) {
-      this.emitError(client, ERROR_MESSAGES.INVALID_ROUNDS);
+
+    if (!this.validateAgentsForDebateStart(dto.agents, client)) {
       return;
     }
 
@@ -337,10 +452,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * @param client - The WebSocket client socket.
    */
   @SubscribeMessage('submitClarifications')
-  async handleSubmitClarifications(
-    @MessageBody() dto: SubmitClarificationsDto,
-    @ConnectedSocket() client: Socket
-  ) {
+  async handleSubmitClarifications(@MessageBody() dto: SubmitClarificationsDto, @ConnectedSocket() client: Socket): Promise<void> {
     if (!this.debateInProgress) {
       this.emitError(client, ERROR_MESSAGES.NO_DEBATE_IN_PROGRESS);
       return;
@@ -362,7 +474,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * @param client - The WebSocket client socket.
    */
   @SubscribeMessage('cancelDebate')
-  handleCancelDebate(@ConnectedSocket() client: Socket) {
+  handleCancelDebate(@ConnectedSocket() client: Socket): void {
     if (this.debateInProgress) {
       this.resetDebateState();
       client.emit(WS_EVENTS.DEBATE_CANCELLED);
@@ -392,7 +504,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * @param clarifications - Optional clarifications with answers.
    * @param rounds - Optional number of debate rounds (uses configured rounds if not provided).
    */
-  private async runDebate(client: Socket, clarifications?: AgentClarifications[], rounds?: number) {
+  private async runDebate(client: Socket, clarifications?: AgentClarifications[], rounds?: number): Promise<void> {
     if (!this.configuredAgents) {
       this.emitError(client, ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
       return;
@@ -431,61 +543,61 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   private createHooks(client: Socket, agents: AgentConfig[]): OrchestratorHooks {
     return {
-      onRoundStart: (round: number, total: number) => {
+      onRoundStart: (round: number, total: number): void => {
         this.currentRound = round;
         this.totalRounds = total;
         const message = LOG_MESSAGES.ROUND_STARTING(round, total);
         logInfo(message);
         client.emit(WS_EVENTS.ROUND_START, { round, total });
       },
-      onPhaseStart: (round: number, phase: ContributionType, count: number) => {
+      onPhaseStart: (round: number, phase: ContributionType, count: number): void => {
         const phaseLabel = this.getPhaseLabel(phase);
         const message = this.formatMessageWithRound(`${phaseLabel} phase starting`, round);
         logInfo(message);
         client.emit(WS_EVENTS.PHASE_START, { round, phase, expectedCount: count });
       },
-      onAgentStart: (agentName: string, activity: string) => {
+      onAgentStart: (agentName: string, activity: string): void => {
         const message = this.formatMessageWithRound(`${agentName} is ${activity}...`, this.currentRound);
         logInfo(message);
         client.emit(WS_EVENTS.AGENT_START, { agentName, activity });
       },
-      onAgentComplete: (agentName: string, activity: string) => {
+      onAgentComplete: (agentName: string, activity: string): void => {
         const message = this.formatMessageWithRound(`${agentName} completed ${activity}`, this.currentRound);
         logSuccess(message);
         client.emit(WS_EVENTS.AGENT_COMPLETE, { agentName, activity });
       },
-      onPhaseComplete: (round: number, phase: ContributionType) => {
+      onPhaseComplete: (round: number, phase: ContributionType): void => {
         const phaseLabel = this.getPhaseLabel(phase);
         const message = this.formatMessageWithRound(`${phaseLabel} phase completed`, round);
         logSuccess(message);
         client.emit(WS_EVENTS.PHASE_COMPLETE, { round, phase });
       },
-      onSynthesisStart: () => {
+      onSynthesisStart: (): void => {
         const message = 'Synthesis starting';
         logInfo(message);
         client.emit(WS_EVENTS.SYNTHESIS_START);
       },
-      onSynthesisComplete: () => {
+      onSynthesisComplete: (): void => {
         const message = 'Synthesis completed';
         logSuccess(message);
         client.emit(WS_EVENTS.SYNTHESIS_COMPLETE);
       },
-      onSummarizationStart: (agentName: string) => {
+      onSummarizationStart: (agentName: string): void => {
         const message = this.formatMessageWithRound(`${agentName} is summarizing context...`, this.currentRound);
         logInfo(message);
         client.emit(WS_EVENTS.SUMMARIZATION_START, { agentName });
       },
-      onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number) => {
+      onSummarizationComplete: (agentName: string, beforeChars: number, afterChars: number): void => {
         const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
         logSuccess(message);
         client.emit(WS_EVENTS.SUMMARIZATION_COMPLETE, { agentName, beforeChars, afterChars });
       },
-      onSummarizationEnd: (agentName: string) => {
+      onSummarizationEnd: (agentName: string): void => {
         const message = this.formatMessageWithRound(`${agentName} completed summarizing context`, this.currentRound);
         logSuccess(message);
         client.emit(WS_EVENTS.SUMMARIZATION_END, { agentName });
       },
-      onContributionCreated: (contribution: Contribution, roundNumber: number) => {
+      onContributionCreated: (contribution: Contribution, roundNumber: number): void => {
         // Look up agent name from configured agents (captured in closure)
         const agentConfig = agents.find(a => a.id === contribution.agentId);
         const agentName = agentConfig?.name || contribution.agentId;
@@ -520,7 +632,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * @param result - The debate result from the orchestrator.
    * @returns Formatted result object suitable for WebSocket transmission.
    */
-  private formatDebateResult(result: DebateResult) {
+  private formatDebateResult(result: DebateResult): FormattedDebateResult {
     return {
       debateId: result.debateId,
       solution: result.solution,
@@ -541,7 +653,7 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /**
    * Resets the debate state after completion or cancellation.
    */
-  private resetDebateState() {
+  private resetDebateState(): void {
     this.debateInProgress = false;
     this.currentProblem = '';
     this.pendingClarifications = [];
