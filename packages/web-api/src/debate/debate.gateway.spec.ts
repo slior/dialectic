@@ -21,20 +21,21 @@ import {
 } from 'dialectic-core';
 import { Socket } from 'socket.io';
 
-import { DebateGateway } from './debate.gateway';
-import { DebateService } from './debate.service';
+import { DebateGateway, StartDebateDto, AgentConfigInput } from './debate.gateway';
+import { DebateService, OrchestratorHooks } from './debate.service';
 
 /**
- * Agent configuration input type for testing (matches AgentConfigInput from gateway).
+ * Helper type to access private properties and methods in tests.
+ * Uses a separate interface to avoid TypeScript's intersection type reduction issues with private properties.
  */
-interface AgentConfigInput {
-  id: string;
-  name: string;
-  role: string;
-  model: string;
-  provider: string;
-  temperature: number;
+interface GatewayWithPrivateAccess {
+  connectedClients: Set<string>;
+  debateInProgress: boolean;
+  currentProblem: string;
+  getPhaseLabel: (phase: string) => string;
+  formatMessageWithRound: (message: string, round: number) => string;
 }
+
 
 // Test constants
 const DEFAULT_ROUNDS = 3;
@@ -236,7 +237,7 @@ describe('DebateGateway', () => {
       gateway.handleConnection(mockSocket);
 
       // Access private property via type assertion for testing
-      const connectedClients = (gateway as any).connectedClients;
+      const connectedClients = (gateway as unknown as GatewayWithPrivateAccess).connectedClients;
       expect(connectedClients.has(TEST_CLIENT_ID)).toBe(true);
     });
 
@@ -289,7 +290,7 @@ describe('DebateGateway', () => {
       gateway.handleConnection(mockSocket);
       gateway.handleDisconnect(mockSocket);
 
-      const connectedClients = (gateway as any).connectedClients;
+      const connectedClients = (gateway as unknown as GatewayWithPrivateAccess).connectedClients;
       expect(connectedClients.has(TEST_CLIENT_ID)).toBe(false);
     });
 
@@ -416,7 +417,7 @@ describe('DebateGateway', () => {
         mockSocket
       );
 
-      expect((gateway as any).debateInProgress).toBe(false); // Reset after completion
+      expect((gateway as unknown as GatewayWithPrivateAccess).debateInProgress).toBe(false); // Reset after completion
       expect(logInfo).toHaveBeenCalledWith('Debate started');
       expect(mockSocket.emit).toHaveBeenCalledWith('debateStarted', {
         problem: TEST_PROBLEM_TRIMMED,
@@ -502,8 +503,13 @@ describe('DebateGateway', () => {
     });
 
     it('should reject when agents array is missing', async () => {
+      const invalidDto: Partial<StartDebateDto> = {
+        problem: TEST_PROBLEM,
+        clarificationsEnabled: false,
+        // Intentionally omitting 'agents' to test error handling
+      };
       await gateway.handleStartDebate(
-        { problem: TEST_PROBLEM, clarificationsEnabled: false } as any,
+        invalidDto as StartDebateDto,
         mockSocket
       );
 
@@ -712,11 +718,11 @@ describe('DebateGateway', () => {
       );
 
       // Cancel debate (before completion)
-      (gateway as any).debateInProgress = true;
+      (gateway as unknown as GatewayWithPrivateAccess).debateInProgress = true;
       gateway.handleCancelDebate(mockSocket);
 
-      expect((gateway as any).debateInProgress).toBe(false);
-      expect((gateway as any).currentProblem).toBe('');
+      expect((gateway as unknown as GatewayWithPrivateAccess).debateInProgress).toBe(false);
+      expect((gateway as unknown as GatewayWithPrivateAccess).currentProblem).toBe('');
       expect(mockSocket.emit).toHaveBeenCalledWith('debateCancelled');
     });
 
@@ -728,12 +734,17 @@ describe('DebateGateway', () => {
   });
 
   describe('orchestrator hooks', () => {
-    let hooks: any;
+    /**
+     * Type for hooks with all methods required (gateway always provides all methods).
+     */
+    type RequiredHooks = Required<OrchestratorHooks>;
+    let hooks: RequiredHooks;
 
     beforeEach(async () => {
       const mockResult = createMockDebateResult();
       mockDebateService.runDebate.mockImplementation((_problem, hooksParam) => {
-        hooks = hooksParam;
+        // Gateway always provides hooks with all methods, so we can safely assert
+        hooks = hooksParam as RequiredHooks;
         return Promise.resolve(mockResult);
       });
 
@@ -928,36 +939,36 @@ describe('DebateGateway', () => {
         mockSocket
       );
 
-      expect((gateway as any).debateInProgress).toBe(false);
-      expect((gateway as any).currentProblem).toBe('');
+      expect((gateway as unknown as GatewayWithPrivateAccess).debateInProgress).toBe(false);
+      expect((gateway as unknown as GatewayWithPrivateAccess).currentProblem).toBe('');
     });
   });
 
   describe('phase label mapping', () => {
     it('should map proposal phase correctly', () => {
-      const phaseLabel = (gateway as any).getPhaseLabel(TEST_PHASE_PROPOSAL);
+      const phaseLabel = (gateway as unknown as GatewayWithPrivateAccess).getPhaseLabel(TEST_PHASE_PROPOSAL);
       expect(phaseLabel).toBe('Proposals');
     });
 
     it('should map critique phase correctly', () => {
-      const phaseLabel = (gateway as any).getPhaseLabel(TEST_PHASE_CRITIQUE);
+      const phaseLabel = (gateway as unknown as GatewayWithPrivateAccess).getPhaseLabel(TEST_PHASE_CRITIQUE);
       expect(phaseLabel).toBe('Critiques');
     });
 
     it('should map refinement phase correctly', () => {
-      const phaseLabel = (gateway as any).getPhaseLabel(TEST_PHASE_REFINEMENT);
+      const phaseLabel = (gateway as unknown as GatewayWithPrivateAccess).getPhaseLabel(TEST_PHASE_REFINEMENT);
       expect(phaseLabel).toBe('Refinements');
     });
   });
 
   describe('message formatting with round', () => {
     it('should format message with round prefix when round > 0', () => {
-      const message = (gateway as any).formatMessageWithRound('Test message', TEST_ROUND_NUMBER);
+      const message = (gateway as unknown as GatewayWithPrivateAccess).formatMessageWithRound('Test message', TEST_ROUND_NUMBER);
       expect(message).toBe(`[Round ${TEST_ROUND_NUMBER}] Test message`);
     });
 
     it('should return message without prefix when round is 0', () => {
-      const message = (gateway as any).formatMessageWithRound('Test message', 0);
+      const message = (gateway as unknown as GatewayWithPrivateAccess).formatMessageWithRound('Test message', 0);
       expect(message).toBe('Test message');
     });
   });

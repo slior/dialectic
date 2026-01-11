@@ -5,10 +5,14 @@ import * as path from 'path';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { StateManager } from 'dialectic-core';
+import { Response } from 'express';
 
 import { DebateController } from './debate.controller';
 
-
+/**
+ * Mock Response type for testing - only includes the methods we need to mock.
+ */
+type MockResponse = Pick<Response, 'setHeader'>;
 
 // Mock dialectic-core dependencies
 jest.mock('dialectic-core', () => {
@@ -41,6 +45,8 @@ describe('DebateController', () => {
 
     controller = module.get<DebateController>(DebateController);
     // Replace the StateManager instance with one pointing to our test directory
+    // Using type assertion to access private property for testing purposes
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (controller as any).stateManager = stateManager;
   });
 
@@ -110,11 +116,11 @@ describe('DebateController', () => {
   describe('GET /api/debates/:id/download', () => {
     it('should download debate JSON', async () => {
       const state = await stateManager.createDebate(TEST_PROBLEM);
-      const mockResponse = {
+      const mockResponse: MockResponse = {
         setHeader: jest.fn(),
-      } as any;
+      };
 
-      const result = await controller.downloadDebate(state.id, mockResponse);
+      const result = await controller.downloadDebate(state.id, mockResponse as Response);
 
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'application/json');
       expect(mockResponse.setHeader).toHaveBeenCalledWith(
@@ -128,12 +134,12 @@ describe('DebateController', () => {
     });
 
     it('should return 404 for non-existent debate', async () => {
-      const mockResponse = {
+      const mockResponse: MockResponse = {
         setHeader: jest.fn(),
-      } as any;
+      };
 
       await expect(
-        controller.downloadDebate('nonexistent-id', mockResponse)
+        controller.downloadDebate('nonexistent-id', mockResponse as Response)
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -141,11 +147,11 @@ describe('DebateController', () => {
       const state = await stateManager.createDebate(TEST_PROBLEM);
       await stateManager.updateUserFeedback(state.id, TEST_FEEDBACK_POSITIVE);
 
-      const mockResponse = {
+      const mockResponse: MockResponse = {
         setHeader: jest.fn(),
-      } as any;
+      };
 
-      const result = await controller.downloadDebate(state.id, mockResponse);
+      const result = await controller.downloadDebate(state.id, mockResponse as Response);
 
       expect(result).toEqual(
         expect.objectContaining({

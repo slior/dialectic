@@ -16,7 +16,7 @@ import { DebateService, OrchestratorHooks } from './debate.service';
 /**
  * Agent configuration input from client (matches AgentConfigInput from UI).
  */
-interface AgentConfigInput {
+export interface AgentConfigInput {
   id: string;
   name: string;
   role: string;
@@ -28,7 +28,7 @@ interface AgentConfigInput {
 /**
  * DTO for starting a debate via WebSocket.
  */
-interface StartDebateDto {
+export interface StartDebateDto {
   problem: string;
   clarificationsEnabled: boolean;
   rounds?: number;
