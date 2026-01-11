@@ -1,0 +1,230 @@
+---
+globs: *.ts
+alwaysApply: false
+---
+# Function Type Definitions
+
+This rule ensures that all function parameters and return types use named types instead of inline type definitions. This applies to all TypeScript files (.ts) in the codebase.
+
+## Core Principle
+
+Always use named types for function parameters and return types. Prefer existing types when available, otherwise create new named types and use them consistently.
+
+## Rules
+
+### 1. Function Return Types
+
+**Rule:** Never use inline object types for function return values. Always define a named type or interface.
+
+**Bad:**
+```typescript
+async function submitFeedback(id: string, dto: SubmitFeedbackDto): Promise<{ success: boolean; message: string }> {
+  return { success: true, message: 'Feedback submitted successfully' };
+}
+
+private formatDebateResult(result: DebateResult): {
+  debateId: string;
+  solution: DebateResult['solution'];
+  rounds: Array<{ roundNumber: number; contributions: Array<{...}> }>;
+} {
+  // ...
+}
+```
+
+**Good:**
+```typescript
+interface SubmitFeedbackResponse {
+  success: boolean;
+  message: string;
+}
+
+interface FormattedContribution {
+  agentId: string;
+  agentRole: string;
+  type: ContributionType;
+  content: string;
+  targetAgentId?: string;
+}
+
+interface FormattedRound {
+  roundNumber: number;
+  contributions: FormattedContribution[];
+}
+
+interface FormattedDebateResult {
+  debateId: string;
+  solution: DebateResult['solution'];
+  rounds: FormattedRound[];
+  metadata: DebateResult['metadata'];
+}
+
+async function submitFeedback(id: string, dto: SubmitFeedbackDto): Promise<SubmitFeedbackResponse> {
+  return { success: true, message: 'Feedback submitted successfully' };
+}
+
+private formatDebateResult(result: DebateResult): FormattedDebateResult {
+  // ...
+}
+```
+
+### 2. Function Parameter Types
+
+**Rule:** Use named types for complex parameter objects. For simple primitives, explicit types are acceptable.
+
+**Bad:**
+```typescript
+function processOptions(options: {
+  debate: string;
+  config?: string;
+  output?: string;
+  verbose?: boolean;
+}): void {
+  // ...
+}
+```
+
+**Good:**
+```typescript
+interface ProcessOptions {
+  debate: string;
+  config?: string;
+  output?: string;
+  verbose?: boolean;
+}
+
+function processOptions(options: ProcessOptions): void {
+  // ...
+}
+```
+
+### 3. Prefer Existing Types
+
+**Rule:** Before creating a new type, check if a suitable type already exists in the codebase.
+
+**Good:**
+```typescript
+// If DebateState already exists in dialectic-core
+async function downloadDebate(id: string): Promise<DebateState> {
+  // ...
+}
+
+// Instead of creating a new type
+```
+
+### 4. Type Definition Location
+
+**Rule:** Define types near where they are used, following these guidelines:
+
+- **File-level types:** Define at the top of the file, after imports, before the class/function that uses them
+- **Private types:** Define in the same file if only used within that file
+- **Shared types:** Define in a shared types file if used across multiple files in the same package
+- **Cross-package types:** Define in the core package if used across packages
+
+**Good:**
+```typescript
+import { DebateState } from 'dialectic-core';
+
+/**
+ * DTO for submitting user feedback.
+ */
+interface SubmitFeedbackDto {
+  feedback: number;
+}
+
+/**
+ * Response DTO for feedback submission.
+ */
+interface SubmitFeedbackResponse {
+  success: boolean;
+  message: string;
+}
+
+@Controller('api/debates')
+export class DebateController {
+  async submitFeedback(id: string, dto: SubmitFeedbackDto): Promise<SubmitFeedbackResponse> {
+    // ...
+  }
+}
+```
+
+### 5. Nested Types
+
+**Rule:** When a return type contains nested objects, create named types for each level of nesting.
+
+**Bad:**
+```typescript
+function getResult(): {
+  data: {
+    items: Array<{
+      id: string;
+      name: string;
+      metadata: {
+        created: Date;
+        updated: Date;
+      };
+    }>;
+  };
+} {
+  // ...
+}
+```
+
+**Good:**
+```typescript
+interface ItemMetadata {
+  created: Date;
+  updated: Date;
+}
+
+interface Item {
+  id: string;
+  name: string;
+  metadata: ItemMetadata;
+}
+
+interface ResultData {
+  items: Item[];
+}
+
+interface Result {
+  data: ResultData;
+}
+
+function getResult(): Result {
+  // ...
+}
+```
+
+### 6. Type Naming Conventions
+
+**Rule:** Use descriptive names that indicate the purpose and context of the type.
+
+- **DTOs:** Use `DTO` suffix (e.g., `SubmitFeedbackDTO`)
+- **Responses:** Use `Response` suffix (e.g., `SubmitFeedbackResponse`)
+- **Formatted data:** Use `Formatted` prefix (e.g., `FormattedDebateResult`)
+- **Interfaces:** Use PascalCase (e.g., `ProcessOptions`)
+
+## Exceptions
+
+Simple primitive types and well-known types do not need named types:
+
+**Acceptable:**
+```typescript
+function getId(): string { }
+function getCount(): number { }
+function isActive(): boolean { }
+function getItems(): string[] { }
+function processData(data: Record<string, unknown>): void { }
+```
+
+## Checklist
+
+When writing or reviewing function signatures:
+
+- [ ] All function return types use named types (not inline object types)
+- [ ] Complex parameter objects use named types
+- [ ] Existing types are preferred over creating new ones
+- [ ] Nested types are extracted into named types
+- [ ] Types are defined in appropriate locations (file-level, shared, etc.)
+- [ ] Type names follow naming conventions
+- [ ] Types are documented with JSDoc comments when appropriate
