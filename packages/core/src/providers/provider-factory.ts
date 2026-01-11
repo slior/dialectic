@@ -1,5 +1,5 @@
 import { LLM_PROVIDERS } from '../types/agent.types';
-import { EXIT_CONFIG_ERROR } from '../utils/exit-codes';
+import { ErrorWithCode, EXIT_CONFIG_ERROR } from '../utils/exit-codes';
 
 import { LLMProvider } from './llm-provider';
 import { OpenAIProvider } from './openai-provider';
@@ -26,7 +26,7 @@ function createProviderWithApiKey<T extends LLMProvider>(
 ): T {
   const apiKey = process.env[envVarName];
   if (!apiKey || apiKey.trim() === '') {
-    const err: any = new Error(`${envVarName} is not set`);
+    const err = new Error(`${envVarName} is not set`) as ErrorWithCode;
     err.code = EXIT_CONFIG_ERROR;
     throw err;
   }
@@ -57,7 +57,7 @@ export function createProvider(providerType: string): LLMProvider {
     
     default: {
       const supportedTypes = Object.values(LLM_PROVIDERS).join(', ');
-      const err: any = new Error(`Unsupported provider type: ${providerType}. Supported types are: ${supportedTypes}`);
+      const err = new Error(`Unsupported provider type: ${providerType}. Supported types are: ${supportedTypes}`) as ErrorWithCode;
       err.code = EXIT_CONFIG_ERROR;
       throw err;
     }

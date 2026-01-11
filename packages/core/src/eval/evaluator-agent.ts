@@ -2,6 +2,7 @@ import { LLMProvider, CompletionResponse } from '../providers/llm-provider';
 import { createProvider } from '../providers/provider-factory';
 import { EvaluatorConfig, EvaluatorInputs } from '../types/eval.types';
 import { writeStderr } from '../utils/console';
+import { ErrorWithCode } from '../utils/exit-codes';
 
 export interface EvaluatorResult {
   id: string;
@@ -122,8 +123,9 @@ export class EvaluatorAgent {
         latencyMs,
         ...(res.usage !== undefined && { usage: res.usage }),
       };
-    } catch (err: any) {
-      writeStderr(`[${this.id}] Evaluation failed: ${err?.message ?? 'unknown error'}\n`);
+    } catch (err: unknown) {
+      const errorWithCode = err as ErrorWithCode;
+      writeStderr(`[${this.id}] Evaluation failed: ${errorWithCode.message ?? 'unknown error'}\n`);
       throw err;
     }
   }

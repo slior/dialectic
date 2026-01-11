@@ -143,7 +143,7 @@ describe('common utilities', () => {
 
     it('should add code property to the error', () => {
       const error = createValidationError('Test error', EXIT_INVALID_ARGS);
-      expect((error as any).code).toBe(EXIT_INVALID_ARGS);
+      expect(error.code).toBe(EXIT_INVALID_ARGS);
     });
 
     it('should work with different exit codes', () => {
@@ -151,15 +151,15 @@ describe('common utilities', () => {
       const error2 = createValidationError('Error 2', 2);
       const error3 = createValidationError('Error 3', 3);
       
-      expect((error1 as any).code).toBe(1);
-      expect((error2 as any).code).toBe(2);
-      expect((error3 as any).code).toBe(3);
+      expect(error1.code).toBe(1);
+      expect(error2.code).toBe(2);
+      expect(error3.code).toBe(3);
     });
 
     it('should handle empty message', () => {
       const error = createValidationError('', EXIT_INVALID_ARGS);
       expect(error.message).toBe('');
-      expect((error as any).code).toBe(EXIT_INVALID_ARGS);
+      expect(error.code).toBe(EXIT_INVALID_ARGS);
     });
   });
 

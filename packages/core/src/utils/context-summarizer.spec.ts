@@ -1,4 +1,4 @@
-import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES, CompletionRequest, CompletionResponse } from 'dialectic-core';
+import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES, CompletionRequest, CompletionResponse, LLM_PROVIDERS } from 'dialectic-core';
 //TODO: change the imports to import from source instead of dialectic-core.
 // Test constants
 const DEFAULT_SUMMARY_TEMPERATURE = 0.3;
@@ -39,7 +39,7 @@ describe('LengthBasedSummarizer', () => {
 
   it('should return summary with correct metadata (configured values)', async () => {
     const provider = new MockLLMProvider('Test summary content');
-    const summarizer = new LengthBasedSummarizer(provider, { model: 'gpt-4o', temperature: CUSTOM_TEMPERATURE, provider: 'openai' as any });
+    const summarizer = new LengthBasedSummarizer(provider, { model: 'gpt-4o', temperature: CUSTOM_TEMPERATURE, provider: LLM_PROVIDERS.OPENAI });
     
     const content = 'This is the debate history to summarize.';
     const role = AGENT_ROLES.ARCHITECT;

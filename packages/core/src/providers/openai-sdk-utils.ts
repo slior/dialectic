@@ -132,6 +132,27 @@ export interface ResponsesAPIClient {
 }
 
 /**
+ * Type for the Chat Completions API client methods.
+ * Represents a client that supports the OpenAI Chat Completions API structure.
+ * Used by both OpenAI and OpenRouter providers.
+ * 
+ * Note: The `create` method uses `any` because:
+ * 1. The OpenAI SDK's `create` method has multiple overloads with different signatures
+ * 2. TypeScript's `Parameters` utility type (used in `extractOpenAIChatCompletionTypes`) 
+ *    requires a function signature to extract parameter types from the concrete client type
+ * 3. The actual types are extracted at compile time from the concrete client instance,
+ *    so `any` here is safe and necessary for type extraction to work properly
+ */
+export interface ChatCompletionAPIClient {
+  chat: {
+    completions: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      create: (...args: any[]) => any;
+    };
+  };
+}
+
+/**
  * Converts ToolSchema array to OpenAI function calling format.
  * 
  * @param tools - Array of tool schemas.
@@ -356,7 +377,7 @@ export function convertChatUsage(usage?: ChatCompletionUsage): CompletionUsage |
  * @param openAITools - Optional array of tools in OpenAI format.
  * @returns A CompletionResponse.
  */
-export async function tryWithChatCompletionAPI<T extends { chat: { completions: { create: (...args: any[]) => any } } }>(
+export async function tryWithChatCompletionAPI<T extends ChatCompletionAPIClient>(
   client: T,
   request: CompletionRequest,
   messages: ChatMessage[],
@@ -442,8 +463,7 @@ export async function completeWithFallback(
  * @param client - OpenAI client instance (used to extract types from the SDK method signature).
  * @returns Object with type information for type extraction (not for runtime use).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractOpenAIChatCompletionTypes<T extends { chat: { completions: { create: (...args: any[]) => any } } }>(
+export function extractOpenAIChatCompletionTypes<T extends ChatCompletionAPIClient>(
   _client: T // eslint-disable-line @typescript-eslint/no-unused-vars
 ): {
   createParams: Parameters<T['chat']['completions']['create']>[0];

@@ -1,6 +1,19 @@
 import type { ChatRole } from '../providers/llm-provider';
 
 /**
+ * JSON Schema property definition for tool parameters.
+ * Represents a single parameter in a tool's parameter schema.
+ */
+export interface JsonSchemaProperty {
+  /** The type of the parameter (e.g., 'string', 'number', 'boolean'). */
+  type: string;
+  /** Optional description of the parameter. */
+  description?: string;
+  /** Additional JSON Schema properties (for extensibility). */
+  [key: string]: unknown;
+}
+
+/**
  * Tool schema matching OpenAI function calling format.
  * Used to define available tools for LLM agents.
  */
@@ -12,11 +25,7 @@ export interface ToolSchema {
   /** JSON Schema definition of tool parameters. */
   parameters: {
     type: 'object';
-    properties: Record<string, {
-      type: string;
-      description?: string;
-      [key: string]: any;
-    }>;
+    properties: Record<string, JsonSchemaProperty>;
     required?: string[];
   };
 }

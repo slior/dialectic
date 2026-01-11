@@ -171,7 +171,9 @@ describe('ContextSearchTool', () => {
     });
 
     it('should handle invalid arguments', () => {
-      const result = tool.execute({ invalid: 'arg' } as any, mockContext);
+      // Test with invalid arguments (missing required 'term' property)
+      const invalidArgs: Record<string, unknown> = { invalid: 'arg' };
+      const result = tool.execute(invalidArgs as { term?: string }, mockContext);
       const parsed = JSON.parse(result);
       
       // Should either error or return empty results

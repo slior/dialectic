@@ -3,8 +3,18 @@ import {
   ToolSchema, DebateContext, DebateState, CompletionRequest, CompletionResponse,
   ToolRegistry, ToolImplementation, CONTRIBUTION_TYPES, SUMMARIZATION_METHODS,
   DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH,
-  DEFAULT_SUMMARIZATION_METHOD, createProvider,
+  DEFAULT_SUMMARIZATION_METHOD, createProvider, Proposal, Critique,
 } from 'dialectic-core';
+
+/**
+ * Test-only type that exposes protected methods for testing.
+ * This allows us to test protected methods without using `any`.
+ */
+type RoleBasedAgentTestAccess = RoleBasedAgent & {
+  proposeImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal>;
+  critiqueImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Critique>;
+  refineImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal>;
+};
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;
@@ -855,7 +865,7 @@ describe('RoleBasedAgent Tool Calling', () => {
 describe('RoleBasedAgent (Security Role)', () => {
   // Mock environment variable for provider factory
   const originalEnv = process.env;
-  let mockProvider: any;
+  let mockProvider: LLMProvider;
 
   beforeAll(() => {
     process.env.OPENAI_API_KEY = 'test-key';
@@ -925,7 +935,7 @@ describe('RoleBasedAgent (Security Role)', () => {
   describe('propose()', () => {
     it('should call proposeImpl with security-focused prompts', async () => {
       const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt', undefined, defaultSummaryConfig, undefined);
-      const proposeImplSpy = jest.spyOn(agent, 'proposeImpl' as keyof typeof agent as any);
+      const proposeImplSpy = jest.spyOn(agent as RoleBasedAgentTestAccess, 'proposeImpl');
       
       const result = await agent.propose('Test problem', mockContext);
       
@@ -955,7 +965,7 @@ describe('RoleBasedAgent (Security Role)', () => {
   describe('critique()', () => {
     it('should call critiqueImpl with security-focused prompts', async () => {
       const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt', undefined, defaultSummaryConfig, undefined);
-      const critiqueImplSpy = jest.spyOn(agent, 'critiqueImpl' as keyof typeof agent as any);
+      const critiqueImplSpy = jest.spyOn(agent as RoleBasedAgentTestAccess, 'critiqueImpl');
       const mockProposal = {
         content: 'Test proposal content',
         metadata: { latencyMs: 100, model: 'gpt-4' }
@@ -989,7 +999,7 @@ describe('RoleBasedAgent (Security Role)', () => {
   describe('refine()', () => {
     it('should call refineImpl with security-focused prompts', async () => {
       const agent = RoleBasedAgent.create(mockConfig, mockProvider, 'Test security prompt', undefined, defaultSummaryConfig, undefined);
-      const refineImplSpy = jest.spyOn(agent, 'refineImpl' as keyof typeof agent as any);
+      const refineImplSpy = jest.spyOn(agent as RoleBasedAgentTestAccess, 'refineImpl');
       const mockProposal = {
         content: 'Original proposal content',
         metadata: { latencyMs: 100, model: 'gpt-4' }

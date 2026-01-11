@@ -68,7 +68,7 @@ describe('StateManager (file-first persistence)', () => {
     const state = await sm.createDebate('Problem');
     await expect(sm.addContribution(state.id, {
       agentId: 'a1',
-      agentRole: 'architect' as any,
+      agentRole: AGENT_ROLES.ARCHITECT,
       type: 'proposal',
       content: 'x',
       metadata: {},

@@ -6,6 +6,7 @@ import { DebateConfig } from '../types/debate.types';
 import { TracingContext, TRACE_OPTIONS, TraceMetadata } from '../types/tracing.types';
 
 import { logWarning } from './console';
+import { ErrorWithCode } from './exit-codes';
 import { TracingDecoratorAgent } from './tracing-decorator-agent';
 import { TracingLLMProvider } from './tracing-provider';
 
@@ -87,9 +88,10 @@ export function createTracingContext(
       trace,
       currentSpans: new Map(),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorWithCode = error as ErrorWithCode;
     // Log warning but don't throw - tracing failures should be non-blocking
-    logWarning(`Failed to create Langfuse tracing context: ${error.message}`);
+    logWarning(`Failed to create Langfuse tracing context: ${errorWithCode.message}`);
     return undefined;
   }
 }

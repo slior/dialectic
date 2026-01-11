@@ -3,7 +3,7 @@ import path from 'path';
 
 import { round2 } from '../types/eval.types';
 
-import { EXIT_INVALID_ARGS } from './exit-codes';
+import { EXIT_INVALID_ARGS, ErrorWithCode } from './exit-codes';
 
 const FILE_ENCODING_UTF8 = 'utf-8';
 
@@ -59,8 +59,8 @@ export function getErrorMessage(error: unknown): string {
  * @param code - The numeric error code indicating the exit or validation type.
  * @returns An Error object with the specified message and an added 'code' property.
  */
-export function createValidationError(message: string, code: number): Error {
-  const err: any = new Error(message);
+export function createValidationError(message: string, code: number): ErrorWithCode {
+  const err = new Error(message) as ErrorWithCode;
   err.code = code;
   return err;
 }

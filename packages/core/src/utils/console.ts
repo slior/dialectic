@@ -1,12 +1,22 @@
+/**
+ * Type representing the chalk color methods we use.
+ * This interface matches the structure of chalk's color methods.
+ */
+interface ChalkColorMethods {
+  blueBright: (text: string) => string;
+  greenBright: (text: string) => string;
+  yellowBright: (text: string) => string;
+}
+
 // Lazy load chalk for optional color support
-let chalk: any;
+let chalk: ChalkColorMethods;
 try {
   chalk = require('chalk');
 } catch {
   // If chalk is not available, create a pass-through mock
   chalk = new Proxy({}, {
     get: (): ((text: string) => string) => (text: string) => text
-  });
+  }) as ChalkColorMethods;
 }
 
 // Message type enum for categorizing messages

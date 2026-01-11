@@ -76,7 +76,7 @@ describe('OpenAI Provider Tool Calling', () => {
     };
 
     // Reset the mock implementation to return our mock client
-    (OpenAI as jest.MockedClass<typeof OpenAI>).mockImplementation(() => mockClient as any);
+    (OpenAI as jest.MockedClass<typeof OpenAI>).mockImplementation(() => mockClient as unknown as OpenAI);
     provider = new OpenAIProvider('test-api-key');
   });
 

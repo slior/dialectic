@@ -2,6 +2,7 @@ import { LLMProvider, CompletionRequest, CompletionResponse } from '../providers
 import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
 
 import { logWarning } from './console';
+import { ErrorWithCode } from './exit-codes';
 import { getSpanParent } from './tracing-utils';
 
 /**
@@ -81,17 +82,19 @@ export class TracingLLMProvider implements LLMProvider {
         });
 
         return response;
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorWithCode = error as ErrorWithCode;
         // End generation with error
         generation.end({
           level: SPAN_LEVEL.ERROR,
-          statusMessage: error.message,
+          statusMessage: errorWithCode.message,
         });
-        throw error;
+        throw errorWithCode;
       }
-    } catch (tracingError: any) {
+    } catch (tracingError: unknown) {
+      const errorWithCode = tracingError as ErrorWithCode;
       // If tracing fails, log warning and continue with original provider call
-      logWarning(`Langfuse tracing failed for LLM call: ${tracingError.message}`);
+      logWarning(`Langfuse tracing failed for LLM call: ${errorWithCode.message}`);
       return await this.wrappedProvider.complete(request);
     }
   }

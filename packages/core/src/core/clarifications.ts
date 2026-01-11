@@ -1,4 +1,4 @@
-import { AgentClarifications } from '../types/debate.types';
+import { AgentClarifications, DebateContext } from '../types/debate.types';
 
 import { Agent } from './agent';
 
@@ -14,7 +14,7 @@ import { Agent } from './agent';
 export async function collectClarifications( problem: string, agents: Agent[], maxPerAgent: number, warn: (message: string) => void ): Promise<AgentClarifications[]>
 {
   const agentPromises = agents.map(async (a) => {
-    const ctx = { problem } as any;
+    const ctx: DebateContext = { problem };
     const res = await a.askClarifyingQuestions(problem, ctx);
     const list = Array.isArray(res?.questions) ? res.questions : [];
     const truncated = list.slice(0, maxPerAgent);
