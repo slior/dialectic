@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 
-
-import { CompletionRequest, CompletionResponse, LLMProvider, ResponsesAPIClient, completeWithFallback } from './llm-provider';
+import { CompletionRequest, CompletionResponse, LLMProvider } from './llm-provider';
+import { ResponsesAPIClient, completeWithFallback } from './openai-sdk-utils';
 
 export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
