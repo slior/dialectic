@@ -25,14 +25,12 @@ jest.mock('openai', () => {
     default: class OpenAIMock {
       public chat = {
         completions: {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           create: async (_: unknown): Promise<unknown> => ({ 
             choices: [{ message: { content: 'Security solution text' } }],
             usage: { total_tokens: MOCK_TOTAL_TOKENS, prompt_tokens: MOCK_PROMPT_TOKENS, completion_tokens: MOCK_COMPLETION_TOKENS }
           }),
         },
       };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       constructor(_opts: unknown) {}
     },
   };
@@ -47,7 +45,6 @@ class MockLLMProvider implements LLMProvider {
     this.responses = responses;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_request: unknown): Promise<CompletionResponse> {
     const response = this.responses[this.currentIndex % this.responses.length];
     this.currentIndex++;
@@ -73,7 +70,6 @@ class TestTool implements ToolImplementation {
     },
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   execute(_args: unknown, _context?: DebateContext, _state?: DebateState): string {
     return JSON.stringify({ status: 'success', result: { output: 'test' } });
   }
@@ -89,7 +85,6 @@ class MockProvider implements LLMProvider {
     this.callCount = 0;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_request: CompletionRequest): Promise<CompletionResponse> {
     const response = this.responses[this.callCount] || { text: 'Final' };
     this.callCount++;
@@ -486,7 +481,6 @@ describe('RoleBasedAgent - prepareContext()', () => {
 
   it('should fallback to full history on error with warning', async () => {
     class FailingProvider implements LLMProvider {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       async complete(_request: unknown): Promise<CompletionResponse> {
         throw new Error('LLM failure');
       }

@@ -68,6 +68,7 @@ module.exports = tseslint.config(
       'complexity': 'warn',
       'sonarjs/cognitive-complexity': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': 'off', //a lot of mocks don't use the parameters
       // Disable max-lines-per-function for tests: it's standard to have all tests in a single describe block
       'max-lines-per-function': 'off',
     },

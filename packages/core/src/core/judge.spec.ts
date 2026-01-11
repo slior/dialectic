@@ -20,7 +20,6 @@ class MockLLMProvider implements LLMProvider {
     this.responseText = text;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_request: CompletionRequest): Promise<CompletionResponse> {
     return {
       text: this.responseText,

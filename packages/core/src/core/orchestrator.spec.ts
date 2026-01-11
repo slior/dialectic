@@ -76,7 +76,6 @@ function createMockAgentWithToolMetadata(id: string, role: any, toolCalls?: Tool
 // Partial mock of JudgeAgent for testing - only implements the methods needed by the orchestrator
 // Using double cast (as unknown as JudgeAgent) because this is intentionally a partial mock
 const mockJudge = {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   synthesize: async (_problem: string, _rounds: DebateRound[]) => ({
     description: 'final',
     tradeoffs: [],
@@ -84,7 +83,6 @@ const mockJudge = {
     confidence: 80,
     synthesizedBy: 'judge',
   } as Solution),
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   prepareContext: async (_rounds: DebateRound[]) => ({ context: { problem: '', history: [] } }),
 } as unknown as JudgeAgent;
 
@@ -101,7 +99,6 @@ function createMockStateManager(): StateManager {
 
   return {
     createDebate: async (problem: string) => ({ ...state, problem }),
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     beginRound: async (_id: string) => {
       const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
       state.rounds.push(round);
@@ -109,7 +106,6 @@ function createMockStateManager(): StateManager {
       state.updatedAt = new Date();
       return round;
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addContribution: async (_id: string, contrib: any) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
@@ -138,7 +134,6 @@ function createMockStateManagerWithToolSupport(): StateManager {
 
   return {
     createDebate: async (problem: string) => ({ ...state, problem }),
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     beginRound: async (_id: string) => {
       const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
       state.rounds.push(round);
@@ -146,30 +141,25 @@ function createMockStateManagerWithToolSupport(): StateManager {
       state.updatedAt = new Date();
       return round;
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addContribution: async (_id: string, contrib: any) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       round.contributions.push(contrib);
       state.updatedAt = new Date();
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addSummary: async (_id: string, _summary: any) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       if (!round.summaries) round.summaries = {};
       state.updatedAt = new Date();
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addJudgeSummary: async (_id: string, _summary: any) => {
       state.updatedAt = new Date();
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     completeDebate: async (_id: string, _solution: any) => {
       state.status = 'completed';
       state.updatedAt = new Date();
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     getDebate: async (_id: string) => state,
   } as unknown as StateManager;
 }
@@ -189,29 +179,25 @@ class MockAgent extends Agent {
     this.summaryToReturn = summary;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
     return { content: 'Mock proposal', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async critique(_proposal: Proposal, _context: DebateContext): Promise<Critique> {
     return { content: 'Mock critique', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async refine(_originalProposal: Proposal, _critiques: Critique[], _context: DebateContext): Promise<Proposal> {
     return { content: 'Mock refinement', metadata: { latencyMs: MOCK_LATENCY_MS } };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSummarize(_context: DebateContext): boolean {
     return this.summaryToReturn !== undefined;
   }
 
   async prepareContext(
     context: DebateContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _roundNumber: number
   ): Promise<ContextPreparationResult> {
     if (this.summaryToReturn) {
@@ -223,7 +209,6 @@ class MockAgent extends Agent {
     return { context };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<{ questions: { id?: string; text: string }[] }> {
     return { questions: [] };
   }
@@ -243,32 +228,26 @@ class MockJudge extends Agent {
     super(config, {} as unknown as any);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
     return { content: 'Judge proposal', metadata: {} };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async critique(_proposal: Proposal, _context: DebateContext): Promise<Critique> {
     return { content: 'Judge critique', metadata: {} };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async refine(_originalProposal: Proposal, _critiques: Critique[], _context: DebateContext): Promise<Proposal> {
     return { content: 'Judge refinement', metadata: {} };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSummarize(_context: DebateContext): boolean {
     return false;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async prepareContext(context: DebateContext, _roundNumber: number): Promise<{ context: DebateContext }> {
     return { context };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async synthesize(_context: DebateContext): Promise<any> {
     return {
       description: 'Final solution',
@@ -280,7 +259,6 @@ class MockJudge extends Agent {
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<{ questions: { id?: string; text: string }[] }> {
     return { questions: [] };
   }
@@ -380,7 +358,6 @@ describe('DebateOrchestrator (Flow 1)', () => {
     };
     const sm = {
       createDebate: async (problem: string) => ({ ...state, problem }),
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     beginRound: async (_id: string) => {
         const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
         state.rounds.push(round);
@@ -388,7 +365,6 @@ describe('DebateOrchestrator (Flow 1)', () => {
         state.updatedAt = new Date();
         return round;
       },
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
     addContribution: async (_id: string, contrib: any) => {
         const round = state.rounds[state.currentRound - 1];
         if (!round) throw new Error('No active round');

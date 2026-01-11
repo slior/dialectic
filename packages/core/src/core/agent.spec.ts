@@ -23,7 +23,6 @@ class MockTool implements ToolImplementation {
     },
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   execute(args: Record<string, unknown>, _context?: DebateContext, _state?: DebateState): string {
     const input = typeof args.input === 'string' ? args.input : '';
     if (input === 'error') {
@@ -43,7 +42,6 @@ class MockProviderWithTools implements LLMProvider {
     this.callCount = 0;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_request: CompletionRequest): Promise<CompletionResponse> {
     const response = this.toolCallResponses[this.callCount] || { text: 'Final response' };
     this.callCount++;
@@ -69,38 +67,31 @@ class TestAgent extends Agent {
     (this as any).toolCallLimit = toolCallLimit ?? 10;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async propose(_problem: string, _context: DebateContext): Promise<any> {
     throw new Error('Not implemented in test');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async critique(_proposal: any, _context: DebateContext): Promise<any> {
     throw new Error('Not implemented in test');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async refine(_original: any, _critiques: any[], _context: DebateContext): Promise<any> {
     throw new Error('Not implemented in test');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   shouldSummarize(_context: DebateContext): boolean {
     return false;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async prepareContext(_context: DebateContext, _roundNumber: number): Promise<any> {
     return { context: _context };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
   async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<any> {
     return { questions: [] };
   }
 
   // Expose callLLM for testing
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async testCallLLM(systemPrompt: string, userPrompt: string, context?: DebateContext): Promise<any> {
     return (this as any).callLLM(systemPrompt, userPrompt, context);
   }

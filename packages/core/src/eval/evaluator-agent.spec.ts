@@ -261,7 +261,6 @@ describe('EvaluatorAgent', () => {
           TEST_SYSTEM_PROMPT,
           TEST_USER_PROMPT_TEMPLATE
         );
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { requirementsInfo, ...inputs } = createMockEvaluatorInputs();
 
         await agent.evaluate(inputs);
@@ -375,7 +374,7 @@ describe('EvaluatorAgent', () => {
       });
 
       it('should handle non-Error objects thrown', async () => {
-        const error = { message: 'Custom error object' } as any;
+        const error = { message: 'Custom error object' } as unknown as Error;
         mockProvider = new MockLLMProvider('', true, error);
         const config = createMockEvaluatorConfig();
         const agent = new EvaluatorAgent(

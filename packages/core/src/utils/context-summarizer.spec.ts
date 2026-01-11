@@ -18,7 +18,6 @@ class MockLLMProvider implements LLMProvider {
     this.shouldFail = shouldFail;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async complete(_request: CompletionRequest): Promise<CompletionResponse> {
     if (this.shouldFail) {
       throw new Error('Mock LLM failure');
@@ -121,7 +120,6 @@ describe('LengthBasedSummarizer', () => {
 
   it('should handle missing token usage from LLM', async () => {
     class NoTokenProvider implements LLMProvider {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       async complete(_request: CompletionRequest): Promise<CompletionResponse> {
         return { text: 'Summary' };
       }
