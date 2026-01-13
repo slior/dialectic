@@ -120,7 +120,7 @@ export default function Dashboard() {
     const clampedHeightPx = Math.max(MIN_SOLUTION_PANEL_HEIGHT_PX, Math.min(newHeightPx, maxHeightPx));
     
     setSolutionPanelHeight(`${clampedHeightPx}px`);
-  }, [parseHeight]);
+  }, []);
 
   const handleHorizontalResizeEnd = useCallback(() => {
     isDraggingHorizontal.current = false;
