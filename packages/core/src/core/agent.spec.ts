@@ -1,4 +1,6 @@
-import { Agent, ToolRegistry, ToolImplementation, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState } from 'dialectic-core';
+import { Agent, ToolRegistry, ToolImplementation, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState, AgentConfig, Proposal, Critique, ContextPreparationResult, ClarificationQuestionsResponse, AgentLogger, AGENT_ROLES, LLM_PROVIDERS } from 'dialectic-core';
+
+import { AgentLLMResponse } from './agent';
 
 // Test constants
 const DEFAULT_TOOL_CALL_LIMIT = 10;
@@ -7,6 +9,21 @@ const SINGLE_TOOL_CALL_LIMIT = 1;
 const MOCK_INPUT_TOKENS = 100;
 const MOCK_OUTPUT_TOKENS = 50;
 const MOCK_TOTAL_TOKENS = 150;
+
+/**
+ * Creates a minimal AgentConfig for testing.
+ */
+function createTestAgentConfig(overrides?: Partial<AgentConfig>): AgentConfig {
+  return {
+    id: 'test-agent',
+    name: 'Test Agent',
+    role: AGENT_ROLES.ARCHITECT,
+    model: 'gpt-4',
+    provider: LLM_PROVIDERS.OPENAI,
+    temperature: 0.5,
+    ...overrides,
+  };
+}
 
 // Mock tool implementation
 class MockTool implements ToolImplementation {
@@ -58,24 +75,34 @@ class MockProviderWithTools implements LLMProvider {
   }
 }
 
+/**
+ * Type for accessing protected members of Agent in tests.
+ * This allows us to test protected methods without using `any`.
+ */
+type TestAgentAccess = Agent & {
+  toolRegistry: ToolRegistry | undefined;
+  toolCallLimit: number;
+  callLLM(systemPrompt: string, userPrompt: string, context?: DebateContext, state?: DebateState): Promise<AgentLLMResponse>;
+};
+
 // Mock agent class for testing
 class TestAgent extends Agent {
-  // eslint-disable-next-line max-params, @typescript-eslint/no-explicit-any
-  constructor(config: any, provider: LLMProvider, toolRegistry?: ToolRegistry, toolCallLimit?: number, logger?: any) {
+  constructor(config: AgentConfig, provider: LLMProvider, toolRegistry?: ToolRegistry, toolCallLimit?: number, logger?: AgentLogger) {
     super(config, provider, toolRegistry, toolCallLimit, logger);
-    (this as any).toolRegistry = toolRegistry;
-    (this as any).toolCallLimit = toolCallLimit ?? 10;
+    const self = this as unknown as TestAgentAccess;
+    self.toolRegistry = toolRegistry;
+    self.toolCallLimit = toolCallLimit ?? 10;
   }
 
-  async propose(_problem: string, _context: DebateContext): Promise<any> {
+  async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
     throw new Error('Not implemented in test');
   }
 
-  async critique(_proposal: any, _context: DebateContext): Promise<any> {
+  async critique(_proposal: Proposal, _context: DebateContext): Promise<Critique> {
     throw new Error('Not implemented in test');
   }
 
-  async refine(_original: any, _critiques: any[], _context: DebateContext): Promise<any> {
+  async refine(_original: Proposal, _critiques: Critique[], _context: DebateContext): Promise<Proposal> {
     throw new Error('Not implemented in test');
   }
 
@@ -83,17 +110,18 @@ class TestAgent extends Agent {
     return false;
   }
 
-  async prepareContext(_context: DebateContext, _roundNumber: number): Promise<any> {
+  async prepareContext(_context: DebateContext, _roundNumber: number): Promise<ContextPreparationResult> {
     return { context: _context };
   }
 
-  async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<any> {
+  async askClarifyingQuestions(_problem: string, _context: DebateContext): Promise<ClarificationQuestionsResponse> {
     return { questions: [] };
   }
 
   // Expose callLLM for testing
-  async testCallLLM(systemPrompt: string, userPrompt: string, context?: DebateContext): Promise<any> {
-    return (this as any).callLLM(systemPrompt, userPrompt, context);
+  async testCallLLM(systemPrompt: string, userPrompt: string, context?: DebateContext): Promise<AgentLLMResponse> {
+    const self = this as unknown as TestAgentAccess;
+    return self.callLLM(systemPrompt, userPrompt, context);
   }
 }
 
@@ -109,7 +137,7 @@ describe('Agent Tool Calling', () => {
     toolRegistry.register(new MockTool());
     
     agent = new TestAgent(
-      { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
+      createTestAgentConfig(),
       mockProvider,
       toolRegistry,
       DEFAULT_TOOL_CALL_LIMIT
@@ -143,7 +171,7 @@ describe('Agent Tool Calling', () => {
       
       expect(response.toolCalls).toBeDefined();
       expect(response.toolCalls?.length).toBe(1);
-      expect(response.toolCalls?.[0].name).toBe('mock_tool');
+      expect(response.toolCalls?.[0]?.name).toBe('mock_tool');
     });
 
     it('should handle response without tool calls', async () => {
@@ -253,7 +281,7 @@ describe('Agent Tool Calling', () => {
   describe('Iteration Limits', () => {
     it('should stop at iteration limit', async () => {
       const limitedAgent = new TestAgent(
-        { id: 'test', name: 'Test', model: 'gpt-4' },
+        createTestAgentConfig({ id: 'test', name: 'Test' }),
         mockProvider,
         toolRegistry,
         LIMITED_TOOL_CALL_LIMIT // Limit to 2 iterations
@@ -294,9 +322,13 @@ describe('Agent Tool Calling', () => {
       const response = await agent.testCallLLM('System', 'User', mockContext);
       
       expect(response.toolResults?.length).toBe(1);
-      const result = JSON.parse(response.toolResults![0].content);
-      expect(result.status).toBe('error');
-      expect(result.error).toContain('not found');
+      const toolResult = response.toolResults?.[0];
+      expect(toolResult).toBeDefined();
+      if (toolResult) {
+        const result = JSON.parse(toolResult.content);
+        expect(result.status).toBe('error');
+        expect(result.error).toContain('not found');
+      }
     });
 
     it('should handle tool execution errors', async () => {
@@ -319,8 +351,12 @@ describe('Agent Tool Calling', () => {
       const response = await agent.testCallLLM('System', 'User', mockContext);
       
       expect(response.toolResults?.length).toBe(1);
-      const result = JSON.parse(response.toolResults![0].content);
-      expect(result.status).toBe('error');
+      const toolResult = response.toolResults?.[0];
+      expect(toolResult).toBeDefined();
+      if (toolResult) {
+        const result = JSON.parse(toolResult.content);
+        expect(result.status).toBe('error');
+      }
     });
 
     it('should handle malformed tool call arguments', async () => {
@@ -343,13 +379,17 @@ describe('Agent Tool Calling', () => {
       const response = await agent.testCallLLM('System', 'User', mockContext);
       
       expect(response.toolResults?.length).toBe(1);
-      const result = JSON.parse(response.toolResults![0].content);
-      expect(result.status).toBe('error');
+      const toolResult = response.toolResults?.[0];
+      expect(toolResult).toBeDefined();
+      if (toolResult) {
+        const result = JSON.parse(toolResult.content);
+        expect(result.status).toBe('error');
+      }
     });
 
     it('should count failed tool invocations toward limit', async () => {
       const limitedAgent = new TestAgent(
-        { id: 'test', name: 'Test', model: 'gpt-4' },
+        createTestAgentConfig({ id: 'test', name: 'Test' }),
         mockProvider,
         toolRegistry,
         LIMITED_TOOL_CALL_LIMIT
@@ -415,13 +455,16 @@ describe('Agent Tool Calling', () => {
       const response = await agent.testCallLLM('System', 'User', mockContext);
       
       expect(response.toolResults?.length).toBe(1);
-      const result = response.toolResults![0];
-      expect(result.tool_call_id).toBe('call_1');
-      expect(result.role).toBe('tool');
-      expect(result.content).toBeDefined();
-      
-      const parsed = JSON.parse(result.content);
-      expect(parsed.status).toBeDefined();
+      const result = response.toolResults?.[0];
+      expect(result).toBeDefined();
+      if (result) {
+        expect(result.tool_call_id).toBe('call_1');
+        expect(result.role).toBe('tool');
+        expect(result.content).toBeDefined();
+        
+        const parsed = JSON.parse(result.content);
+        expect(parsed.status).toBeDefined();
+      }
     });
   });
 
@@ -467,7 +510,7 @@ describe('Agent Tool Calling', () => {
 
     it('should terminate when limit reached', async () => {
       const limitedAgent = new TestAgent(
-        { id: 'test', name: 'Test', model: 'gpt-4' },
+        createTestAgentConfig({ id: 'test', name: 'Test' }),
         mockProvider,
         toolRegistry,
         SINGLE_TOOL_CALL_LIMIT
@@ -511,7 +554,7 @@ describe('Agent Tool Calling', () => {
       };
 
       const agentWithLogger = new TestAgent(
-        { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
+        createTestAgentConfig(),
         mockProvider,
         toolRegistry,
         DEFAULT_TOOL_CALL_LIMIT,
@@ -552,7 +595,7 @@ describe('Agent Tool Calling', () => {
       registryWithTool.register(new MockTool());
 
       const agentWithLogger = new TestAgent(
-        { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
+        createTestAgentConfig(),
         mockProvider,
         registryWithTool,
         10,
@@ -597,7 +640,7 @@ describe('Agent Tool Calling', () => {
       };
 
       const agentWithLogger = new TestAgent(
-        { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
+        createTestAgentConfig(),
         mockProvider,
         toolRegistry,
         DEFAULT_TOOL_CALL_LIMIT,
@@ -641,7 +684,7 @@ describe('Agent Tool Calling', () => {
       };
 
       const agentWithLogger = new TestAgent(
-        { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
+        createTestAgentConfig(),
         mockProvider,
         toolRegistry,
         DEFAULT_TOOL_CALL_LIMIT,
@@ -688,7 +731,7 @@ describe('Agent Tool Calling', () => {
       };
 
       const agentWithoutLogger = new TestAgent(
-        { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
+        createTestAgentConfig(),
         mockProvider,
         toolRegistry,
         10
@@ -727,7 +770,7 @@ describe('Agent Tool Calling', () => {
       };
 
       const agentWithLogger = new TestAgent(
-        { id: 'test-agent', name: 'Test Agent', model: 'gpt-4' },
+        createTestAgentConfig(),
         mockProvider,
         toolRegistry,
         DEFAULT_TOOL_CALL_LIMIT,

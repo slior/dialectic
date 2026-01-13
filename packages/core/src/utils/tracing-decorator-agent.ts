@@ -1,15 +1,40 @@
-import { getPromptsForRole } from '../agents/prompts';
-import { Agent, AgentLLMResponse } from '../core/agent';
+import { getPromptsForRole, RolePrompts } from '../agents/prompts';
+import { RoleBasedAgent } from '../agents/role-based-agent';
+import { Agent, AgentLLMResponse, AgentLogger } from '../core/agent';
 import { LLMProvider } from '../providers/llm-provider';
 import { ToolImplementation } from '../tools/tool-implementation';
+import { ToolRegistry } from '../tools/tool-registry';
 import { Proposal, Critique } from '../types/agent.types';
 import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { ToolCall, ToolResult, TOOL_RESULT_STATUS } from '../types/tool.types';
 import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
 
+import { getErrorMessage } from './common';
 import { logWarning } from './console';
 import { TracingLLMProvider } from './tracing-provider';
 import { getSpanParent } from './tracing-utils';
+
+/**
+ * Interface for accessing protected members of Agent class.
+ * Used internally by TracingDecoratorAgent to extract protected members
+ * from the wrapped agent without using `any` casts.
+ */
+interface AgentWithProtectedMembers {
+  readonly provider: LLMProvider;
+  readonly toolRegistry: ToolRegistry | undefined;
+  readonly toolCallLimit: number;
+  readonly logger: AgentLogger | undefined;
+}
+
+/**
+ * Interface for accessing RoleBasedAgent-specific properties.
+ * Used internally by TracingDecoratorAgent to access prompt-related properties
+ * from RoleBasedAgent instances without using `any` casts.
+ */
+interface RoleBasedAgentWithPrompts {
+  readonly resolvedSystemPrompt: string;
+  readonly rolePrompts: RolePrompts;
+}
 
 
 /**
@@ -25,11 +50,12 @@ export class TracingDecoratorAgent extends Agent {
     private readonly wrappedAgent: Agent,
     private readonly tracingContext: TracingContext
   ) {
-    // Extract protected members from wrapped agent (need cast since they're protected)
-    const provider = (wrappedAgent as any).provider as LLMProvider;
-    const toolRegistry = (wrappedAgent as any).toolRegistry;
-    const toolCallLimit = (wrappedAgent as any).toolCallLimit;
-    const logger = (wrappedAgent as any).logger;
+    // Extract protected members from wrapped agent using type assertion to interface
+    const agentWithProtected = wrappedAgent as unknown as AgentWithProtectedMembers;
+    const provider = agentWithProtected.provider;
+    const toolRegistry = agentWithProtected.toolRegistry;
+    const toolCallLimit = agentWithProtected.toolCallLimit;
+    const logger = agentWithProtected.logger;
 
     // Pass through the wrapped agent's config and provider
     super(
@@ -58,9 +84,8 @@ export class TracingDecoratorAgent extends Agent {
     const spanName = `agent-propose-${this.config.id}`;
     return this.executeWithSpan(spanName, context, async () => {
       // Access wrapped agent's prompt preparation (RoleBasedAgent-specific)
-      const wrappedAgentAny = this.wrappedAgent as any;
-      const systemPrompt = wrappedAgentAny.resolvedSystemPrompt;
-      const rolePrompts = wrappedAgentAny.rolePrompts || getPromptsForRole(this.config.role);
+      const systemPrompt = this.getSystemPrompt();
+      const rolePrompts = this.getRolePrompts();
       const userPrompt = rolePrompts.proposePrompt(problem, context, this.config.id, context.includeFullHistory);
       
       // Call our own proposeImpl, which will use our callLLM (which uses our executeTool)
@@ -75,9 +100,8 @@ export class TracingDecoratorAgent extends Agent {
     const spanName = `agent-critique-${this.config.id}`;
     return this.executeWithSpan(spanName, context, async () => {
       // Access wrapped agent's prompt preparation (RoleBasedAgent-specific)
-      const wrappedAgentAny = this.wrappedAgent as any;
-      const systemPrompt = wrappedAgentAny.resolvedSystemPrompt;
-      const rolePrompts = wrappedAgentAny.rolePrompts || getPromptsForRole(this.config.role);
+      const systemPrompt = this.getSystemPrompt();
+      const rolePrompts = this.getRolePrompts();
       const userPrompt = rolePrompts.critiquePrompt(proposal.content, context, this.config.id, context.includeFullHistory);
       
       // Call our own critiqueImpl, which will use our callLLM (which uses our executeTool)
@@ -92,9 +116,8 @@ export class TracingDecoratorAgent extends Agent {
     const spanName = `agent-refine-${this.config.id}`;
     return this.executeWithSpan(spanName, context, async () => {
       // Access wrapped agent's prompt preparation (RoleBasedAgent-specific)
-      const wrappedAgentAny = this.wrappedAgent as any;
-      const systemPrompt = wrappedAgentAny.resolvedSystemPrompt;
-      const rolePrompts = wrappedAgentAny.rolePrompts || getPromptsForRole(this.config.role);
+      const systemPrompt = this.getSystemPrompt();
+      const rolePrompts = this.getRolePrompts();
       const critiquesText = critiques.map((c, i) => `Critique ${i + 1}:\n${c.content}`).join('\n\n');
       const userPrompt = rolePrompts.refinePrompt(originalProposal.content, critiquesText, context, this.config.id, context.includeFullHistory);
       
@@ -231,7 +254,7 @@ export class TracingDecoratorAgent extends Agent {
               output: result.content,
             });
           }
-        } catch (parseError: any) {
+        } catch (parseError: unknown) {
           // If we can't parse, just end the span with the raw content
           toolSpan.end({
             output: result.content,
@@ -241,9 +264,10 @@ export class TracingDecoratorAgent extends Agent {
         // No result added (shouldn't happen, but handle gracefully)
         toolSpan.end();
       }
-    } catch (tracingError: any) {
+    } catch (tracingError: unknown) {
       // If tracing fails, log warning and continue with tool execution
-      logWarning(`Langfuse tracing failed for tool execution: ${tracingError.message}`);
+      const errorMessage = getErrorMessage(tracingError);
+      logWarning(`Langfuse tracing failed for tool execution: ${errorMessage}`);
       
       // Fall back to base class behavior - call super.executeTool
       super.executeTool(tool, args, toolCall, context, state, toolResultsForThisIteration, allToolResults);
@@ -263,7 +287,8 @@ export class TracingDecoratorAgent extends Agent {
     // Reset iteration counter on the wrapped provider before executing the method
     // This ensures each agent method (propose, critique, refine, etc.) starts
     // with iteration 0 for its tool-calling loop
-    const provider = (this.wrappedAgent as any).provider;
+    const agentWithProtected = this.wrappedAgent as unknown as AgentWithProtectedMembers;
+    const provider = agentWithProtected.provider;
     if (provider instanceof TracingLLMProvider) {
       provider.resetIterationCount();
     }
@@ -289,10 +314,11 @@ export class TracingDecoratorAgent extends Agent {
         const result = await fn();
         span.end();
         return result;
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = getErrorMessage(error);
         span.end({
           level: SPAN_LEVEL.ERROR,
-          statusMessage: error.message,
+          statusMessage: errorMessage,
         });
         throw error;
       } finally {
@@ -303,11 +329,39 @@ export class TracingDecoratorAgent extends Agent {
           this.tracingContext.currentSpans.delete(this.config.id);
         }
       }
-    } catch (tracingError: any) {
+    } catch (tracingError: unknown) {
       // If tracing fails, log warning and continue with original operation
-      logWarning(`Langfuse tracing failed for ${spanName}: ${tracingError.message}`);
+      const errorMessage = getErrorMessage(tracingError);
+      logWarning(`Langfuse tracing failed for ${spanName}: ${errorMessage}`);
       return await fn();
     }
+  }
+
+  /**
+   * Gets the system prompt from the wrapped agent if it's a RoleBasedAgent,
+   * otherwise falls back to the role's default system prompt.
+   */
+  private getSystemPrompt(): string {
+    if (this.wrappedAgent instanceof RoleBasedAgent) {
+      const roleBasedAgent = this.wrappedAgent as unknown as RoleBasedAgentWithPrompts;
+      return roleBasedAgent.resolvedSystemPrompt;
+    }
+    // Fallback to default system prompt for the role
+    const rolePrompts = getPromptsForRole(this.config.role);
+    return rolePrompts.systemPrompt;
+  }
+
+  /**
+   * Gets the role prompts from the wrapped agent if it's a RoleBasedAgent,
+   * otherwise falls back to the role's default prompts.
+   */
+  private getRolePrompts(): RolePrompts {
+    if (this.wrappedAgent instanceof RoleBasedAgent) {
+      const roleBasedAgent = this.wrappedAgent as unknown as RoleBasedAgentWithPrompts;
+      return roleBasedAgent.rolePrompts;
+    }
+    // Fallback to default prompts for the role
+    return getPromptsForRole(this.config.role);
   }
 
   /**

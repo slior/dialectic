@@ -1,8 +1,40 @@
 import { TracingDecoratorAgent, RoleBasedAgent, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, Proposal, Critique, SummarizationConfig, DebateContext, DebateState, TracingContext, LLMProvider, ToolImplementation, ToolCall, ToolResult } from 'dialectic-core';
+import type { Langfuse } from 'langfuse';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;
 const MOCK_TOTAL_TOKENS = 100;
+
+/**
+ * Mock type for Langfuse generation with jest mocks.
+ */
+interface MockLangfuseGeneration {
+  end: jest.Mock;
+}
+
+/**
+ * Mock type for Langfuse span with jest mocks.
+ */
+interface MockLangfuseSpan {
+  end: jest.Mock;
+  generation: jest.Mock<MockLangfuseGeneration>;
+  span: jest.Mock<MockLangfuseSpan>;
+}
+
+/**
+ * Mock type for Langfuse trace with jest mocks.
+ */
+interface MockLangfuseTrace {
+  span: jest.Mock<MockLangfuseSpan>;
+}
+
+/**
+ * Mock type for Langfuse client with jest mocks.
+ */
+interface MockLangfuse {
+  trace: jest.Mock<MockLangfuseTrace>;
+  flushAsync: jest.Mock<Promise<void>>;
+}
 
 /**
  * Test-only type that exposes protected methods for testing.
@@ -22,9 +54,9 @@ type TracingDecoratorAgentTestAccess = TracingDecoratorAgent & {
 
 describe('TracingDecoratorAgent', () => {
   let mockProvider: LLMProvider;
-  let mockLangfuse: any;
-  let mockTrace: any;
-  let mockSpan: any;
+  let mockLangfuse: MockLangfuse;
+  let mockTrace: MockLangfuseTrace;
+  let mockSpan: MockLangfuseSpan;
   let tracingContext: TracingContext;
   let agentConfig: AgentConfig;
   let summaryConfig: SummarizationConfig;
@@ -56,11 +88,11 @@ describe('TracingDecoratorAgent', () => {
     mockLangfuse = {
       trace: jest.fn().mockReturnValue(mockTrace),
       flushAsync: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    };
 
     tracingContext = {
-      langfuse: mockLangfuse,
-      trace: mockTrace,
+      langfuse: mockLangfuse as unknown as Langfuse,
+      trace: mockTrace as unknown as ReturnType<Langfuse['trace']>,
       currentSpans: new Map(),
     };
 
@@ -264,8 +296,8 @@ describe('TracingDecoratorAgent', () => {
         name: 'test_tool',
         arguments: '{"param":"value"}',
       };
-      const toolResultsForThisIteration: any[] = [];
-      const allToolResults: any[] = [];
+      const toolResultsForThisIteration: ToolResult[] = [];
+      const allToolResults: ToolResult[] = [];
 
       // Access protected method via type assertion for testing
       // Using a test-only type that exposes the protected method

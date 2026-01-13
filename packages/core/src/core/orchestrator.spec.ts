@@ -3,7 +3,9 @@ import os from 'os';
 import path from 'path';
 
 import { DebateConfig, DebateRound, DebateState, Solution, AgentConfig, 
-          Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult } from 'dialectic-core';
+          Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult, AgentRole, Contribution } from 'dialectic-core';
+
+import { LLMProvider } from '../providers/llm-provider';
 
 import { Agent } from './agent';
 import { JudgeAgent } from './judge';
@@ -21,7 +23,7 @@ const EXPECTED_ROUNDS_COUNT = 3;
 const SINGLE_ROUND = 1;
 const TWO_ROUNDS = 2;
 
-function createMockAgent(id: string, role: any, withToolCalls = false): Agent {
+function createMockAgent(id: string, role: AgentRole, withToolCalls = false): Agent {
   const baseMetadata = {};
   const toolMetadata = withToolCalls ? {
     toolCalls: [{ id: 'call_1', name: 'test_tool', arguments: '{}' }],
@@ -35,12 +37,12 @@ function createMockAgent(id: string, role: any, withToolCalls = false): Agent {
     critique: async () => ({ content: `${role} critique`, metadata: { ...baseMetadata, ...toolMetadata } }),
     refine: async () => ({ content: `${role} refined`, metadata: { ...baseMetadata, ...toolMetadata } }),
     shouldSummarize: () => false,
-    prepareContext: async (context: any) => ({ context }),
+    prepareContext: async (context: DebateContext) => ({ context }),
     askClarifyingQuestions: async () => ({ questions: [] }),
   } as unknown as Agent;
 }
 
-function createMockAgentWithToolMetadata(id: string, role: any, toolCalls?: ToolCall[], toolResults?: ToolResult[], iterations?: number): Agent {
+function createMockAgentWithToolMetadata(id: string, role: AgentRole, toolCalls?: ToolCall[], toolResults?: ToolResult[], iterations?: number): Agent {
   return {
     config: { id, role, model: 'gpt-4', name: `${role} agent` },
     propose: async () => ({
@@ -68,7 +70,7 @@ function createMockAgentWithToolMetadata(id: string, role: any, toolCalls?: Tool
       },
     }),
     shouldSummarize: () => false,
-    prepareContext: async (context: any) => ({ context }),
+    prepareContext: async (context: DebateContext) => ({ context }),
     askClarifyingQuestions: async () => ({ questions: [] }),
   } as unknown as Agent;
 }
@@ -106,7 +108,7 @@ function createMockStateManager(): StateManager {
       state.updatedAt = new Date();
       return round;
     },
-    addContribution: async (_id: string, contrib: any) => {
+    addContribution: async (_id: string, contrib: Contribution) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       round.contributions.push(contrib);
@@ -141,22 +143,22 @@ function createMockStateManagerWithToolSupport(): StateManager {
       state.updatedAt = new Date();
       return round;
     },
-    addContribution: async (_id: string, contrib: any) => {
+    addContribution: async (_id: string, contrib: Contribution) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       round.contributions.push(contrib);
       state.updatedAt = new Date();
     },
-    addSummary: async (_id: string, _summary: any) => {
+    addSummary: async (_id: string, _summary: DebateSummary) => {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       if (!round.summaries) round.summaries = {};
       state.updatedAt = new Date();
     },
-    addJudgeSummary: async (_id: string, _summary: any) => {
+    addJudgeSummary: async (_id: string, _summary: DebateSummary) => {
       state.updatedAt = new Date();
     },
-    completeDebate: async (_id: string, _solution: any) => {
+    completeDebate: async (_id: string, _solution: Solution) => {
       state.status = 'completed';
       state.updatedAt = new Date();
     },
@@ -169,7 +171,7 @@ class MockAgent extends Agent {
   private summaryToReturn?: DebateSummary;
 
   constructor(config: AgentConfig, summaryToReturn?: DebateSummary) {
-    super(config, {} as any);
+    super(config, {} as unknown as LLMProvider);
     if (summaryToReturn) {
       this.summaryToReturn = summaryToReturn;
     }
@@ -225,7 +227,7 @@ class MockJudge extends Agent {
       provider: LLM_PROVIDERS.OPENAI,
       temperature: DEFAULT_JUDGE_TEMPERATURE
     };
-    super(config, {} as unknown as any);
+    super(config, {} as unknown as LLMProvider);
   }
 
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
@@ -248,7 +250,7 @@ class MockJudge extends Agent {
     return { context };
   }
 
-  async synthesize(_context: DebateContext): Promise<any> {
+  async synthesize(_context: DebateContext): Promise<Solution> {
     return {
       description: 'Final solution',
       implementation: 'Implementation',
@@ -283,7 +285,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
     expect(state.rounds.length).toBe(EXPECTED_ROUNDS_COUNT);
     // Each round should include refinement contributions
     state.rounds.forEach((round: DebateRound) => {
-      const hasRefinement = round.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
+      const hasRefinement = round.contributions.some((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
       expect(hasRefinement).toBe(true);
     });
   });
@@ -304,9 +306,9 @@ describe('DebateOrchestrator (Flow 1)', () => {
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
     expect(state.rounds.length).toBe(SINGLE_ROUND);
-    const hasProposal = state.rounds[0]?.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL) ?? false;
-    const hasCritique = state.rounds[0]?.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.CRITIQUE) ?? false;
-    const hasRefinement = state.rounds[0]?.contributions.some((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT) ?? false;
+    const hasProposal = state.rounds[0]?.contributions.some((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL) ?? false;
+    const hasCritique = state.rounds[0]?.contributions.some((c: Contribution) => c.type === CONTRIBUTION_TYPES.CRITIQUE) ?? false;
+    const hasRefinement = state.rounds[0]?.contributions.some((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT) ?? false;
     expect(hasProposal && hasCritique && hasRefinement).toBe(true);
   });
 
@@ -333,11 +335,11 @@ describe('DebateOrchestrator (Flow 1)', () => {
     expect(r2).toBeDefined();
 
     const r1RefByAgent: Record<string, string> = {};
-    r1!.contributions.filter((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT).forEach((c: any) => {
+    r1!.contributions.filter((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT).forEach((c: Contribution) => {
       r1RefByAgent[c.agentId] = c.content;
     });
 
-    const r2Props = r2!.contributions.filter((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
+    const r2Props = r2!.contributions.filter((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
     expect(r2Props.length).toBe(agents.length);
 
     // Proposals in round 2 must equal refinements from round 1 per agent, with tokens/latency zero
@@ -353,7 +355,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
     const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
 
     // Custom SM that drops refinement for agent a2 in round 1
-    const state: any = {
+    const state: DebateState = {
       id: 'deb-test', problem: '', status: 'running', currentRound: 0, rounds: [], createdAt: new Date(), updatedAt: new Date(),
     };
     const sm = {
@@ -365,7 +367,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
         state.updatedAt = new Date();
         return round;
       },
-    addContribution: async (_id: string, contrib: any) => {
+    addContribution: async (_id: string, contrib: Contribution) => {
         const round = state.rounds[state.currentRound - 1];
         if (!round) throw new Error('No active round');
         // Drop refinement for a2 in round 1 only
@@ -399,13 +401,15 @@ describe('DebateOrchestrator (Flow 1)', () => {
 
     const r1 = state.rounds[0];
     const r2 = state.rounds[1];
+    expect(r1).toBeDefined();
+    expect(r2).toBeDefined();
 
     // a1 should be carried over; a2 should fall back to LLM proposal content
-    const r1RefA1 = r1.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT && c.agentId === 'a1')?.content;
-    const r2PropA1 = r2.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL && c.agentId === 'a1')?.content;
+    const r1RefA1 = r1!.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT && c.agentId === 'a1')?.content;
+    const r2PropA1 = r2!.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL && c.agentId === 'a1')?.content;
     expect(r2PropA1).toBe(r1RefA1);
 
-    const r2PropA2 = r2.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL && c.agentId === 'a2')?.content;
+    const r2PropA2 = r2!.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL && c.agentId === 'a2')?.content;
     expect(r2PropA2).toBe('performance proposal');
 
     expect(warnSpy).toHaveBeenCalled();
@@ -430,7 +434,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
     await orchestrator.runDebate('Test problem');
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
-    const proposal = state.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
+    const proposal = state.rounds[0]?.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
     
     expect(proposal).toBeDefined();
     expect(proposal?.metadata.toolCalls).toBeDefined();
@@ -454,7 +458,7 @@ describe('DebateOrchestrator (Flow 1)', () => {
     await orchestrator.runDebate('Test problem');
 
     const state = (sm as unknown as { getState: () => DebateState }).getState();
-    const proposal = state.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
+    const proposal = state.rounds[0]?.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
     
     expect(proposal?.metadata.toolResults).toBeDefined();
     expect(proposal?.metadata.toolResults?.length).toBe(1);
@@ -565,7 +569,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
     const state = await stateManager.createDebate('Test problem');
     await stateManager.beginRound(state.id);
     
-    await (orchestrator as any).summarizationPhase(state, 1);
+    await (orchestrator as unknown as { summarizationPhase: (state: DebateState, roundNumber: number) => Promise<Map<string, DebateContext>> }).summarizationPhase(state, 1);
 
     expect(onSummarizationStart).toHaveBeenCalledWith('Agent 1');
     expect(onSummarizationComplete).toHaveBeenCalledWith('Agent 1', 1000, 500);
@@ -604,7 +608,7 @@ describe('DebateOrchestrator - summarizationPhase()', () => {
     const state = await stateManager.createDebate('Test problem');
     await stateManager.beginRound(state.id);
     
-    await (orchestrator as any).summarizationPhase(state, 1);
+    await (orchestrator as unknown as { summarizationPhase: (state: DebateState, roundNumber: number) => Promise<Map<string, DebateContext>> }).summarizationPhase(state, 1);
 
     expect(addSummarySpy).toHaveBeenCalledWith(state.id, summary);
   });
@@ -808,7 +812,7 @@ describe('Orchestrator Tool Metadata', () => {
       const debate = await stateManager.getDebate('deb-test');
       expect(debate).toBeDefined();
       const contribution = debate?.rounds[0]?.contributions.find(
-        (c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL
+        (c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL
       );
 
       expect(contribution?.metadata.toolCalls).toBeDefined();
@@ -841,7 +845,7 @@ describe('Orchestrator Tool Metadata', () => {
       const debate = await stateManager.getDebate('deb-test');
       expect(debate).toBeDefined();
       const contribution = debate?.rounds[0]?.contributions.find(
-        (c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL
+        (c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL
       );
 
       expect(contribution?.metadata.toolResults).toBeDefined();
@@ -866,7 +870,7 @@ describe('Orchestrator Tool Metadata', () => {
       const debate = await stateManager.getDebate('deb-test');
       expect(debate).toBeDefined();
       const contribution = debate?.rounds[0]?.contributions.find(
-        (c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL
+        (c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL
       );
 
       expect(contribution?.metadata.toolCallIterations).toBe(3);
@@ -938,9 +942,9 @@ describe('Orchestrator Tool Metadata', () => {
 
       const debate = await stateManager.getDebate('deb-test');
       expect(debate).toBeDefined();
-      const proposal = debate?.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
-      const critique = debate?.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.CRITIQUE);
-      const refinement = debate?.rounds[0]?.contributions.find((c: any) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
+      const proposal = debate?.rounds[0]?.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
+      const critique = debate?.rounds[0]?.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.CRITIQUE);
+      const refinement = debate?.rounds[0]?.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
 
       // All phases should have tool metadata if agent used tools
       expect(proposal?.metadata.toolCalls).toBeDefined();

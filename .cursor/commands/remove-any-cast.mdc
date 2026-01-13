@@ -1,0 +1,530 @@
+---
+description: Identify and remove 'any' type casts from a TypeScript file
+---
+
+# Remove Any Cast
+
+Identify and remove all `any` type casts from a TypeScript file, replacing them with proper type-safe alternatives. This command improves type safety, code quality, and maintainability.
+
+## Input Parameters
+
+The command accepts the following parameters:
+
+- **file_path** (required)
+  - The path to the TypeScript file to analyze and refactor
+  - Can be relative to workspace root or absolute path
+  - Must be a `.ts` or `.tsx` file
+
+## Goal
+
+Analyze the specified file for:
+1. Variables typed as `any` (e.g., `let x: any`)
+2. Type assertions to `any` (e.g., `value as any`)
+3. Function parameters typed as `any` (e.g., `(arg: any) => ...`)
+4. Return types typed as `any` (e.g., `function(): any`)
+5. Generic constraints using `any` (e.g., `<T extends { foo: any }>`)
+
+For each occurrence, determine the appropriate replacement strategy and apply it.
+Make sure semantics of the code don't change.
+
+## Replacement Strategies
+
+### Strategy 1: Use Existing Types
+
+**When:** A proper type already exists in the codebase.
+
+**Example - Variable with known type:**
+
+Before:
+```typescript
+let mockProvider: any;
+mockProvider = createProvider('openai');
+```
+
+After:
+```typescript
+let mockProvider: LLMProvider;
+mockProvider = createProvider('openai');
+```
+
+**How to fix:**
+1. Check what value is assigned to the variable
+2. Look at the return type of functions that provide the value
+3. Import and use the correct type
+
+---
+
+### Strategy 2: Create Test-Only Access Types
+
+**When:** Testing protected or private methods that are not accessible from the class type.
+
+**Example - Spying on protected methods:**
+
+Before:
+```typescript
+const proposeImplSpy = jest.spyOn(agent, 'proposeImpl' as keyof typeof agent as any);
+```
+
+After:
+```typescript
+/**
+ * Test-only type that exposes protected methods for testing.
+ * This allows us to test protected methods without using `any`.
+ */
+type RoleBasedAgentTestAccess = RoleBasedAgent & {
+  proposeImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal>;
+  critiqueImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Critique>;
+  refineImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal>;
+};
+
+// Usage:
+const proposeImplSpy = jest.spyOn(agent as RoleBasedAgentTestAccess, 'proposeImpl');
+```
+
+**How to fix:**
+1. Create an intersection type that adds the protected method signatures
+2. Place the type at the top of the test file after imports
+3. Cast the instance to the test-access type when spying
+4. Include proper JSDoc explaining the type is for testing only
+
+---
+
+### Strategy 3: Use ErrorWithCode Type
+
+**When:** Creating errors with custom `code` property for exit codes.
+
+**Example - Error with code property:**
+
+Before:
+```typescript
+export function createValidationError(message: string, code: number): Error {
+  const err: any = new Error(message);
+  err.code = code;
+  return err;
+}
+```
+
+After:
+```typescript
+import { ErrorWithCode } from './exit-codes';
+
+export function createValidationError(message: string, code: number): ErrorWithCode {
+  const err = new Error(message) as ErrorWithCode;
+  err.code = code;
+  return err;
+}
+```
+
+**How to fix:**
+1. Import `ErrorWithCode` type (defined as `Error & { code?: number }`)
+2. Change return type to `ErrorWithCode`
+3. Use `as ErrorWithCode` instead of `: any`
+
+---
+
+### Strategy 4: Create Interface for External Library Types
+
+**When:** Using an external library that may not be available or has complex types.
+
+**Example - Optional dependency with lazy loading:**
+
+Before:
+```typescript
+let chalk: any;
+try {
+  chalk = require('chalk');
+} catch {
+  chalk = new Proxy({}, {
+    get: () => (text: string) => text
+  });
+}
+```
+
+After:
+```typescript
+/**
+ * Type representing the chalk color methods we use.
+ * This interface matches the structure of chalk's color methods.
+ */
+interface ChalkColorMethods {
+  blueBright: (text: string) => string;
+  greenBright: (text: string) => string;
+  yellowBright: (text: string) => string;
+}
+
+let chalk: ChalkColorMethods;
+try {
+  chalk = require('chalk');
+} catch {
+  chalk = new Proxy({}, {
+    get: () => (text: string) => text
+  }) as ChalkColorMethods;
+}
+```
+
+**How to fix:**
+1. Identify which methods/properties of the library are actually used
+2. Create a minimal interface with only those methods/properties
+3. Add JSDoc explaining the interface purpose
+4. Type the variable with the interface
+5. Add type assertion to the fallback/mock
+
+---
+
+### Strategy 5: Use Constants Instead of String Literals
+
+**When:** A string literal is cast to `any` to satisfy a union type.
+
+**Example - Provider type constant:**
+
+Before:
+```typescript
+const summarizer = new LengthBasedSummarizer(provider, { 
+  model: 'gpt-4o', 
+  temperature: 0.55, 
+  provider: 'openai' as any 
+});
+```
+
+After:
+```typescript
+import { LLM_PROVIDERS } from 'dialectic-core';
+
+const summarizer = new LengthBasedSummarizer(provider, { 
+  model: 'gpt-4o', 
+  temperature: 0.55, 
+  provider: LLM_PROVIDERS.OPENAI 
+});
+```
+
+**How to fix:**
+1. Find the constant object that defines the valid values
+2. Import the constant
+3. Use the constant value instead of the string literal
+4. This provides the correct literal type that matches the expected union
+
+---
+
+### Strategy 6: Use Specific Type Assertions for Test Invalid Inputs
+
+**When:** Testing error handling with intentionally invalid arguments.
+
+**Example - Testing invalid arguments:**
+
+Before:
+```typescript
+it('should handle invalid arguments', () => {
+  const result = tool.execute({ invalid: 'arg' } as any, mockContext);
+  // ...
+});
+```
+
+After:
+```typescript
+it('should handle invalid arguments', () => {
+  // Test with invalid arguments (missing required 'term' property)
+  const invalidArgs: Record<string, unknown> = { invalid: 'arg' };
+  const result = tool.execute(invalidArgs as { term?: string }, mockContext);
+  // ...
+});
+```
+
+**How to fix:**
+1. Create a typed variable with `Record<string, unknown>` or similar
+2. Add a comment explaining we are testing invalid input
+3. Use a specific type assertion to the expected parameter type
+4. This is more specific than `any` and documents intent
+
+---
+
+### Strategy 7: Extract Inline Types to Named Interfaces
+
+**When:** Complex inline types are used in function signatures or interfaces.
+
+**Example - Inline type in Record:**
+
+Before:
+```typescript
+export interface ToolSchema {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, {
+      type: string;
+      description?: string;
+      [key: string]: unknown;
+    }>;
+    required?: string[];
+  };
+}
+```
+
+After:
+```typescript
+/**
+ * JSON Schema property definition for tool parameters.
+ * Represents a single parameter in a tool's parameter schema.
+ */
+export interface JsonSchemaProperty {
+  type: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+export interface ToolSchema {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, JsonSchemaProperty>;
+    required?: string[];
+  };
+}
+```
+
+**How to fix:**
+1. Identify repeated or complex inline types
+2. Extract to a named interface with JSDoc
+3. Place the interface before the type that uses it
+4. Replace inline types with the named interface
+
+---
+
+### Strategy 8: Extract Generic Constraints to Named Interfaces
+
+**When:** Generic type constraints use inline object types.
+
+**Example - Generic constraint:**
+
+Before:
+```typescript
+export async function tryWithChatCompletionAPI<T extends { chat: { completions: { create: (...args: any[]) => any } } }>(
+  client: T,
+  // ...
+): Promise<CompletionResponse> {
+```
+
+After:
+```typescript
+/**
+ * Type for the Chat Completions API client methods.
+ * Represents a client that supports the OpenAI Chat Completions API structure.
+ * Used by both OpenAI and OpenRouter providers.
+ */
+export interface ChatCompletionAPIClient {
+  chat: {
+    completions: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      create: (...args: any[]) => any;
+    };
+  };
+}
+
+export async function tryWithChatCompletionAPI<T extends ChatCompletionAPIClient>(
+  client: T,
+  // ...
+): Promise<CompletionResponse> {
+```
+
+**How to fix:**
+1. Extract the inline constraint to a named interface
+2. Add JSDoc explaining the interface purpose
+3. Replace the inline constraint with `extends InterfaceName`
+4. If `any` is still needed in the interface, add a comment explaining why
+
+---
+
+### Strategy 9: Use unknown in Catch Clauses
+
+**When:** Error handling uses `any` in catch clauses.
+
+**Example - Error handling:**
+
+Before:
+```typescript
+try {
+  createProvider(providerType);
+} catch (error: any) {
+  expect(error.message).toBe(expectedMessage);
+  expect(error.code).toBe(EXIT_CONFIG_ERROR);
+}
+```
+
+After:
+```typescript
+try {
+  createProvider(providerType);
+} catch (error: unknown) {
+  const errorWithCode = error as ErrorWithCode;
+  expect(errorWithCode.message).toBe(expectedMessage);
+  expect(errorWithCode.code).toBe(EXIT_CONFIG_ERROR);
+}
+```
+
+**How to fix:**
+1. Change `catch (error: any)` to `catch (error: unknown)`
+2. Cast to the appropriate error type inside the catch block
+3. Use `ErrorWithCode` if the error has a `code` property
+4. Use `Error` for standard error properties
+
+---
+
+### Strategy 10: Use Specific Type Assertion Instead of any
+
+**When:** Testing edge cases with intentionally wrong types.
+
+**Example - Testing with undefined where string expected:**
+
+Before:
+```typescript
+function expectProviderError(providerType: string | undefined, expectedMessage: string): void {
+  expect(() => createProvider(providerType as any)).toThrow();
+}
+```
+
+After:
+```typescript
+function expectProviderError(providerType: string | undefined, expectedMessage: string): void {
+  // Type assertion needed because createProvider expects string, but we test edge cases like undefined
+  const providerTypeArg = providerType as string;
+  expect(() => createProvider(providerTypeArg)).toThrow();
+}
+```
+
+**How to fix:**
+1. Use a more specific type assertion (`as string` instead of `as any`)
+2. Add a comment explaining why the assertion is needed
+3. Create an intermediate variable with the asserted type for clarity
+
+---
+
+## When any Is Acceptable
+
+In rare cases, `any` is acceptable. Document these with eslint-disable comments and explanations:
+
+### Case 1: Type Extraction Patterns
+
+When using TypeScript's `Parameters` utility to extract types from overloaded SDK methods:
+
+```typescript
+/**
+ * Note: The `create` method uses `any` because:
+ * 1. The OpenAI SDK's `create` method has multiple overloads with different signatures
+ * 2. TypeScript's `Parameters` utility type requires a function signature to extract parameter types
+ * 3. The actual types are extracted at compile time from the concrete client instance
+ */
+export interface ChatCompletionAPIClient {
+  chat: {
+    completions: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      create: (...args: any[]) => any;
+    };
+  };
+}
+```
+
+### Case 2: Runtime Type Extraction Functions
+
+When a function exists only for compile-time type extraction:
+
+```typescript
+export function extractOpenAIChatCompletionTypes<T extends ChatCompletionAPIClient>(
+  _client: T
+): {
+  createParams: Parameters<T['chat']['completions']['create']>[0];
+  messageParam: Parameters<T['chat']['completions']['create']>[0]['messages'][number];
+} {
+  // This function exists only for type extraction via typeof, not for runtime use
+  return null as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
+```
+
+### Case 3: Third-Party Library Compatibility
+
+When interfacing with libraries that use `any` in their type definitions, and there is no reasonable alternative.
+
+**Always:**
+1. Add eslint-disable comment
+2. Add JSDoc or inline comment explaining why `any` is necessary
+3. Limit scope to the minimum necessary
+
+---
+
+## Implementation Instructions
+
+When executing this command, follow these steps:
+
+1. **Scan the File**
+   - Read the entire file
+   - Identify all occurrences of `any` type usage
+   - Categorize each by type (variable, parameter, return type, assertion, etc.)
+
+2. **Analyze Each Occurrence**
+   - Determine the context and purpose of the `any`
+   - Check if existing types can replace it
+   - Identify the appropriate replacement strategy
+
+3. **Apply Fixes**
+   - Apply the appropriate strategy for each occurrence
+   - Add necessary imports
+   - Create new types/interfaces if needed
+   - Add comments where assertions are necessary
+
+4. **Check for Lint Errors**
+   - Run linter on the modified file
+   - Fix any introduced errors
+
+5. **Run Tests**
+   - Run tests related to the modified file
+   - Verify all tests pass
+   - If tests fail, investigate and fix
+
+---
+
+## Verification Checklist
+
+Before completing the task:
+
+- [ ] All `any` usages have been analyzed
+- [ ] Replaceable `any` types have been replaced with proper types
+- [ ] Necessary `any` usages have eslint-disable comments with explanations
+- [ ] New interfaces/types have JSDoc documentation
+- [ ] All imports are properly added
+- [ ] No linter errors in the file
+- [ ] All related tests pass
+- [ ] Code follows project style guidelines
+
+---
+
+## Final Step: Run Tests
+
+After all modifications, verify tests pass:
+
+```bash
+npm test -- <filename>.spec.ts --passWithNoTests
+```
+
+Or for broader verification:
+
+```bash
+npm test
+```
+
+If tests fail:
+1. Analyze the failure
+2. Check if the type change affected runtime behavior
+3. Adjust the fix or the test as appropriate
+4. Re-run tests until all pass
+
+---
+
+## Output
+
+After successful execution:
+1. All unnecessary `any` types are replaced with proper types
+2. New interfaces/types are created where needed
+3. Necessary `any` usages are documented with comments
+4. The file has no linter errors
+5. All related tests pass
+6. The code is more type-safe and maintainable

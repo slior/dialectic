@@ -1,4 +1,4 @@
-import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
+import { AgentConfig, AgentRole, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
 import {
   DebateState,
   Contribution,
@@ -992,9 +992,9 @@ describe('report-generator', () => {
         {
           id: '',
           name: '',
-          role: '' as any,
+          role: '' as unknown as AgentRole,
           model: '',
-          provider: '' as any,
+          provider: '' as unknown as typeof LLM_PROVIDERS.OPENAI,
           temperature: 0,
         } as AgentConfig,
       ];
@@ -1019,9 +1019,9 @@ describe('report-generator', () => {
       const judgeConfig = {
         id: '',
         name: '',
-        role: '' as any,
+        role: '' as unknown as AgentRole,
         model: '',
-        provider: '' as any,
+        provider: '' as unknown as typeof LLM_PROVIDERS.OPENAI,
         temperature: 0,
       } as AgentConfig;
 
@@ -1047,7 +1047,7 @@ describe('report-generator', () => {
           role: AGENT_ROLES.ARCHITECT,
           model: 'gpt-4',
           provider: LLM_PROVIDERS.OPENAI,
-          temperature: undefined as any,
+          temperature: undefined as unknown as number,
         } as AgentConfig,
       ];
       const judgeConfig = createJudgeConfig();
@@ -1074,7 +1074,7 @@ describe('report-generator', () => {
         role: AGENT_ROLES.GENERALIST,
         model: 'gpt-4',
         provider: LLM_PROVIDERS.OPENAI,
-        temperature: undefined as any,
+        temperature: undefined as unknown as number,
       } as AgentConfig;
 
       const report = generateDebateReport(

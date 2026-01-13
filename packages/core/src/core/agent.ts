@@ -5,6 +5,7 @@ import { ToolRegistry } from '../tools/tool-registry';
 import { AgentConfig, Proposal, Critique, ContributionMetadata, DEFAULT_TOOL_CALL_LIMIT } from '../types/agent.types';
 import { DebateContext, ContextPreparationResult, ClarificationQuestionsResponse, DebateState } from '../types/debate.types';
 import { ToolCall, ToolResult, TOOL_RESULT_STATUS, ToolSchema } from '../types/tool.types';
+import { getErrorMessage } from '../utils/common';
 import { writeStderr } from '../utils/console';
 
 /**
@@ -267,9 +268,10 @@ export abstract class Agent {
     try {
       // JSON.parse returns any, but we use Record<string, unknown> to indicate it's an object
       return JSON.parse(toolCall.arguments) as Record<string, unknown>;
-    } catch (parseError: any) {
-      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" arguments are invalid JSON: ${parseError.message}. Skipping.`, false);
-      this.addToolErrorResult(toolCall.id, `Invalid arguments JSON: ${parseError.message}`, toolResultsForThisIteration, allToolResults);
+    } catch (parseError: unknown) {
+      const errorMessage = getErrorMessage(parseError);
+      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" arguments are invalid JSON: ${errorMessage}. Skipping.`, false);
+      this.addToolErrorResult(toolCall.id, `Invalid arguments JSON: ${errorMessage}`, toolResultsForThisIteration, allToolResults);
       return null;
     }
   }
@@ -313,9 +315,10 @@ export abstract class Agent {
 
       // Execute tool
       this.executeTool(tool, args, toolCall, context, state, toolResultsForThisIteration, allToolResults);
-    } catch (error: any) {
-      this.logMessage(`Warning: [${this.config.name}] Error processing tool call "${toolCall.name}": ${error.message}`, false);
-      this.addToolErrorResult(toolCall.id, error.message, toolResultsForThisIteration, allToolResults);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      this.logMessage(`Warning: [${this.config.name}] Error processing tool call "${toolCall.name}": ${errorMessage}`, false);
+      this.addToolErrorResult(toolCall.id, errorMessage, toolResultsForThisIteration, allToolResults);
     }
   }
 
@@ -468,9 +471,10 @@ export abstract class Agent {
       
       toolResultsForThisIteration.push(toolResult);
       allToolResults.push(toolResult);
-    } catch (execError: any) {
-      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" execution failed: ${execError.message}`, false);
-      this.addToolErrorResult(toolCall.id, execError.message, toolResultsForThisIteration, allToolResults);
+    } catch (execError: unknown) {
+      const errorMessage = getErrorMessage(execError);
+      this.logMessage(`Warning: [${this.config.name}] Tool "${toolCall.name}" execution failed: ${errorMessage}`, false);
+      this.addToolErrorResult(toolCall.id, errorMessage, toolResultsForThisIteration, allToolResults);
     }
   }
 

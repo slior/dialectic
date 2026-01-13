@@ -1,4 +1,4 @@
-import { AgentConfig, AGENT_ROLES } from '../types/agent.types';
+import { AgentConfig, AGENT_ROLES, AgentRole, LLM_PROVIDERS } from '../types/agent.types';
 import { ClarificationQuestionsResponse } from '../types/debate.types';
 
 import { Agent } from './agent';
@@ -14,16 +14,16 @@ describe('collectClarifications', () => {
   function createMockAgent(
     id: string,
     name: string,
-    role: string,
-    questionsResponse: ClarificationQuestionsResponse
+    role: AgentRole,
+    questionsResponse: ClarificationQuestionsResponse | null | undefined | unknown
   ): Agent {
     return {
       config: {
         id,
         name,
-        role: role as any,
+        role,
         model: 'gpt-4',
-        provider: 'openai' as any,
+        provider: LLM_PROVIDERS.OPENAI,
         temperature: 0.5,
       } as AgentConfig,
       askClarifyingQuestions: jest.fn().mockResolvedValue(questionsResponse),
@@ -161,7 +161,7 @@ describe('collectClarifications', () => {
     });
 
     it('should handle null response', async () => {
-      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, null as any);
+      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, null);
       const warn = createMockWarn();
 
       const result = await collectClarifications(TEST_PROBLEM, [agent], MAX_PER_AGENT, warn);
@@ -173,7 +173,7 @@ describe('collectClarifications', () => {
     });
 
     it('should handle undefined response', async () => {
-      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, undefined as any);
+      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, undefined);
       const warn = createMockWarn();
 
       const result = await collectClarifications(TEST_PROBLEM, [agent], MAX_PER_AGENT, warn);
@@ -185,7 +185,7 @@ describe('collectClarifications', () => {
     });
 
     it('should handle response with non-array questions property', async () => {
-      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, { questions: 'not an array' } as any);
+      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, { questions: 'not an array' } as unknown as ClarificationQuestionsResponse);
       const warn = createMockWarn();
 
       const result = await collectClarifications(TEST_PROBLEM, [agent], MAX_PER_AGENT, warn);
@@ -197,7 +197,7 @@ describe('collectClarifications', () => {
     });
 
     it('should handle response with missing questions property', async () => {
-      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, {} as any);
+      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, {} as unknown as ClarificationQuestionsResponse);
       const warn = createMockWarn();
 
       const result = await collectClarifications(TEST_PROBLEM, [agent], MAX_PER_AGENT, warn);

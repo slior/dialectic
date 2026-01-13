@@ -3,7 +3,8 @@ import { LLMProvider } from '../providers/llm-provider';
 import { ToolRegistry } from '../tools/tool-registry';
 import { AgentConfig, Proposal, Critique, PromptSource, AgentRole } from '../types/agent.types';
 import type { SummarizationConfig } from '../types/config.types';
-import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse, DebateState, Contribution } from '../types/debate.types';
+import { DebateContext, DebateSummary, ContextPreparationResult, CONTRIBUTION_TYPES, ClarificationQuestionsResponse, ClarificationQuestion, DebateState, Contribution } from '../types/debate.types';
+import { getErrorMessage } from '../utils/common';
 import { logWarning } from '../utils/console';
 import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summarizer';
 
@@ -211,14 +212,30 @@ export class RoleBasedAgent extends Agent {
       // Extract first JSON object if any extra tokens sneak in
       const match = text.match(/\{[\s\S]*\}/);
       const json = match ? match[0] : text;
-      const parsed = JSON.parse(json);
-      const list = Array.isArray(parsed?.questions) ? parsed.questions : [];
-      const normalized = list
-        .filter((q: any) => typeof q?.text === 'string' && q.text.trim().length > 0)
-        .map((q: any, idx: number) => ({ id: q.id || `q${idx + 1}`, text: q.text }));
+      const parsed = JSON.parse(json) as unknown;
+      
+      // Type guard for parsed JSON structure
+      const hasQuestions = (obj: unknown): obj is { questions?: unknown[] } => {
+        return typeof obj === 'object' && obj !== null && 'questions' in obj;
+      };
+      
+      const list = hasQuestions(parsed) && Array.isArray(parsed.questions) ? parsed.questions : [];
+      
+      // Type guard for question structure
+      const isValidQuestion = (q: unknown): q is { id?: string; text?: string } => {
+        return typeof q === 'object' && q !== null && 'text' in q;
+      };
+      
+      const normalized: ClarificationQuestion[] = list
+        .filter((q: unknown): q is { id?: string; text: string } => {
+          if (!isValidQuestion(q)) return false;
+          return typeof q.text === 'string' && q.text.trim().length > 0;
+        })
+        .map((q, idx: number) => ({ id: q.id || `q${idx + 1}`, text: q.text }));
       return { questions: normalized };
-    } catch (err: any) {
-      logWarning(`Agent ${this.config.name}: Invalid clarifications JSON. Error: ${err.message}`);
+    } catch (err: unknown) {
+      const errorMessage = getErrorMessage(err);
+      logWarning(`Agent ${this.config.name}: Invalid clarifications JSON. Error: ${errorMessage}`);
       return { questions: [] };
     }
   }
@@ -387,10 +404,11 @@ export class RoleBasedAgent extends Agent {
       // Return original context and summary for persistence
       // Summary will be looked up from rounds when formatting prompts
       return { context, summary };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Log error to stderr and fallback to full history
+      const errorMessage = getErrorMessage(error);
       logWarning(
-        `Agent ${this.config.name}: Summarization failed with error: ${error.message}. Falling back to full history.`
+        `Agent ${this.config.name}: Summarization failed with error: ${errorMessage}. Falling back to full history.`
       );
       return { context };
     }

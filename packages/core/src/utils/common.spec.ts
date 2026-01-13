@@ -9,7 +9,7 @@ import {
   readJsonFile,
   writeFileWithDirectories,
 } from './common';
-import { EXIT_INVALID_ARGS } from './exit-codes';
+import { EXIT_INVALID_ARGS, ErrorWithCode } from './exit-codes';
 
 // Mock fs module
 jest.mock('fs', () => {
@@ -25,6 +25,14 @@ jest.mock('fs', () => {
     },
   };
 });
+
+/**
+ * Type guard to check if an error is an ErrorWithCode.
+ * Used in tests to safely access error.code property.
+ */
+function isErrorWithCode(error: unknown): error is ErrorWithCode {
+  return error instanceof Error && 'code' in error;
+}
 
 describe('common utilities', () => {
   describe('numOrUndefined', () => {
@@ -219,7 +227,10 @@ describe('common utilities', () => {
       expect(() => readJsonFile(filePath)).toThrow();
       try {
         readJsonFile(filePath);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (!isErrorWithCode(error)) {
+          throw new Error('Expected ErrorWithCode');
+        }
         expect(error.message).toContain('File not found');
         expect(error.message).toContain(absPath);
         expect(error.code).toBe(EXIT_INVALID_ARGS);
@@ -235,7 +246,10 @@ describe('common utilities', () => {
       expect(() => readJsonFile(filePath, 'Debate file')).toThrow();
       try {
         readJsonFile(filePath, 'Debate file');
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (!isErrorWithCode(error)) {
+          throw new Error('Expected ErrorWithCode');
+        }
         expect(error.message).toContain('Debate file not found');
         expect(error.message).toContain(absPath);
         expect(error.code).toBe(EXIT_INVALID_ARGS);
@@ -254,7 +268,10 @@ describe('common utilities', () => {
       expect(() => readJsonFile(filePath)).toThrow();
       try {
         readJsonFile(filePath);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (!isErrorWithCode(error)) {
+          throw new Error('Expected ErrorWithCode');
+        }
         expect(error.message).toContain('Path is not a file');
         expect(error.message).toContain(absPath);
         expect(error.code).toBe(EXIT_INVALID_ARGS);
@@ -275,7 +292,10 @@ describe('common utilities', () => {
       expect(() => readJsonFile(filePath)).toThrow();
       try {
         readJsonFile(filePath);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (!isErrorWithCode(error)) {
+          throw new Error('Expected ErrorWithCode');
+        }
         expect(error.message).toContain('Invalid JSON format');
         expect(error.message).toContain(absPath);
         expect(error.code).toBe(EXIT_INVALID_ARGS);
@@ -296,7 +316,10 @@ describe('common utilities', () => {
       expect(() => readJsonFile(filePath, 'Config file')).toThrow();
       try {
         readJsonFile(filePath, 'Config file');
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (!isErrorWithCode(error)) {
+          throw new Error('Expected ErrorWithCode');
+        }
         expect(error.message).toContain('Invalid JSON format in config file');
         expect(error.message).toContain(absPath);
         expect(error.code).toBe(EXIT_INVALID_ARGS);
@@ -337,7 +360,10 @@ describe('common utilities', () => {
       expect(() => readJsonFile(filePath)).toThrow();
       try {
         readJsonFile(filePath);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        if (!isErrorWithCode(error)) {
+          throw new Error('Expected ErrorWithCode');
+        }
         expect(error.message).toContain('File not found');
         expect(error.message).toContain(absPath);
       }

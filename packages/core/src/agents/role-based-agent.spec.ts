@@ -3,7 +3,7 @@ import {
   ToolSchema, DebateContext, DebateState, CompletionRequest, CompletionResponse,
   ToolRegistry, ToolImplementation, CONTRIBUTION_TYPES, SUMMARIZATION_METHODS,
   DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH,
-  DEFAULT_SUMMARIZATION_METHOD, createProvider, Proposal, Critique,
+  DEFAULT_SUMMARIZATION_METHOD, createProvider, Proposal, Critique, Contribution,
 } from 'dialectic-core';
 
 /**
@@ -14,7 +14,14 @@ type RoleBasedAgentTestAccess = RoleBasedAgent & {
   proposeImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal>;
   critiqueImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Critique>;
   refineImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal>;
+  processRelevantContributions<T>(
+    context: DebateContext,
+    callback: (contribution: Contribution, roundNumber: number) => T,
+    initialValue: T,
+    reducer: (accumulator: T, current: T) => T
+  ): T;
 };
+
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;
@@ -1397,7 +1404,7 @@ describe('RoleBasedAgent - processRelevantContributions edge cases', () => {
     method: SUMMARIZATION_METHODS.LENGTH_BASED,
   };
 
-  it('should return initialValue when history is null', () => {
+  it('should return initialValue when history is undefined', () => {
     const provider = new MockLLMProvider();
     const agent = RoleBasedAgent.create(
       agentConfig,
@@ -1410,7 +1417,6 @@ describe('RoleBasedAgent - processRelevantContributions edge cases', () => {
 
     const context: DebateContext = {
       problem: 'Test problem',
-      history: null as any,
     };
 
     // This tests processRelevantContributions indirectly through shouldSummarize
@@ -1454,7 +1460,7 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
     method: SUMMARIZATION_METHODS.LENGTH_BASED,
   };
 
-  it('should return context when history is null in prepareContext', async () => {
+  it('should return context when history is undefined in prepareContext', async () => {
     const provider = new MockLLMProvider();
     const agent = RoleBasedAgent.create(
       agentConfig,
@@ -1467,14 +1473,13 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
 
     const shouldSummarizeSpy = jest.spyOn(agent, 'shouldSummarize').mockReturnValue(true);
     
-    const contextWithNullHistory: DebateContext = {
+    const contextWithoutHistory: DebateContext = {
       problem: 'Test problem',
-      history: null as any,
     };
 
-    const result = await agent.prepareContext(contextWithNullHistory, 1);
+    const result = await agent.prepareContext(contextWithoutHistory, 1);
 
-    expect(result.context).toEqual(contextWithNullHistory);
+    expect(result.context).toEqual(contextWithoutHistory);
     expect(result.summary).toBeUndefined();
 
     shouldSummarizeSpy.mockRestore();
@@ -1546,9 +1551,11 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
       }]
     };
 
-    // Access the private summarizer and set it to null using type assertion
+    // Access the private summarizer and set it to undefined
     // This tests the defensive branch
-    (agent as any).summarizer = null;
+    // Using unknown cast to bypass private property restriction
+    // Type explicitly allows undefined to satisfy exactOptionalPropertyTypes
+    (agent as unknown as { summarizer?: import('dialectic-core').ContextSummarizer | undefined }).summarizer = undefined;
 
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -1563,7 +1570,7 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it('should handle null history in prepareContext to cover processRelevantContributions early return', async () => {
+  it('should handle undefined history in prepareContext to cover processRelevantContributions early return', async () => {
     const provider = new MockLLMProvider(['Summary']);
     const agent = RoleBasedAgent.create(
       agentConfig,
@@ -1577,14 +1584,13 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
     // Mock shouldSummarize to return true so processRelevantContributions is called
     const shouldSummarizeSpy = jest.spyOn(agent, 'shouldSummarize').mockReturnValue(true);
 
-    const contextWithNullHistory: DebateContext = {
+    const contextWithoutHistory: DebateContext = {
       problem: 'Test problem',
-      history: null as any,
     };
 
-    const result = await agent.prepareContext(contextWithNullHistory, 1);
+    const result = await agent.prepareContext(contextWithoutHistory, 1);
 
-    expect(result.context).toEqual(contextWithNullHistory);
+    expect(result.context).toEqual(contextWithoutHistory);
     expect(result.summary).toBeUndefined();
 
     shouldSummarizeSpy.mockRestore();
@@ -1630,14 +1636,16 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
 
     // Mock processRelevantContributions to include a critique in the callback
     // This tests the critique branch in the callback (line 345)
-    const processRelevantContributionsSpy = jest.spyOn(agent as any, 'processRelevantContributions').mockImplementation(
-      function(this: any, ...args: any[]) {
-        const callback = args[1] as (contribution: any, roundNumber: number) => string[];
-        const initialValue = args[2] as string[];
-        const reducer = args[3] as (acc: string[], contribution: string[]) => string[];
+    const processRelevantContributionsSpy = jest.spyOn(agent as RoleBasedAgentTestAccess, 'processRelevantContributions').mockImplementation(
+      <T>(
+        _context: DebateContext,
+        callback: (contribution: Contribution, roundNumber: number) => T,
+        initialValue: T,
+        reducer: (accumulator: T, current: T) => T
+      ): T => {
         // Simulate the callback being called with a critique contribution
         // This tests line 345 (the critique branch in the callback)
-        const critiqueContribution = {
+        const critiqueContribution: Contribution = {
           agentId: 'test-agent',
           agentRole: AGENT_ROLES.PERFORMANCE,
           type: CONTRIBUTION_TYPES.CRITIQUE,
@@ -1645,7 +1653,7 @@ describe('RoleBasedAgent - prepareContext edge cases', () => {
           metadata: {}
         };
         const critiqueResult = callback(critiqueContribution, 1);
-        const proposalContribution = {
+        const proposalContribution: Contribution = {
           agentId: 'test-agent',
           agentRole: AGENT_ROLES.ARCHITECT,
           type: CONTRIBUTION_TYPES.PROPOSAL,

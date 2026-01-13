@@ -1,4 +1,5 @@
 import { TracingLLMProvider, LLMProvider, CompletionRequest, TracingContext } from 'dialectic-core';
+import type { Langfuse } from 'langfuse';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;
@@ -7,12 +8,43 @@ const MOCK_INPUT_TOKENS = 50;
 const MOCK_OUTPUT_TOKENS = 50;
 const MOCK_TOTAL_TOKENS = 100;
 
+/**
+ * Mock type for Langfuse generation with jest mocks.
+ */
+interface MockLangfuseGeneration {
+  end: jest.Mock;
+}
+
+/**
+ * Mock type for Langfuse span with jest mocks.
+ */
+interface MockLangfuseSpan {
+  end: jest.Mock;
+  generation: jest.Mock<MockLangfuseGeneration>;
+}
+
+/**
+ * Mock type for Langfuse trace with jest mocks.
+ */
+interface MockLangfuseTrace {
+  span: jest.Mock<MockLangfuseSpan>;
+  generation: jest.Mock<MockLangfuseGeneration>;
+}
+
+/**
+ * Mock type for Langfuse client with jest mocks.
+ */
+interface MockLangfuse {
+  trace: jest.Mock<MockLangfuseTrace>;
+  flushAsync: jest.Mock<Promise<void>>;
+}
+
 describe('TracingLLMProvider', () => {
   let mockProvider: jest.Mocked<LLMProvider>;
-  let mockLangfuse: any;
-  let mockTrace: any;
-  let mockSpan: any;
-  let mockGeneration: any;
+  let mockLangfuse: MockLangfuse;
+  let mockTrace: MockLangfuseTrace;
+  let mockSpan: MockLangfuseSpan;
+  let mockGeneration: MockLangfuseGeneration;
   let tracingContext: TracingContext;
   let tracingProvider: TracingLLMProvider;
 
@@ -26,7 +58,7 @@ describe('TracingLLMProvider', () => {
           totalTokens: MOCK_TOTAL_TOKENS,
         },
       }),
-    } as any;
+    } as jest.Mocked<LLMProvider>;
 
     mockGeneration = {
       end: jest.fn(),
@@ -45,11 +77,11 @@ describe('TracingLLMProvider', () => {
     mockLangfuse = {
       trace: jest.fn().mockReturnValue(mockTrace),
       flushAsync: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    };
 
     tracingContext = {
-      langfuse: mockLangfuse,
-      trace: mockTrace,
+      langfuse: mockLangfuse as unknown as Langfuse,
+      trace: mockTrace as unknown as ReturnType<Langfuse['trace']>,
       currentSpans: new Map(),
     };
 

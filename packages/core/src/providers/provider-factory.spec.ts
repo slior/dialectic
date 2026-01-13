@@ -1,4 +1,4 @@
-import { createProvider, OpenAIProvider, OpenRouterProvider, EXIT_CONFIG_ERROR } from 'dialectic-core';
+import { createProvider, OpenAIProvider, OpenRouterProvider, EXIT_CONFIG_ERROR, ErrorWithCode } from 'dialectic-core';
 
 // Mock the provider classes
 jest.mock('./openai-provider');
@@ -24,13 +24,16 @@ const ERROR_MESSAGE_SUPPORTED_TYPES_SUFFIX = 'Supported types are: openai, openr
  * @param expectedMessage - The expected error message.
  */
 function expectProviderError(providerType: string | undefined, expectedMessage: string): void {
-  expect(() => createProvider(providerType as any)).toThrow();
+  // Type assertion needed because createProvider expects string, but we test edge cases like undefined
+  const providerTypeArg = providerType as string;
+  expect(() => createProvider(providerTypeArg)).toThrow();
   
   try {
-    createProvider(providerType as any);
-  } catch (error: any) {
-    expect(error.message).toBe(expectedMessage);
-    expect(error.code).toBe(EXIT_CONFIG_ERROR);
+    createProvider(providerTypeArg);
+  } catch (error: unknown) {
+    const errorWithCode = error as ErrorWithCode;
+    expect(errorWithCode.message).toBe(expectedMessage);
+    expect(errorWithCode.code).toBe(EXIT_CONFIG_ERROR);
   }
 }
 

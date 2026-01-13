@@ -4,6 +4,15 @@ import path from 'path';
 import { loadEnvironmentFile } from 'dialectic-core';
 import dotenv from 'dotenv';
 
+/**
+ * Type representing the return value of dotenv.config().
+ * Based on the dotenv library's DotenvConfigOutput type.
+ */
+interface DotenvConfigOutput {
+  parsed?: { [key: string]: string };
+  error?: Error;
+}
+
 // Mock fs and path modules
 jest.mock('fs');
 jest.mock('path');
@@ -76,7 +85,8 @@ describe('env-loader', () => {
 
     it('should load default .env file when it exists', () => {
       mockedFs.existsSync.mockReturnValue(true);
-      mockedDotenv.config.mockReturnValue({ parsed: { [ENV_VAR_TEST]: TEST_VALUE } } as any);
+      const configOutput: DotenvConfigOutput = { parsed: { [ENV_VAR_TEST]: TEST_VALUE } };
+      mockedDotenv.config.mockReturnValue(configOutput as ReturnType<typeof dotenv.config>);
 
       loadEnvironmentFile();
 
@@ -119,7 +129,8 @@ describe('env-loader', () => {
 
     it('should load custom env file when it exists', () => {
       mockedFs.existsSync.mockReturnValue(true);
-      mockedDotenv.config.mockReturnValue({ parsed: { [ENV_VAR_CUSTOM]: CUSTOM_VALUE } } as any);
+      const configOutput: DotenvConfigOutput = { parsed: { [ENV_VAR_CUSTOM]: CUSTOM_VALUE } };
+      mockedDotenv.config.mockReturnValue(configOutput as ReturnType<typeof dotenv.config>);
 
       loadEnvironmentFile(CUSTOM_ENV_FILE);
 
@@ -154,7 +165,8 @@ describe('env-loader', () => {
       // Use INIT_CWD to bypass process.cwd() mocking issues
       process.env.INIT_CWD = MOCK_CWD_PROJECT;
       mockedFs.existsSync.mockReturnValue(true);
-      mockedDotenv.config.mockReturnValue({ parsed: {} } as any);
+      const configOutput: DotenvConfigOutput = { parsed: {} };
+      mockedDotenv.config.mockReturnValue(configOutput as ReturnType<typeof dotenv.config>);
 
       loadEnvironmentFile(CONFIG_ENV_FILE);
 
@@ -169,7 +181,8 @@ describe('env-loader', () => {
     it('should not override existing environment variables', () => {
       process.env[ENV_VAR_EXISTING] = ORIGINAL_VALUE;
       mockedFs.existsSync.mockReturnValue(true);
-      mockedDotenv.config.mockReturnValue({ parsed: { [ENV_VAR_EXISTING]: NEW_VALUE } } as any);
+      const configOutput: DotenvConfigOutput = { parsed: { [ENV_VAR_EXISTING]: NEW_VALUE } };
+      mockedDotenv.config.mockReturnValue(configOutput as ReturnType<typeof dotenv.config>);
 
       loadEnvironmentFile();
 
@@ -184,7 +197,8 @@ describe('env-loader', () => {
     it('should handle dotenv parsing errors', () => {
       mockedFs.existsSync.mockReturnValue(true);
       const parseError = 'Parse error';
-      mockedDotenv.config.mockReturnValue({ error: new Error(parseError) } as any);
+      const configOutput: DotenvConfigOutput = { error: new Error(parseError) };
+      mockedDotenv.config.mockReturnValue(configOutput as ReturnType<typeof dotenv.config>);
 
       expect(() => loadEnvironmentFile()).toThrow(`${ERROR_MESSAGE_FAILED_TO_LOAD} ${parseError}`);
     });
