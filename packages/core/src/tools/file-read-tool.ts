@@ -36,7 +36,6 @@ export class FileReadTool implements ToolImplementation {
    * @param _state - Optional debate state (unused for this tool).
    * @returns JSON string with status and file content or error message.
    */
-  
   // Parameters _context and _state are required by ToolImplementation interface but unused by this tool
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   execute(args: { path?: string }, _context?: unknown, _state?: unknown): string {
