@@ -154,7 +154,7 @@ The tool returns a JSON string with the following structure:
 ```json
 {
   "status": "error",
-  "result": "Error message describing what went wrong"
+  "error": "Error message describing what went wrong"
 }
 ```
 
@@ -207,6 +207,234 @@ An agent can use this tool to:
 }
 ```
 
+### File Read (`file_read`)
+
+Reads the contents of a text file and returns it as a string. This tool allows agents to access file system content during debates, enabling them to reference documentation, configuration files, or other text-based resources.
+
+#### Description
+
+Read the contents of a text file. Returns the file content as a string, or an error message if the file cannot be read.
+
+#### Input Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "The absolute path to the file to read"
+    }
+  },
+  "required": ["path"]
+}
+```
+
+**Parameters**:
+- `path` (string, required): The absolute path to the file to read. Relative paths are resolved to absolute paths.
+
+#### Output Schema
+
+The tool returns a JSON string with the following structure:
+
+**Success Response**:
+```json
+{
+  "status": "success",
+  "result": {
+    "content": "File contents as a string..."
+  }
+}
+```
+
+**Error Response**:
+```json
+{
+  "status": "error",
+  "error": "Error message describing what went wrong"
+}
+```
+
+**Output Fields**:
+- `status`: Either `"success"` or `"error"`
+- `result`: Object containing the file content (on success)
+  - `content`: The file contents as a UTF-8 string (string)
+- `error`: Error message describing what went wrong (on error)
+
+#### Behavior
+
+- **File encoding**: Files are read as UTF-8 text
+- **Path resolution**: Relative paths are resolved to absolute paths using `path.resolve()`
+- **File validation**: The tool checks that the path exists and is a file (not a directory)
+- **Error handling**: Returns descriptive error messages for common file system errors:
+  - File not found (`ENOENT`)
+  - Permission denied (`EACCES`, `EPERM`)
+  - Path is a directory (not a file)
+  - Invalid arguments (missing or invalid path parameter)
+
+#### Example Usage
+
+An agent can use this tool to:
+- Read configuration files referenced in the problem statement
+- Access documentation files that provide context for the design problem
+- Read example code or templates that inform the solution
+- Access any text-based resource needed during the debate
+
+**Example tool call**:
+```json
+{
+  "name": "file_read",
+  "arguments": "{\"path\": \"/path/to/config.json\"}"
+}
+```
+
+**Example success response**:
+```json
+{
+  "status": "success",
+  "result": {
+    "content": "{\n  \"database\": {\n    \"host\": \"localhost\",\n    \"port\": 5432\n  }\n}"
+  }
+}
+```
+
+**Example error response**:
+```json
+{
+  "status": "error",
+  "error": "File not found: /path/to/nonexistent.txt"
+}
+```
+
+### List Files (`list_files`)
+
+Lists all files and directories in a given directory. Returns an array of entries with their absolute paths and types (file or directory). This tool helps agents explore directory structures and discover available resources.
+
+#### Description
+
+List all files and directories in a given directory. Returns an array of entries with their absolute paths and types (file or directory).
+
+#### Input Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "The absolute path to the directory to list"
+    }
+  },
+  "required": ["path"]
+}
+```
+
+**Parameters**:
+- `path` (string, required): The absolute path to the directory to list. Relative paths are resolved to absolute paths.
+
+#### Output Schema
+
+The tool returns a JSON string with the following structure:
+
+**Success Response**:
+```json
+{
+  "status": "success",
+  "result": {
+    "entries": [
+      {
+        "path": "/absolute/path/to/file.txt",
+        "type": "file"
+      },
+      {
+        "path": "/absolute/path/to/subdirectory",
+        "type": "directory"
+      }
+    ]
+  }
+}
+```
+
+**Error Response**:
+```json
+{
+  "status": "error",
+  "error": "Error message describing what went wrong"
+}
+```
+
+**Output Fields**:
+- `status`: Either `"success"` or `"error"`
+- `result`: Object containing the directory listing (on success)
+  - `entries`: Array of file system entry objects, each containing:
+    - `path`: The absolute path to the entry (string)
+    - `type`: Either `"file"` or `"directory"` (string)
+- `error`: Error message describing what went wrong (on error)
+
+#### Behavior
+
+- **Path resolution**: Relative paths are resolved to absolute paths using `path.resolve()`
+- **Directory validation**: The tool checks that the path exists and is a directory (not a file)
+- **Absolute paths**: All returned paths are absolute paths, making them suitable for use with other tools like `file_read`
+- **Entry types**: Each entry includes a `type` field indicating whether it's a file or directory
+- **Empty directories**: Returns an empty array for directories with no contents
+- **Error handling**: Returns descriptive error messages for common file system errors:
+  - Directory not found (`ENOENT`)
+  - Permission denied (`EACCES`, `EPERM`)
+  - Path is a file (not a directory)
+  - Invalid arguments (missing or invalid path parameter)
+
+#### Example Usage
+
+An agent can use this tool to:
+- Explore directory structures to understand project layouts
+- Discover available configuration files or documentation
+- Find relevant source files or examples
+- Navigate file system hierarchies during problem analysis
+
+**Example tool call**:
+```json
+{
+  "name": "list_files",
+  "arguments": "{\"path\": \"/path/to/project\"}"
+}
+```
+
+**Example success response**:
+```json
+{
+  "status": "success",
+  "result": {
+    "entries": [
+      {
+        "path": "/path/to/project/README.md",
+        "type": "file"
+      },
+      {
+        "path": "/path/to/project/config",
+        "type": "directory"
+      },
+      {
+        "path": "/path/to/project/src",
+        "type": "directory"
+      },
+      {
+        "path": "/path/to/project/package.json",
+        "type": "file"
+      }
+    ]
+  }
+}
+```
+
+**Example error response**:
+```json
+{
+  "status": "error",
+  "error": "Directory not found: /path/to/nonexistent"
+}
+```
+
 ## Tool Execution
 
 When an agent has tools configured:
@@ -228,6 +456,8 @@ When an agent has tools configured:
 4. **Review Tool Metadata**: Check contribution metadata in debate state files to understand tool usage patterns
 5. **Error Handling**: Be aware that failed tool invocations count toward limits; ensure tools are properly configured
 6. **Context Search**: Leverage Context Search tool to help agents reference earlier contributions and maintain consistency
+7. **File System Tools**: Use `file_read` and `list_files` to access file system resources when needed for problem context
+8. **Path Safety**: Always use absolute paths when possible; relative paths are resolved relative to the current working directory
 
 ## Future Enhancements
 

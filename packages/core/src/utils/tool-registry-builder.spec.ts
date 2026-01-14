@@ -9,6 +9,8 @@ const AGENT_ID_1 = 'agent-1';
 const AGENT_ID_2 = 'agent-2';
 const AGENT_NAME_TEST = 'Test Agent';
 const TOOL_NAME_CONTEXT_SEARCH = 'context_search';
+const TOOL_NAME_FILE_READ = 'file_read';
+const TOOL_NAME_LIST_FILES = 'list_files';
 const TOOL_NAME_UNKNOWN = 'unknown_tool';
 const TOOL_NAME_UNKNOWN_1 = 'unknown_tool_1';
 const TOOL_NAME_UNKNOWN_2 = 'unknown_tool_2';
@@ -89,6 +91,61 @@ describe('buildToolRegistry', () => {
       expect(registry.has(TOOL_NAME_CONTEXT_SEARCH)).toBe(true);
       const schemas = registry.getAllSchemas();
       expect(schemas.length).toBe(1); // Duplicate name overwrites
+    });
+
+    it('should register file_read tool when configured in agent.tools', () => {
+      agentConfig.tools = [
+        {
+          name: TOOL_NAME_FILE_READ,
+        },
+      ];
+
+      const registry = buildToolRegistry(agentConfig);
+      
+      expect(registry.hasTools()).toBe(true);
+      expect(registry.has(TOOL_NAME_FILE_READ)).toBe(true);
+      const schemas = registry.getAllSchemas();
+      expect(schemas.length).toBe(1);
+      expect(schemas[0]?.name).toBe(TOOL_NAME_FILE_READ);
+    });
+
+    it('should register list_files tool when configured in agent.tools', () => {
+      agentConfig.tools = [
+        {
+          name: TOOL_NAME_LIST_FILES,
+        },
+      ];
+
+      const registry = buildToolRegistry(agentConfig);
+      
+      expect(registry.hasTools()).toBe(true);
+      expect(registry.has(TOOL_NAME_LIST_FILES)).toBe(true);
+      const schemas = registry.getAllSchemas();
+      expect(schemas.length).toBe(1);
+      expect(schemas[0]?.name).toBe(TOOL_NAME_LIST_FILES);
+    });
+
+    it('should register all three tools together', () => {
+      agentConfig.tools = [
+        {
+          name: TOOL_NAME_CONTEXT_SEARCH,
+        },
+        {
+          name: TOOL_NAME_FILE_READ,
+        },
+        {
+          name: TOOL_NAME_LIST_FILES,
+        },
+      ];
+
+      const registry = buildToolRegistry(agentConfig);
+      
+      expect(registry.hasTools()).toBe(true);
+      expect(registry.has(TOOL_NAME_CONTEXT_SEARCH)).toBe(true);
+      expect(registry.has(TOOL_NAME_FILE_READ)).toBe(true);
+      expect(registry.has(TOOL_NAME_LIST_FILES)).toBe(true);
+      const schemas = registry.getAllSchemas();
+      expect(schemas.length).toBe(3);
     });
 
     it('should return registry with correct schemas for registered tools', () => {

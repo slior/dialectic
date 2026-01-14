@@ -16,6 +16,8 @@ export { OpenRouterProvider } from './providers/openrouter-provider';
 export { ToolRegistry, createBaseRegistry } from './tools/tool-registry';
 export { ToolImplementation, createToolErrorJson, createToolSuccessJson, createToolResult } from './tools/tool-implementation';
 export { ContextSearchTool } from './tools/context-search-tool';
+export { FileReadTool } from './tools/file-read-tool';
+export { ListFilesTool } from './tools/list-files-tool';
 export { buildToolRegistry } from './utils/tool-registry-builder';
 
 // Types - re-export all

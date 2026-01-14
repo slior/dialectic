@@ -1,4 +1,6 @@
 import { ContextSearchTool } from '../tools/context-search-tool';
+import { FileReadTool } from '../tools/file-read-tool';
+import { ListFilesTool } from '../tools/list-files-tool';
 import { ToolImplementation } from '../tools/tool-implementation';
 import { ToolRegistry } from '../tools/tool-registry';
 import { AgentConfig } from '../types/agent.types';
@@ -35,6 +37,40 @@ const AVAILABLE_TOOLS: Record<string, ToolDefinition> = {
       },
     },
     createImplementation: () => new ContextSearchTool(),
+  },
+  file_read: {
+    schema: {
+      name: 'file_read',
+      description: 'Read the contents of a text file. Returns the file content as a string, or an error message if the file cannot be read.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'The absolute path to the file to read',
+          },
+        },
+        required: ['path'],
+      },
+    },
+    createImplementation: () => new FileReadTool(),
+  },
+  list_files: {
+    schema: {
+      name: 'list_files',
+      description: 'List all files and directories in a given directory. Returns an array of entries with their absolute paths and types (file or directory).',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'The absolute path to the directory to list',
+          },
+        },
+        required: ['path'],
+      },
+    },
+    createImplementation: () => new ListFilesTool(),
   },
 };
 
