@@ -1,4 +1,7 @@
-import { buildToolRegistry, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, ToolRegistry } from 'dialectic-core';
+import { ToolRegistry } from '../tools/tool-registry';
+import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
+
+import { buildToolRegistry } from './tool-registry-builder';
 
 // Test constants
 const AGENT_ID_TEST = 'test-agent';

@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
-import { loadEnvironmentFile } from 'dialectic-core';
 import dotenv from 'dotenv';
+
+import { loadEnvironmentFile } from './env-loader';
 
 /**
  * Type representing the return value of dotenv.config().

@@ -1,5 +1,15 @@
-import { TracingDecoratorAgent, RoleBasedAgent, AgentConfig, AGENT_ROLES, LLM_PROVIDERS, Proposal, Critique, SummarizationConfig, DebateContext, DebateState, TracingContext, LLMProvider, ToolImplementation, ToolCall, ToolResult } from 'dialectic-core';
 import type { Langfuse } from 'langfuse';
+
+import { RoleBasedAgent } from '../agents/role-based-agent';
+import { LLMProvider } from '../providers/llm-provider';
+import { ToolImplementation } from '../tools/tool-implementation';
+import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS, Proposal, Critique } from '../types/agent.types';
+import { SummarizationConfig, DebateContext, DebateState } from '../types/debate.types';
+import { ToolCall, ToolResult } from '../types/tool.types';
+import { TracingContext } from '../types/tracing.types';
+
+import { TracingDecoratorAgent } from './tracing-decorator-agent';
+
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;

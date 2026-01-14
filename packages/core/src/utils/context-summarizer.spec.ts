@@ -1,5 +1,8 @@
-import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES, CompletionRequest, CompletionResponse, LLM_PROVIDERS } from 'dialectic-core';
-//TODO: change the imports to import from source instead of dialectic-core.
+import { LLMProvider, CompletionRequest, CompletionResponse } from '../providers/llm-provider';
+import { AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
+import { SummarizationConfig, SUMMARIZATION_METHODS } from '../types/debate.types';
+
+import { LengthBasedSummarizer } from './context-summarizer';
 // Test constants
 const DEFAULT_SUMMARY_TEMPERATURE = 0.3;
 const CUSTOM_TEMPERATURE = 0.55;

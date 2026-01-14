@@ -1,4 +1,10 @@
-import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent, TRACE_OPTIONS, TraceMetadata, DebateConfig, LLMProvider, RoleBasedAgent, AgentConfig, AgentRole, AGENT_ROLES, LLM_PROVIDERS, SummarizationConfig } from 'dialectic-core';
+import { RoleBasedAgent } from '../agents/role-based-agent';
+import { LLMProvider } from '../providers/llm-provider';
+import { AgentConfig, AgentRole, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
+import { DebateConfig, SummarizationConfig } from '../types/debate.types';
+import { TRACE_OPTIONS, TraceMetadata } from '../types/tracing.types';
+
+import { validateLangfuseConfig, createTracingContext, createTracingProvider, createTracingAgent } from './tracing-factory';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;

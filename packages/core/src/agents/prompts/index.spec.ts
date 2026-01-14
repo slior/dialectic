@@ -1,4 +1,7 @@
-import { RoleBasedAgent, AGENT_ROLES, getPromptsForRole } from 'dialectic-core';
+import { AGENT_ROLES } from '../../types/agent.types';
+import { RoleBasedAgent } from '../role-based-agent';
+
+import { getPromptsForRole } from './index';
 
 // Test constants
 const TEST_CONTENT = 'test content';

@@ -2,7 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { StateManager, DEBATE_STATUS, DebateSummary, SUMMARIZATION_METHODS, AGENT_ROLES } from 'dialectic-core';
+import { AGENT_ROLES } from '../types/agent.types';
+import { DEBATE_STATUS, DebateSummary, SUMMARIZATION_METHODS } from '../types/debate.types';
+
+import { StateManager } from './state-manager';
 
 // Test constants
 const MOCK_TOKENS_USED = 50;

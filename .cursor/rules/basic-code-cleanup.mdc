@@ -525,6 +525,7 @@ This section  provides guidelines for identifying and fixing common code smells,
 6. [Redundant Function Calls](#6-redundant-function-calls)
 7. [Complex Nested Logic](#7-complex-nested-logic)
 8. [Unnecessary Type Casts](#8-unnecessary-type-casts)
+9. [Importing from Built Package Distribution](#9-importing-from-built-package-distribution)
 
 ---
 
@@ -1029,6 +1030,77 @@ async refinementPhase() {
 
 ---
 
+## 9. Importing from Built Package Distribution
+
+### Problem
+Importing symbols from the built package distribution (e.g., `'dialectic-core'`) instead of using relative source imports **within the same package**. This applies to both application code and test code.
+
+### Code Smell
+```typescript
+// ❌ BAD: Importing from built package within the same package
+// File: packages/core/src/utils/context-summarizer.spec.ts
+import { LengthBasedSummarizer, LLMProvider, SummarizationConfig, SUMMARIZATION_METHODS, AGENT_ROLES, CompletionRequest, CompletionResponse, LLM_PROVIDERS } from 'dialectic-core';
+
+// File: packages/core/src/utils/tracing-provider.spec.ts
+import { TracingLLMProvider, LLMProvider, CompletionRequest, TracingContext } from 'dialectic-core';
+
+// File: packages/core/src/core/agent.spec.ts
+import { Agent, ToolRegistry, LLMProvider, DebateContext, AgentConfig, AGENT_ROLES } from 'dialectic-core';
+```
+
+### Solution
+```typescript
+// ✅ GOOD: Use relative source imports within the same package
+// File: packages/core/src/utils/context-summarizer.spec.ts
+import { LengthBasedSummarizer } from './context-summarizer';
+import { LLMProvider, CompletionRequest, CompletionResponse } from '../providers/llm-provider';
+import { SummarizationConfig, SUMMARIZATION_METHODS } from '../types/debate.types';
+import { AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
+
+// File: packages/core/src/utils/tracing-provider.spec.ts
+import { TracingLLMProvider } from './tracing-provider';
+import { LLMProvider, CompletionRequest } from '../providers/llm-provider';
+import { TracingContext } from '../types/tracing.types';
+
+// File: packages/core/src/core/agent.spec.ts
+import { Agent } from './agent';
+import { ToolRegistry } from '../tools/tool-registry';
+import { LLMProvider } from '../providers/llm-provider';
+import { DebateContext } from '../types/debate.types';
+import { AgentConfig, AGENT_ROLES } from '../types/agent.types';
+```
+
+### Important Notes
+
+**This rule applies WITHIN a package only:**
+- ✅ **Within `packages/core/src/`**: Use relative imports like `'./context-summarizer'` or `'../types/debate.types'`
+- ✅ **Within `packages/cli/src/`**: Use relative imports within that package
+- ✅ **Cross-package imports**: Use package name imports like `'dialectic-core'` when importing from a different package
+- ✅ **External packages**: Always use package name imports like `'fs'`, `'path'`, `'jest'`
+
+**Applies to both application code and test code:**
+- Application code: `packages/core/src/utils/context-summarizer.ts` should import from `'../providers/llm-provider'`, not `'dialectic-core'`
+- Test code: `packages/core/src/utils/context-summarizer.spec.ts` should also import from `'../providers/llm-provider'`, not `'dialectic-core'`
+
+### Why It Matters
+- **No Build Required**: Tests can run without building the package first
+- **Better IDE Support**: IDEs can provide better autocomplete and type checking with direct source imports
+- **Faster Development**: No need to rebuild when making changes during development
+- **Clearer Dependencies**: Relative imports make it immediately clear where symbols come from
+- **Consistency**: Application code and test code follow the same import patterns
+
+### When to Use Package Name Imports
+
+**✅ Use package name imports (`'dialectic-core'`) when:**
+- Importing from a **different package** (e.g., `packages/cli/src/` importing from `packages/core/`)
+- Importing from **external packages** (e.g., `'fs'`, `'path'`, `'jest'`)
+
+**❌ Don't use package name imports when:**
+- Importing **within the same package** (e.g., `packages/core/src/utils/` importing from `packages/core/src/types/`)
+- Both the importing file and the imported file are in the same package directory structure
+
+---
+
 ## Quick Reference Checklist
 
 When reviewing code, ask:
@@ -1041,6 +1113,7 @@ When reviewing code, ask:
 - [ ] Are functions called multiple times with the same result?
 - [ ] Are there deeply nested loops/conditionals that could be extracted?
 - [ ] Are there `as any` casts that could be removed with proper typing?
+- [ ] Are imports within a package using relative source paths instead of built package distribution?
 
 ---
 

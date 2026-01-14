@@ -1,5 +1,10 @@
-import { Agent, ToolRegistry, ToolImplementation, LLMProvider, CompletionRequest, CompletionResponse, DebateContext, DebateState, AgentConfig, Proposal, Critique, ContextPreparationResult, ClarificationQuestionsResponse, AgentLogger, AGENT_ROLES, LLM_PROVIDERS } from 'dialectic-core';
+import { LLMProvider, CompletionRequest, CompletionResponse } from '../providers/llm-provider';
+import { ToolImplementation } from '../tools/tool-implementation';
+import { ToolRegistry } from '../tools/tool-registry';
+import { AgentConfig, Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
+import { DebateContext, DebateState, ContextPreparationResult, ClarificationQuestionsResponse } from '../types/debate.types';
 
+import { Agent, AgentLogger } from './agent';
 import { AgentLLMResponse } from './agent';
 
 // Test constants

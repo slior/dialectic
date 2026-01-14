@@ -1,5 +1,10 @@
-import { TracingLLMProvider, LLMProvider, CompletionRequest, TracingContext } from 'dialectic-core';
 import type { Langfuse } from 'langfuse';
+
+import { LLMProvider, CompletionRequest } from '../providers/llm-provider';
+import { TracingContext } from '../types/tracing.types';
+
+import { TracingLLMProvider } from './tracing-provider';
+
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;

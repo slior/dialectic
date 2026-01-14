@@ -1,4 +1,4 @@
-import { enhanceProblemWithContext } from 'dialectic-core';
+import { enhanceProblemWithContext } from './context-enhancer';
 
 // Test constants
 const TEST_PROBLEM = 'Test problem';

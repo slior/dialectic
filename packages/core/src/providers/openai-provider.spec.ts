@@ -1,5 +1,10 @@
-import { OpenAIProvider, LLMProvider, ToolSchema } from 'dialectic-core';
 import OpenAI from 'openai';
+
+import { ToolSchema } from '../types/tool.types';
+
+import { LLMProvider } from './llm-provider';
+import { OpenAIProvider } from './openai-provider';
+
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.5;

@@ -1,4 +1,5 @@
-import { OpenRouterProvider, CompletionRequest } from 'dialectic-core';
+import { CompletionRequest } from './llm-provider';
+import { OpenRouterProvider } from './openrouter-provider';
 
 // Test constants
 const DEFAULT_TEMPERATURE = 0.7;
