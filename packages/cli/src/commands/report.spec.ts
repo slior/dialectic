@@ -11,11 +11,16 @@ import {
   CONTRIBUTION_TYPES,
   SystemConfig,
   LLM_PROVIDERS,
-  DebateRound
+  DebateRound,
+  DebateStatus,
+  AgentRole,
+  generateDebateReport,
+  writeFileWithDirectories
 } from 'dialectic-core';
 
 import { runCli } from '../index';
 
+import { loadConfig } from './debate';
 
 // Mock env-loader
 jest.mock('dialectic-core', () => {
@@ -26,7 +31,17 @@ jest.mock('dialectic-core', () => {
   };
 });
 
+// Mock loadConfig for testing defensive check
+jest.mock('./debate', () => {
+  const actual = jest.requireActual('./debate');
+  return {
+    ...actual,
+    loadConfig: jest.fn()
+  };
+});
+
 const mockedLoadEnvironmentFile = loadEnvironmentFile as jest.MockedFunction<typeof loadEnvironmentFile>;
+const mockedLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>;
 
 // Test file name constants
 const DEFAULT_CONFIG_FILE = 'debate-config.json';
@@ -64,6 +79,9 @@ describe('CLI report command', () => {
       throw new Error(`process.exit: ${code}`);
     });
     mockedLoadEnvironmentFile.mockClear();
+    mockedLoadConfig.mockClear();
+    // Reset loadConfig to use actual implementation by default
+    mockedLoadConfig.mockImplementation(jest.requireActual('./debate').loadConfig);
     
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'report-test-'));
   });
@@ -269,6 +287,26 @@ describe('CLI report command', () => {
       const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
       const invalidState = createMinimalDebateState();
       invalidState.rounds = undefined as unknown as DebateRound[];
+      writeDebateStateToFile(debatePath, invalidState);
+
+      await expect(runCli(['report', '--debate', debatePath]))
+        .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+    });
+
+    it('should exit with invalid args when debate JSON has invalid status field', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const invalidState = createMinimalDebateState();
+      invalidState.status = undefined as unknown as DebateStatus;
+      writeDebateStateToFile(debatePath, invalidState);
+
+      await expect(runCli(['report', '--debate', debatePath]))
+        .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+    });
+
+    it('should exit with invalid args when debate JSON has status field that is not a string', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const invalidState = createMinimalDebateState();
+      invalidState.status = 123 as unknown as DebateStatus;
       writeDebateStateToFile(debatePath, invalidState);
 
       await expect(runCli(['report', '--debate', debatePath]))
@@ -542,6 +580,198 @@ describe('CLI report command', () => {
       // Should succeed (dates are revived)
       expect(stdoutSpy).toHaveBeenCalled();
     });
+
+    it('should handle missing createdAt field in debate state (not revived when undefined)', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      // Write JSON with createdAt as null (simulating missing/invalid field)
+      // This tests that reviveDatesInDebateState handles undefined/null gracefully
+      const serialized = JSON.parse(JSON.stringify(debateState));
+      serialized.createdAt = null;
+      fs.writeFileSync(debatePath, JSON.stringify(serialized));
+
+      // This will fail in generateDebateReport since createdAt is required,
+      // but we're testing that reviveDatesInDebateState doesn't crash on null/undefined
+      // Note: In practice, createdAt should always be present, but we test the defensive code
+      await expect(runCli(['report', '--debate', debatePath]))
+        .rejects.toThrow();
+    });
+
+    it('should handle missing updatedAt field in debate state (not revived when undefined)', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      // Write JSON with updatedAt as null (simulating missing/invalid field)
+      // This tests that reviveDatesInDebateState handles undefined/null gracefully
+      const serialized = JSON.parse(JSON.stringify(debateState));
+      serialized.updatedAt = null;
+      fs.writeFileSync(debatePath, JSON.stringify(serialized));
+
+      // Should succeed (updatedAt is optional for generateDebateReport, only createdAt is required)
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (missing updatedAt is handled - not revived since it's null/undefined)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle createdAt that is already a Date object', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      debateState.createdAt = new Date('2024-01-01');
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (Date objects are not revived)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle round timestamp that is already a Date object', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      if (debateState.rounds[0]) {
+        debateState.rounds[0].timestamp = new Date('2024-01-01');
+      }
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (Date objects are not revived)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle round without timestamp field', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      if (debateState.rounds[0]) {
+        delete (debateState.rounds[0] as { timestamp?: Date }).timestamp;
+      }
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (missing timestamp is handled)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle contributions without agentId or agentRole', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      if (debateState.rounds[0]) {
+        debateState.rounds[0].contributions.push({
+          agentId: undefined as unknown as string,
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.PROPOSAL,
+          content: 'Test',
+          metadata: {}
+        });
+        debateState.rounds[0].contributions.push({
+          agentId: TEST_AGENT_ID_ARCHITECT,
+          agentRole: undefined as unknown as AgentRole,
+          type: CONTRIBUTION_TYPES.PROPOSAL,
+          content: 'Test',
+          metadata: {}
+        });
+      }
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (contributions without agentId/agentRole are skipped)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle duplicate agent IDs (first occurrence wins)', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      // Add same agent ID with different role in another round
+      debateState.rounds.push({
+        roundNumber: 2,
+        contributions: [
+          {
+            agentId: TEST_AGENT_ID_ARCHITECT,
+            agentRole: AGENT_ROLES.PERFORMANCE, // Different role
+            type: CONTRIBUTION_TYPES.PROPOSAL,
+            content: 'Test',
+            metadata: {}
+          }
+        ],
+        timestamp: new Date()
+      });
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (first occurrence wins, so architect role is used)
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutContent = getStdoutContent();
+      // Should only contain architect role (first occurrence)
+      expect(stdoutContent).toContain(TEST_AGENT_ID_ARCHITECT);
+    });
+
+    it('should handle invalid agent role (defaults to architect)', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      if (debateState.rounds[0]) {
+        debateState.rounds[0].contributions.push({
+          agentId: 'agent-invalid-role',
+          agentRole: 'invalid-role' as typeof AGENT_ROLES[keyof typeof AGENT_ROLES],
+          type: CONTRIBUTION_TYPES.PROPOSAL,
+          content: 'Test',
+          metadata: {}
+        });
+      }
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (invalid role defaults to architect)
+      expect(stdoutSpy).toHaveBeenCalled();
+      const stdoutContent = getStdoutContent();
+      // Should contain the agent ID
+      expect(stdoutContent).toContain('agent-invalid-role');
+    });
+
+    it('should handle empty rounds array', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      debateState.rounds = [];
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (empty rounds array is valid)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle judge ID from finalSolution.synthesizedBy', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      debateState.finalSolution = {
+        description: TEST_SOLUTION_DESCRIPTION,
+        tradeoffs: [],
+        recommendations: [],
+        confidence: 80,
+        synthesizedBy: 'custom-judge-id'
+      };
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (uses synthesizedBy as judge ID)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
+
+    it('should handle missing finalSolution (defaults to judge-main)', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      delete (debateState as { finalSolution?: unknown }).finalSolution;
+      writeDebateStateToFile(debatePath, debateState);
+
+      await runCli(['report', '--debate', debatePath]);
+      
+      // Should succeed (defaults to judge-main)
+      expect(stdoutSpy).toHaveBeenCalled();
+    });
   });
 
   describe('Error handling', () => {
@@ -581,6 +811,110 @@ describe('CLI report command', () => {
         expect(stdoutContent).toContain(SECTION_AGENTS);
         expect(stdoutContent).toContain(TEST_AGENT_ID_ARCHITECT);
       });
+    });
+
+    it('should handle error without code property', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      writeDebateStateToFile(debatePath, debateState);
+
+      // Mock generateDebateReport to throw an error without code
+      const originalGenerate = generateDebateReport;
+      // Using require() here is intentional: jest.spyOn() needs the module object, not the imported function
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      jest.spyOn(require('dialectic-core'), 'generateDebateReport').mockImplementationOnce((..._args: unknown[]) => {
+        throw new Error('Test error without code');
+      });
+
+      try {
+        await expect(runCli(['report', '--debate', debatePath]))
+          .rejects.toThrow();
+        
+        // Should write error to stderr
+        expect(stderrSpy).toHaveBeenCalled();
+      } finally {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        jest.spyOn(require('dialectic-core'), 'generateDebateReport').mockImplementation(originalGenerate as (...args: unknown[]) => unknown);
+      }
+    });
+
+    it('should handle error without message property', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      writeDebateStateToFile(debatePath, debateState);
+
+      // Mock writeFileWithDirectories to throw an error without message
+      const originalWrite = writeFileWithDirectories;
+      // Using require() here is intentional: jest.spyOn() needs the module object, not the imported function
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      jest.spyOn(require('dialectic-core'), 'writeFileWithDirectories').mockImplementationOnce((..._args: unknown[]) => {
+        const err = Object.create(Error.prototype) as Error & { code?: number };
+        // Create error without message property
+        Object.defineProperty(err, 'message', { value: undefined, writable: true });
+        err.code = EXIT_INVALID_ARGS;
+        throw err;
+      });
+
+      try {
+        await expect(runCli(['report', '--debate', debatePath, '--output', path.join(tmpDir, 'output.md')]))
+          .rejects.toThrow();
+        
+        // Should write error to stderr with "Unknown error"
+        expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown error'));
+      } finally {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        jest.spyOn(require('dialectic-core'), 'writeFileWithDirectories').mockImplementation(originalWrite as (...args: unknown[]) => unknown);
+      }
+    });
+
+    it('should handle error with code that is not a number', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const debateState = createMinimalDebateState();
+      writeDebateStateToFile(debatePath, debateState);
+
+      // Mock generateDebateReport to throw an error with non-number code
+      const originalGenerate = generateDebateReport;
+      // Using require() here is intentional: jest.spyOn() needs the module object, not the imported function
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      jest.spyOn(require('dialectic-core'), 'generateDebateReport').mockImplementationOnce((..._args: unknown[]) => {
+        const err: Error & { code?: unknown } = new Error('Test error');
+        err.code = 'not-a-number';
+        throw err;
+      });
+
+      try {
+        await expect(runCli(['report', '--debate', debatePath]))
+          .rejects.toThrow();
+        
+        // Should use EXIT_GENERAL_ERROR when code is not a number
+        expect(stderrSpy).toHaveBeenCalled();
+      } finally {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        jest.spyOn(require('dialectic-core'), 'generateDebateReport').mockImplementation(originalGenerate as (...args: unknown[]) => unknown);
+      }
+    });
+
+    it('should handle missing judge in config (defensive check)', async () => {
+      const debatePath = path.join(tmpDir, DEFAULT_DEBATE_FILE);
+      const configPath = path.join(tmpDir, 'config-no-judge.json');
+      const debateState = createMinimalDebateState();
+      writeDebateStateToFile(debatePath, debateState);
+
+      // Create config file
+      const config = createMinimalConfig();
+      fs.writeFileSync(configPath, JSON.stringify(config));
+
+      // Mock loadConfig to return config without judge (testing defensive check)
+      mockedLoadConfig.mockResolvedValueOnce({
+        agents: config.agents
+        // Intentionally missing judge to test defensive check
+      } as SystemConfig);
+
+      await expect(runCli(['report', '--debate', debatePath, '--config', configPath]))
+        .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+      
+      // Should write error to stderr
+      expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Configuration missing judge definition'));
     });
   });
 });

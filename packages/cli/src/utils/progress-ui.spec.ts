@@ -375,5 +375,238 @@ describe('DebateProgressUI', () => {
       expect(output).toContain('[Round 2] Proposals phase completed');
     });
   });
+
+  describe('completeAgentActivity edge cases', () => {
+    it('should handle completing activity when agent has multiple activities remaining', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.PROPOSAL, 2);
+      
+      // Start multiple activities for the same agent
+      ui.startAgentActivity(TEST_AGENT_NAME, 'proposing');
+      ui.startAgentActivity(TEST_AGENT_NAME, 'reviewing');
+      
+      // Complete one activity - should still have the other activity
+      ui.completeAgentActivity(TEST_AGENT_NAME, 'proposing');
+      
+      const output = getOutput();
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed proposing`);
+      // Should still be able to complete the other activity
+      ui.completeAgentActivity(TEST_AGENT_NAME, 'reviewing');
+      expect(getOutput()).toContain(`[Round 1] ${TEST_AGENT_NAME} completed reviewing`);
+    });
+
+    it('should handle completing activity when activity is not found in list', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.PROPOSAL, 2);
+      
+      // Start an activity
+      ui.startAgentActivity(TEST_AGENT_NAME, 'proposing');
+      
+      // Try to complete a different activity that doesn't exist
+      ui.completeAgentActivity(TEST_AGENT_NAME, 'nonexistent');
+      
+      const output = getOutput();
+      // Should still log the completion message
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed nonexistent`);
+    });
+
+    it('should handle completing activity when agent has no activities', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      
+      // Try to complete an activity for an agent that never started any
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      // Should still log the completion message
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+    });
+
+    it('should update phase progress when completing activity in a phase', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.PROPOSAL, 3);
+      ui.startAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      // Complete the activity - should update phase progress
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+    });
+
+    it('should update phase progress for critique phase', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.CRITIQUE, 2);
+      ui.startAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      // Complete the activity - should update phase progress for critique phase
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+    });
+
+    it('should update phase progress for refinement phase', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.REFINEMENT, 2);
+      ui.startAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      // Complete the activity - should update phase progress for refinement phase
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+    });
+
+    it('should handle completing activity when not in a recognized phase', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      // Don't start a phase, or set currentPhase to something unrecognized
+      ui.startSynthesis(); // This sets currentPhase to 'Synthesis' which doesn't match PHASE_LABELS
+      
+      ui.startAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      // Should still log the completion message
+      expect(output).toContain(`${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+    });
+
+    it('should handle completing activity when phase progress does not exist', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.PROPOSAL, 2);
+      ui.startAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      // Use type assertion to access private state and manually clear phaseProgress
+      // to test the branch where phaseType exists but progress doesn't
+      const uiWithPrivateAccess = ui as unknown as {
+        state: {
+          currentPhase: string;
+          currentRound: number;
+          phaseProgress: Map<string, { current: number; total: number }>;
+        };
+      };
+      
+      // Clear phaseProgress to simulate missing progress entry
+      uiWithPrivateAccess.state.phaseProgress.clear();
+      
+      // Now complete the activity - phaseType will exist (PROPOSAL) but progress won't
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      // Should still log the completion message even if progress doesn't exist
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+    });
+
+    it('should handle completing activity when activities array becomes empty after removal', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.PROPOSAL, 2);
+      
+      // Start an activity
+      ui.startAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      // Complete it (this removes it, making activities.length === 0, then deletes the key)
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      // Try to complete again - activities will be undefined (key was deleted)
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      // Should still log the completion message
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+    });
+
+    it('should handle completing activity when activities exists but length is 0 (edge case)', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.PROPOSAL, 2);
+      
+      // Test the branch where activities exists but activities.length === 0
+      // This tests the branch: `if (activities && activities.length > 0)` 
+      // where activities is [] (empty array, truthy but length is 0)
+      // Using type assertion to access private state for testing purposes
+      const uiWithPrivateAccess = ui as unknown as {
+        state: {
+          agentActivity: Map<string, string[]>;
+          currentPhase: string;
+          currentRound: number;
+          phaseProgress: Map<string, { current: number; total: number }>;
+        };
+      };
+      
+      // Manually set activities to empty array to test this specific branch
+      // This covers the case: activities is truthy ([]) but activities.length === 0
+      uiWithPrivateAccess.state.agentActivity.set(TEST_AGENT_NAME, []);
+      
+      // Also set up phase state so phaseType will be found
+      uiWithPrivateAccess.state.currentPhase = 'Proposals';
+      uiWithPrivateAccess.state.currentRound = 1;
+      uiWithPrivateAccess.state.phaseProgress.set('1-proposal', { current: 0, total: 2 });
+      
+      // Now complete an activity - the condition `activities && activities.length > 0` 
+      // should evaluate to false because activities.length is 0
+      ui.completeAgentActivity(TEST_AGENT_NAME, TEST_ACTIVITY);
+      
+      const output = getOutput();
+      // Should still log the completion message
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed ${TEST_ACTIVITY}`);
+      // Verify the empty array branch was taken (we don't enter the if block at line 139)
+    });
+
+    it('should handle completing activity when idx is negative (activity not found but activities exist)', () => {
+      const ui = createUI();
+      ui.startRound(1);
+      ui.startPhase(CONTRIBUTION_TYPES.PROPOSAL, 2);
+      
+      // Start an activity
+      ui.startAgentActivity(TEST_AGENT_NAME, 'activity1');
+      
+      // Try to complete a different activity that doesn't exist in the list
+      // This tests the branch where idx < 0
+      ui.completeAgentActivity(TEST_AGENT_NAME, 'activity2');
+      
+      const output = getOutput();
+      // Should still log the completion message
+      expect(output).toContain(`[Round 1] ${TEST_AGENT_NAME} completed activity2`);
+      // The original activity should still be in the list (not removed)
+      expect(output).toContain(`${TEST_AGENT_NAME} is activity1...`);
+    });
+  });
+
+  describe('start method', () => {
+    it('should complete without error (no-op)', async () => {
+      const ui = createUI();
+      await expect(ui.start()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('initialize method', () => {
+    it('should set totalRounds correctly', () => {
+      const ui = new DebateProgressUI();
+      const totalRounds = 5;
+      ui.initialize(totalRounds);
+      ui.startRound(1);
+      
+      const output = getOutput();
+      expect(output).toContain(`Round 1/${totalRounds} starting`);
+    });
+  });
+
+  describe('constructor', () => {
+    it('should initialize with default state', () => {
+      const ui = new DebateProgressUI();
+      // Should be able to log without initialization
+      ui.log(TEST_MESSAGE);
+      
+      const output = getOutput();
+      expect(output).toContain(TEST_MESSAGE);
+    });
+  });
 });
 

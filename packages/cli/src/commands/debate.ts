@@ -709,6 +709,11 @@ async function resolveProblemDescription(problem: string | undefined, options: {
 
  
   const hasFile = !!options.problemDescription;
+  const hasProblem = !!(problem && problem.trim().length > 0);
+
+  // Validate exactly-one constraint BEFORE clearing problem (to catch explicit cases where both are provided)
+  validateExactlyOneProblemSource(hasProblem, hasFile);
+
   if (hasFile) {
     // Handle Commander.js quirk: when --problemDescription (-p) is used as 1st option, Commander.js may also
     // assign the path to the optional positional [problem] argument. If the option is set,
@@ -716,12 +721,7 @@ async function resolveProblemDescription(problem: string | undefined, options: {
     problem = undefined;
   }
 
-  const hasProblem = !!(problem && problem.trim().length > 0);
-
-  // Validate exactly-one constraint
-  validateExactlyOneProblemSource(hasProblem, hasFile);
-
-  // Return problem string if provided
+   // Return problem string if provided
   if (hasProblem) {
     return problem!.trim();
   }

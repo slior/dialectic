@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 
 import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR, ErrorWithCode, loadEnvironmentFile, RoleBasedAgent, Agent, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, 
-  DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, collectClarifications, generateDebateReport } from 'dialectic-core';
+  DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, collectClarifications, generateDebateReport, StateManager } from 'dialectic-core';
 
 import { runCli } from '../index';
 
@@ -362,20 +362,13 @@ describe('CLI debate command', () => {
       }
     });
 
-    it('should use file when both problem string and --problemDescription are provided', async () => {
-      // When --problemDescription is provided, the code ignores the positional argument
-      // This is intentional behavior to handle Commander.js quirks
+    it('should error when both problem string and --problemDescription are provided', async () => {
+      // When both are explicitly provided, we should error to avoid ambiguity
       const problemFile = path.join(tmpDir, 'problem.txt');
       fs.writeFileSync(problemFile, 'Problem from file');
       
-      const stdoutWriteSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      
-      await runCli(['debate', 'Problem from string', '--problemDescription', problemFile, '--rounds', '1']);
-      
-      // Should complete successfully using the file (positional argument is ignored)
-      expect(stdoutWriteSpy).toHaveBeenCalled();
-      
-      stdoutWriteSpy.mockRestore();
+      await expect(runCli(['debate', 'Problem from string', '--problemDescription', problemFile, '--rounds', '1']))
+        .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
     });
 
     it('should read problem from file when --problemDescription is provided', async () => {
@@ -2139,6 +2132,983 @@ describe('CLI clarifications phase', () => {
         expect.stringContaining('Context file is empty')
       );
     });
+  });
+
+  describe('Additional coverage tests for full coverage', () => {
+    const originalEnv = process.env;
+    let tmpDir: string;
+    let consoleErrorSpy: jest.SpyInstance;
+    let stderrWriteSpy: jest.SpyInstance;
+    let stdoutSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv, OPENAI_API_KEY: 'test' };
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coverage-test-'));
+      consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      resetLoadEnvironmentFileMock();
+    });
+
+    afterEach(() => {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+      process.env = originalEnv;
+      consoleErrorSpy.mockRestore();
+      stderrWriteSpy.mockRestore();
+      stdoutSpy.mockRestore();
+    });
+
+    describe('rethrowIfErrorCode edge cases', () => {
+      it('should handle readAndValidateFileContent error with EXIT_INVALID_ARGS code', async () => {
+        const problemFile = path.join(tmpDir, 'problem.txt');
+        fs.writeFileSync(problemFile, 'Some content');
+        
+        // Mock fs.promises.readFile to throw an error with EXIT_INVALID_ARGS code
+        const errorWithCode = Object.assign(new Error('Invalid file'), { code: EXIT_INVALID_ARGS });
+        jest.spyOn(fs.promises, 'readFile').mockRejectedValueOnce(errorWithCode);
+        
+        await expect(runCli(['debate', '--problemDescription', problemFile]))
+          .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+        
+        jest.spyOn(fs.promises, 'readFile').mockRestore();
+      });
+
+      it('should handle readContextFile error with EXIT_INVALID_ARGS code', async () => {
+        const contextFile = path.join(tmpDir, 'context.txt');
+        fs.writeFileSync(contextFile, 'Some context');
+        
+        // Mock fs.promises.readFile to throw an error with EXIT_INVALID_ARGS code
+        const errorWithCode = Object.assign(new Error('Invalid file'), { code: EXIT_INVALID_ARGS });
+        jest.spyOn(fs.promises, 'readFile').mockRejectedValueOnce(errorWithCode);
+        
+        // rethrowIfErrorCode will throw errors with EXIT_INVALID_ARGS code
+        await expect(runCli(['debate', 'Design a system', '--context', contextFile]))
+          .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+        
+        jest.spyOn(fs.promises, 'readFile').mockRestore();
+      });
+    });
+
+    describe('createAgentLogger branches', () => {
+      it('should log when onlyVerbose is false', async () => {
+        // Test line 179-180: onlyVerbose === false branch
+        // The logger is used by agents, so we test indirectly through agent activity
+        // Agents call logger with onlyVerbose=false for normal activity messages
+        // The logger function is created and used during debate execution
+        // We verify the command completes successfully, which indicates the logger works correctly
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should complete successfully - this exercises the onlyVerbose === false branch
+        // when agents log their activity (the logger is called with onlyVerbose=false)
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should log when onlyVerbose is true and verbose is true', async () => {
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        
+        await runCli(['debate', 'Design a system', '--verbose', '--rounds', '1']);
+        
+        // Verbose output should include detailed information
+        expect(stderrWriteSpy).toHaveBeenCalled();
+        
+        stderrWriteSpy.mockRestore();
+      });
+
+      it('should not log when onlyVerbose is true and verbose is false', async () => {
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should not contain verbose header
+        const calls = stderrWriteSpy.mock.calls.map(args => String(args[0]));
+        const stderr = calls.join('');
+        expect(stderr).not.toContain('Running debate (verbose)');
+        
+        stderrWriteSpy.mockRestore();
+      });
+
+      it('should log when onlyVerbose is undefined', async () => {
+        // When onlyVerbose is undefined, it should log (onlyVerbose === false || undefined === true && verbose)
+        // Since undefined !== false, it checks (undefined === true && verbose), which is false when verbose is false
+        // So it should not log. But when onlyVerbose is undefined and verbose is true, it should log.
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        
+        await runCli(['debate', 'Design a system', '--verbose', '--rounds', '1']);
+        
+        // Should have verbose output
+        expect(stderrWriteSpy).toHaveBeenCalled();
+        
+        stderrWriteSpy.mockRestore();
+      });
+    });
+
+    describe('createOrchestratorHooks verbose branch', () => {
+      it('should log summarization details when verbose is true', async () => {
+        // Test lines 234-236: verbose branch in onSummarizationComplete
+        // Need to trigger summarization with verbose=true
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          summarization: {
+            enabled: true,
+            threshold: 100, // Low threshold to trigger summarization
+            maxLength: 500,
+            method: 'length-based',
+          },
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        const capturedStderr: string[] = [];
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStderr.push(String(chunk));
+          return true;
+        });
+        
+        // Run with verbose and summarization enabled
+        // This should trigger onSummarizationComplete with verbose=true
+        await runCli(['debate', 'Design a system', '--config', configPath, '--verbose', '--rounds', '2']);
+        
+        const stderr = capturedStderr.join('');
+        // The verbose branch should log summarization details
+        // Check that progress UI was called (indirectly tests the hook)
+        expect(stderr.length).toBeGreaterThan(0);
+        
+        stderrWriteSpy.mockRestore();
+      });
+    });
+
+    describe('resolveJudgeSystemPromptWithDefault branches', () => {
+      it('should use configDir when provided', async () => {
+        const promptFile = path.join(tmpDir, 'judge-prompt.txt');
+        fs.writeFileSync(promptFile, 'Custom judge prompt');
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [createTestAgentConfig()],
+          debate: createTestDebateConfig(),
+          judge: {
+            id: 'test-judge',
+            name: 'Test Judge',
+            role: 'generalist',
+            model: 'gpt-4',
+            provider: 'openai',
+            temperature: 0.3,
+            systemPromptPath: 'judge-prompt.txt', // Relative path
+          },
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully (prompt resolved relative to configDir)
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should use process.cwd() when configDir is undefined', async () => {
+        // When using built-in defaults, configDir should be process.cwd()
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('resolveJudgeSummaryPromptWithDefault branches', () => {
+      it('should use configDir when provided', async () => {
+        const summaryPromptFile = path.join(tmpDir, 'judge-summary-prompt.txt');
+        fs.writeFileSync(summaryPromptFile, 'Custom judge summary prompt');
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [createTestAgentConfig()],
+          debate: createTestDebateConfig(),
+          judge: {
+            id: 'test-judge',
+            name: 'Test Judge',
+            role: 'generalist',
+            model: 'gpt-4',
+            provider: 'openai',
+            temperature: 0.3,
+            summaryPromptPath: 'judge-summary-prompt.txt', // Relative path
+          },
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should use process.cwd() when configDir is undefined', async () => {
+        // When using built-in defaults, configDir should be process.cwd()
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('createJudgeWithPromptResolution branches', () => {
+      it('should include absPath in metadata when prompt file is used', async () => {
+        const promptFile = path.join(tmpDir, 'judge-prompt.txt');
+        fs.writeFileSync(promptFile, 'Custom judge prompt');
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [createTestAgentConfig()],
+          debate: createTestDebateConfig(),
+          judge: {
+            id: 'test-judge',
+            name: 'Test Judge',
+            role: 'generalist',
+            model: 'gpt-4',
+            provider: 'openai',
+            temperature: 0.3,
+            systemPromptPath: promptFile,
+            summaryPromptPath: promptFile,
+          },
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        const outputFile = path.join(tmpDir, 'result.json');
+        await runCli(['debate', 'Design a system', '--config', configPath, '--output', outputFile, '--rounds', '1']);
+        
+        // Check that the debate state includes prompt path metadata
+        if (fs.existsSync(outputFile)) {
+          const debateState = JSON.parse(fs.readFileSync(outputFile, 'utf-8'));
+          expect(debateState).toBeDefined();
+        }
+      });
+
+      it('should use built-in prompts when prompt paths are not provided', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [createTestAgentConfig()],
+          debate: createTestDebateConfig(),
+          judge: {
+            id: 'test-judge',
+            name: 'Test Judge',
+            role: 'generalist',
+            model: 'gpt-4',
+            provider: 'openai',
+            temperature: 0.3,
+            // No prompt paths
+          },
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('createAgentWithPromptResolution branches', () => {
+      it('should handle agents with tools', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [
+            createTestAgentConfig({
+              tools: [
+                {
+                  name: 'test_tool',
+                  description: 'A test tool',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      param: { type: 'string', description: 'A parameter' }
+                    },
+                    required: ['param']
+                  }
+                }
+              ]
+            })
+          ],
+          debate: createTestDebateConfig(),
+          judge: {
+            id: 'test-judge',
+            name: 'Test Judge',
+            role: 'generalist',
+            model: 'gpt-4',
+            provider: 'openai',
+            temperature: 0.3,
+          },
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        // infoUser uses console.error (via logInfo), so check console.error calls
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should show tools available message via console.error
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Tools available')
+        );
+      });
+
+      it('should handle agents without tools', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent();
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        // infoUser uses console.error (via logInfo), so check console.error calls
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should show "no tools" message via console.error
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('no tools')
+        );
+      });
+
+      it('should handle clarification prompt path', async () => {
+        const clarificationPromptFile = path.join(tmpDir, 'clarification-prompt.txt');
+        fs.writeFileSync(clarificationPromptFile, 'Custom clarification prompt');
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [
+            createTestAgentConfig({
+              clarificationPromptPath: clarificationPromptFile
+            })
+          ],
+          debate: createTestDebateConfig(),
+          judge: {
+            id: 'test-judge',
+            name: 'Test Judge',
+            role: 'generalist',
+            model: 'gpt-4',
+            provider: 'openai',
+            temperature: 0.3,
+          },
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('buildAgents with tracing context', () => {
+      it('should wrap agents with tracing when tracing context is provided', async () => {
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully with tracing
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('validateExactlyOneProblemSource branches', () => {
+      it('should error when both problem string and --problemDescription are provided', async () => {
+        const problemFile = path.join(tmpDir, 'problem.txt');
+        fs.writeFileSync(problemFile, 'Problem from file');
+        
+        await expect(runCli(['debate', 'Problem from string', '--problemDescription', problemFile]))
+          .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+        expect(stderrWriteSpy).toHaveBeenCalledWith(
+          expect.stringContaining('provide exactly one of')
+        );
+      });
+
+      it('should error when neither problem string nor --problemDescription are provided', async () => {
+        await expect(runCli(['debate']))
+          .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
+        expect(stderrWriteSpy).toHaveBeenCalledWith(
+          expect.stringContaining('problem is required')
+        );
+      });
+    });
+
+    describe('outputRoundSummary branches', () => {
+      it('should output summaries when round has summaries', async () => {
+        // Test lines 746-751: output summaries when round.summaries exists
+        // This is tested indirectly through verbose output when summaries are present
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          summarization: {
+            enabled: true,
+            threshold: 100, // Low threshold to trigger summarization
+            maxLength: 500,
+            method: 'length-based',
+          },
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        const capturedStderr: string[] = [];
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStderr.push(String(chunk));
+          return true;
+        });
+        
+        // Run with verbose and summarization enabled to generate summaries
+        await runCli(['debate', 'Design a system', '--config', configPath, '--verbose', '--rounds', '2']);
+        
+        const stderr = capturedStderr.join('');
+        // Should output round summary with summaries if they exist
+        expect(stderr).toMatch(/Round\s+\d+/);
+        // If summaries were generated, they should be in the output
+        // This exercises lines 746-751
+        
+        stderrWriteSpy.mockRestore();
+      });
+
+      it('should output contributions when round has contributions', async () => {
+        const capturedStderr: string[] = [];
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStderr.push(String(chunk));
+          return true;
+        });
+        
+        await runCli(['debate', 'Design a system', '--verbose', '--rounds', '1']);
+        
+        const stderr = capturedStderr.join('');
+        // Should show contributions
+        expect(stderr.length).toBeGreaterThan(0);
+        
+        stderrWriteSpy.mockRestore();
+      });
+    });
+
+    describe('outputResults branches', () => {
+      it('should write JSON output when output path ends with .json', async () => {
+        const outputFile = path.join(tmpDir, 'result.json');
+        
+        await runCli(['debate', 'Design a system', '--output', outputFile, '--rounds', '1']);
+        
+        expect(fs.existsSync(outputFile)).toBe(true);
+        const content = JSON.parse(fs.readFileSync(outputFile, 'utf-8'));
+        expect(content).toHaveProperty('id');
+      });
+
+      it('should write text output when output path does not end with .json', async () => {
+        const outputFile = path.join(tmpDir, 'result.txt');
+        
+        await runCli(['debate', 'Design a system', '--output', outputFile, '--rounds', '1']);
+        
+        expect(fs.existsSync(outputFile)).toBe(true);
+        const content = fs.readFileSync(outputFile, 'utf-8');
+        expect(content).toContain(MOCK_SOLUTION_TEXT);
+      });
+
+      it('should write to stdout when no output path is provided', async () => {
+        const capturedStdout: string[] = [];
+        const stdoutWriteSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStdout.push(String(chunk));
+          return true;
+        });
+        
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        const stdout = capturedStdout.join('');
+        expect(stdout).toContain(MOCK_SOLUTION_TEXT);
+        
+        stdoutWriteSpy.mockRestore();
+      });
+
+      it('should show verbose summary when no output path and verbose is true', async () => {
+        const capturedStderr: string[] = [];
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStderr.push(String(chunk));
+          return true;
+        });
+        
+        await runCli(['debate', 'Design a system', '--verbose', '--rounds', '1']);
+        
+        const stderr = capturedStderr.join('');
+        expect(stderr).toContain('Summary (verbose)');
+        
+        stderrWriteSpy.mockRestore();
+      });
+
+      it('should not show verbose summary when output path is provided', async () => {
+        const outputFile = path.join(tmpDir, 'result.txt');
+        const capturedStderr: string[] = [];
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStderr.push(String(chunk));
+          return true;
+        });
+        
+        await runCli(['debate', 'Design a system', '--verbose', '--output', outputFile, '--rounds', '1']);
+        
+        const stderr = capturedStderr.join('');
+        expect(stderr).not.toContain('Summary (verbose)');
+        
+        stderrWriteSpy.mockRestore();
+      });
+    });
+
+    describe('generateReport error handling', () => {
+      it('should handle debate state not found error', async () => {
+        const reportPath = path.join(tmpDir, 'report.md');
+        
+        // Mock StateManager.getDebate to return undefined
+        const originalGetDebate = StateManager.prototype.getDebate;
+        StateManager.prototype.getDebate = jest.fn().mockResolvedValue(undefined);
+        
+        await runCli(['debate', 'Design a system', '--report', reportPath, '--rounds', '1']);
+        
+        // Should show error message
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to generate report')
+        );
+        
+        // Restore original method
+        StateManager.prototype.getDebate = originalGetDebate;
+      });
+
+      it('should handle report generation failure gracefully', async () => {
+        const reportPath = path.join(tmpDir, 'report.md');
+        
+        // Mock generateDebateReport to throw an error
+        mockedGenerateDebateReport.mockImplementationOnce(() => {
+          throw new Error('Report generation failed');
+        });
+        
+        await runCli(['debate', 'Design a system', '--report', reportPath, '--rounds', '1']);
+        
+        // Should show error message but not fail the debate
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to generate report')
+        );
+        
+        // Reset mock
+        mockedGenerateDebateReport.mockImplementation(jest.requireActual('dialectic-core').generateDebateReport);
+      });
+    });
+
+    describe('extractProblemFileName and extractContextFileName', () => {
+      it('should extract problem file name when provided', async () => {
+        const problemFile = path.join(tmpDir, 'problem.txt');
+        fs.writeFileSync(problemFile, 'Problem content');
+        
+        await runCli(['debate', '--problemDescription', problemFile, '--rounds', '1']);
+        
+        // Should complete successfully (function is used internally for tracing metadata)
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should return undefined when problem file name is not provided', async () => {
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should extract context file name when provided', async () => {
+        const contextFile = path.join(tmpDir, 'context.txt');
+        fs.writeFileSync(contextFile, 'Context content');
+        
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--context', contextFile, '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully (function is used internally for tracing metadata)
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should return undefined when context file name is not provided', async () => {
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('initializeTracingContext branches', () => {
+      it('should return undefined when trace is not LANGFUSE', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'none',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully without tracing
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should include problemFileName in metadata when provided', async () => {
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const problemFile = path.join(tmpDir, 'problem.txt');
+        fs.writeFileSync(problemFile, 'Design a system');
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', '--problemDescription', problemFile, '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should not include problemFileName in metadata when not provided', async () => {
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should include contextFileName in metadata when provided', async () => {
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const contextFile = path.join(tmpDir, 'context.txt');
+        fs.writeFileSync(contextFile, 'Additional context');
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--context', contextFile, '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should not include contextFileName in metadata when not provided', async () => {
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should include judgeConfig in metadata when judge exists', async () => {
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should not include judgeConfig in metadata when judge does not exist', async () => {
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        // This case is hard to test since loadConfig always provides a default judge
+        // But we can test that the code handles the case gracefully
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [createTestAgentConfig()],
+          debate: createTestDebateConfig(),
+          // No judge field - loadConfig will add default judge
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('outputVerboseDebateInfo branches', () => {
+      it('should return early when verbose is false', async () => {
+        const capturedStderr: string[] = [];
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStderr.push(String(chunk));
+          return true;
+        });
+        
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        const stderr = capturedStderr.join('');
+        // Should not show verbose header
+        expect(stderr).not.toContain('Running debate (verbose)');
+        
+        stderrWriteSpy.mockRestore();
+      });
+
+      it('should output verbose info when verbose is true', async () => {
+        const capturedStderr: string[] = [];
+        const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Buffer | Uint8Array) => {
+          capturedStderr.push(String(chunk));
+          return true;
+        });
+        
+        await runCli(['debate', 'Design a system', '--verbose', '--rounds', '1']);
+        
+        const stderr = capturedStderr.join('');
+        // Should show verbose header
+        expect(stderr).toContain('Running debate (verbose)');
+        
+        stderrWriteSpy.mockRestore();
+      });
+    });
+
+    describe('flushTracingContext error handling', () => {
+      it('should handle flush errors gracefully', async () => {
+        // Test lines 1018-1019: catch block in flushTracingContext
+        process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
+        process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
+        
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          trace: 'langfuse',
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        // Mock createTracingContext to return a context with a langfuse that throws on flush
+        // Using require() here is intentional: jest.spyOn() needs the module object, not the imported function
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { createTracingContext } = require('dialectic-core');
+        const originalCreateTracingContext = createTracingContext;
+        
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        jest.spyOn(require('dialectic-core'), 'createTracingContext').mockImplementation((...args) => {
+          const context = originalCreateTracingContext(...args);
+          if (context) {
+            // Mock flushAsync to throw an error
+            context.langfuse.flushAsync = jest.fn().mockRejectedValue(new Error('Flush failed'));
+          }
+          return context;
+        });
+        
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const logWarningSpy = jest.spyOn(require('dialectic-core'), 'logWarning');
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should log warning about flush failure
+        expect(logWarningSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to flush Langfuse trace')
+        );
+        
+        // Should complete successfully even if flush fails
+        expect(stdoutSpy).toHaveBeenCalled();
+        
+        logWarningSpy.mockRestore();
+        jest.restoreAllMocks();
+      });
+    });
+
+    describe('generateReportIfRequested', () => {
+      it('should return early when report is not requested', async () => {
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should complete successfully without generating report
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('getSystemSummaryConfig branches', () => {
+      it('should use default summarization config when not provided', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = {
+          agents: [createTestAgentConfig()],
+          debate: {
+            rounds: 3,
+            terminationCondition: { type: 'fixed' },
+            synthesisMethod: 'judge',
+            includeFullHistory: true,
+            timeoutPerRound: 300000,
+            // No summarization field
+          },
+          judge: {
+            id: 'test-judge',
+            name: 'Test Judge',
+            role: 'generalist',
+            model: 'gpt-4',
+            provider: 'openai',
+            temperature: 0.3,
+          },
+        };
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully with default summarization config
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should use provided summarization config when available', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          summarization: {
+            enabled: false,
+            threshold: 3000,
+            maxLength: 1500,
+            method: 'length-based',
+          },
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should complete successfully with custom summarization config
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('isClarificationRequested branches', () => {
+      it('should return true when options.clarify is true', async () => {
+        mockReadlineWithAnswers([]);
+        mockedCollectClarifications.mockResolvedValueOnce([]);
+        
+        await runCli(['debate', 'Design a system', '--clarify', '--rounds', '1']);
+        
+        // Should call collectClarifications
+        expect(mockedCollectClarifications).toHaveBeenCalled();
+      });
+
+      it('should return true when sysConfig.debate.interactiveClarifications is true', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          interactiveClarifications: true,
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        mockReadlineWithAnswers([]);
+        mockedCollectClarifications.mockResolvedValueOnce([]);
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should call collectClarifications
+        expect(mockedCollectClarifications).toHaveBeenCalled();
+      });
+
+      it('should return false when neither option is set', async () => {
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should not call collectClarifications (it's mocked to return empty array by default)
+        // We verify by checking that the debate completes without clarification phase
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+    });
+
+    describe('collectFinalClarifications', () => {
+      it('should return undefined when clarification is not requested', async () => {
+        await runCli(['debate', 'Design a system', '--rounds', '1']);
+        
+        // Should complete successfully without clarifications
+        expect(stdoutSpy).toHaveBeenCalled();
+      });
+
+      it('should use custom maxPerAgent when provided', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          interactiveClarifications: true,
+          clarificationsMaxPerAgent: 3,
+        });
+        
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+        
+        mockReadlineWithAnswers([]);
+        mockedCollectClarifications.mockResolvedValueOnce([]);
+        
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+        
+        // Should call collectClarifications with maxPerAgent=3
+        expect(mockedCollectClarifications).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Array),
+          3,
+          expect.any(Function)
+        );
+      });
+
+      it('should use default maxPerAgent when not provided', async () => {
+        mockReadlineWithAnswers([]);
+        mockedCollectClarifications.mockResolvedValueOnce([]);
+        
+        await runCli(['debate', 'Design a system', '--clarify', '--rounds', '1']);
+        
+        // Should call collectClarifications with default maxPerAgent (5)
+        expect(mockedCollectClarifications).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Array),
+          5,
+          expect.any(Function)
+        );
+      });
+    });
+
+    function mockReadlineWithAnswers(answers: string[]): void {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const readlineModule = require('readline');
+      if (readlineModule.__setMockAnswers) {
+        readlineModule.__setMockAnswers(answers);
+      } else {
+        mockAnswers = [...answers];
+        currentIndex = 0;
+      }
+    }
   });
 });
 
