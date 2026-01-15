@@ -6,14 +6,19 @@ import { ToolSchema } from '../types/tool.types';
 import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
 
 /**
+ * Tool name constant for the File Read tool.
+ */
+export const FILE_READ_TOOL_NAME = 'file_read';
+
+/**
  * File Read tool allows agents to read the contents of text files.
  * Returns the file content as a string, or an error message if the file cannot be read.
  */
 export class FileReadTool implements ToolImplementation {
-  name = 'file_read';
+  name = FILE_READ_TOOL_NAME;
 
   schema: ToolSchema = {
-    name: 'file_read',
+    name: FILE_READ_TOOL_NAME,
     description: 'Read the contents of a text file. Returns the file content as a string, or an error message if the file cannot be read.',
     parameters: {
       type: 'object',

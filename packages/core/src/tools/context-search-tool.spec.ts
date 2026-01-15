@@ -1,10 +1,10 @@
 
 import { DebateContext, DebateRound, Contribution, CONTRIBUTION_TYPES, DebateState, DEBATE_STATUS } from '../types/debate.types';
 
-import { ContextSearchTool } from './context-search-tool';
+import { CONTEXT_SEARCH_TOOL_NAME, ContextSearchTool } from './context-search-tool';
 
 // Test constants
-const TOOL_NAME_CONTEXT_SEARCH = 'context_search';
+const TOOL_NAME_CONTEXT_SEARCH = CONTEXT_SEARCH_TOOL_NAME;
 const AGENT_ID_1 = 'agent1';
 const AGENT_ID_2 = 'agent2';
 const AGENT_ROLE_ARCHITECT = 'architect';

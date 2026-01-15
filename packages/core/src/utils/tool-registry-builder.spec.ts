@@ -1,3 +1,6 @@
+import { CONTEXT_SEARCH_TOOL_NAME } from '../tools/context-search-tool';
+import { FILE_READ_TOOL_NAME } from '../tools/file-read-tool';
+import { LIST_FILES_TOOL_NAME } from '../tools/list-files-tool';
 import { ToolRegistry } from '../tools/tool-registry';
 import { AgentConfig, AGENT_ROLES, LLM_PROVIDERS } from '../types/agent.types';
 
@@ -8,9 +11,9 @@ const AGENT_ID_TEST = 'test-agent';
 const AGENT_ID_1 = 'agent-1';
 const AGENT_ID_2 = 'agent-2';
 const AGENT_NAME_TEST = 'Test Agent';
-const TOOL_NAME_CONTEXT_SEARCH = 'context_search';
-const TOOL_NAME_FILE_READ = 'file_read';
-const TOOL_NAME_LIST_FILES = 'list_files';
+const TOOL_NAME_CONTEXT_SEARCH = CONTEXT_SEARCH_TOOL_NAME;
+const TOOL_NAME_FILE_READ = FILE_READ_TOOL_NAME;
+const TOOL_NAME_LIST_FILES = LIST_FILES_TOOL_NAME;
 const TOOL_NAME_UNKNOWN = 'unknown_tool';
 const TOOL_NAME_UNKNOWN_1 = 'unknown_tool_1';
 const TOOL_NAME_UNKNOWN_2 = 'unknown_tool_2';

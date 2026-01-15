@@ -2,10 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { ListFilesTool } from './list-files-tool';
+import { LIST_FILES_TOOL_NAME, ListFilesTool } from './list-files-tool';
 
 // Test constants
-const TOOL_NAME_LIST_FILES = 'list_files';
+const TOOL_NAME_LIST_FILES = LIST_FILES_TOOL_NAME;
 const PARAM_TYPE_OBJECT = 'object';
 const PARAM_TYPE_STRING = 'string';
 const PARAM_NAME_PATH = 'path';

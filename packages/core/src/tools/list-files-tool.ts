@@ -6,6 +6,11 @@ import { ToolSchema } from '../types/tool.types';
 import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
 
 /**
+ * Tool name constant for the List Files tool.
+ */
+export const LIST_FILES_TOOL_NAME = 'list_files';
+
+/**
  * File system entry type constants.
  */
 const FILE_SYSTEM_ENTRY_TYPE = {
@@ -28,10 +33,10 @@ interface FileSystemEntry {
  * Returns an array of entries with their absolute paths and types.
  */
 export class ListFilesTool implements ToolImplementation {
-  name = 'list_files';
+  name = LIST_FILES_TOOL_NAME;
 
   schema: ToolSchema = {
-    name: 'list_files',
+    name: LIST_FILES_TOOL_NAME,
     description: 'List all files and directories in a given directory. Returns an array of entries with their absolute paths and types (file or directory).',
     parameters: {
       type: 'object',

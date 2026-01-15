@@ -20,14 +20,19 @@ type ContextSearchMatch = {
 };
 
 /**
+ * Tool name constant for the Context Search tool.
+ */
+export const CONTEXT_SEARCH_TOOL_NAME = 'context_search';
+
+/**
  * Context Search tool allows agents to search for terms in debate history.
  * Returns relevant contributions containing the search term.
  */
 export class ContextSearchTool implements ToolImplementation {
-  name = 'context_search';
+  name = CONTEXT_SEARCH_TOOL_NAME;
   
   schema: ToolSchema = {
-    name: 'context_search',
+    name: CONTEXT_SEARCH_TOOL_NAME,
     description: 'Search for a term in the debate history. Returns relevant contributions containing the search term.',
     parameters: {
       type: 'object',

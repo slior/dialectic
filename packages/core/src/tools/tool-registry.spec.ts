@@ -1,3 +1,4 @@
+import { CONTEXT_SEARCH_TOOL_NAME } from './context-search-tool';
 import { ToolImplementation } from './tool-implementation';
 import { ToolRegistry, createBaseRegistry } from './tool-registry';
 
@@ -8,7 +9,7 @@ const TOOL_NAME_TOOL2 = 'tool2';
 const TOOL_NAME_BASE = 'base_tool';
 const TOOL_NAME_NEW = 'new_tool';
 const TOOL_NAME_DUPLICATE = 'duplicate';
-const TOOL_NAME_CONTEXT_SEARCH = 'context_search';
+const TOOL_NAME_CONTEXT_SEARCH = CONTEXT_SEARCH_TOOL_NAME;
 const TOOL_DESCRIPTION_TEST = 'A test tool';
 const TOOL_DESCRIPTION_TOOL1 = 'Tool 1';
 const TOOL_DESCRIPTION_TOOL2 = 'Tool 2';

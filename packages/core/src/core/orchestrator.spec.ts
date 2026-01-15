@@ -6,6 +6,7 @@ import { DebateConfig, DebateRound, DebateState, Solution, AgentConfig,
           Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult, AgentRole, Contribution } from 'dialectic-core';
 
 import { LLMProvider } from '../providers/llm-provider';
+import { CONTEXT_SEARCH_TOOL_NAME } from '../tools/context-search-tool';
 
 import { Agent } from './agent';
 import { JudgeAgent } from './judge';
@@ -792,7 +793,7 @@ describe('Orchestrator Tool Metadata', () => {
       const toolCalls: ToolCall[] = [
         {
           id: 'call_1',
-          name: 'context_search',
+          name: CONTEXT_SEARCH_TOOL_NAME,
           arguments: '{"term":"test"}',
         },
       ];
@@ -816,7 +817,7 @@ describe('Orchestrator Tool Metadata', () => {
       );
 
       expect(contribution?.metadata.toolCalls).toBeDefined();
-      expect(contribution?.metadata.toolCalls?.[0]?.name).toBe('context_search');
+      expect(contribution?.metadata.toolCalls?.[0]?.name).toBe(CONTEXT_SEARCH_TOOL_NAME);
     });
   });
 

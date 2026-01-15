@@ -2,10 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { FileReadTool } from './file-read-tool';
+import { FILE_READ_TOOL_NAME, FileReadTool } from './file-read-tool';
 
 // Test constants
-const TOOL_NAME_FILE_READ = 'file_read';
+const TOOL_NAME_FILE_READ = FILE_READ_TOOL_NAME;
 const PARAM_TYPE_OBJECT = 'object';
 const PARAM_TYPE_STRING = 'string';
 const PARAM_NAME_PATH = 'path';
