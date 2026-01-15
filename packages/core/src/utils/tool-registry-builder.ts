@@ -11,11 +11,14 @@ import { logWarning } from './console';
  * Map of available tool implementations.
  * Tools are registered here with their implementation factories.
  * Tool schemas are defined in the tool classes themselves.
+ * 
+ * Tools that require context directory accept it as a parameter.
+ * Tools that don't need context directory ignore the parameter.
  */
-const AVAILABLE_TOOLS: Record<string, () => ToolImplementation> = {
+const AVAILABLE_TOOLS: Record<string, (contextDirectory?: string) => ToolImplementation> = {
   [CONTEXT_SEARCH_TOOL_NAME]: () => new ContextSearchTool(),
-  [FILE_READ_TOOL_NAME]: () => new FileReadTool(),
-  [LIST_FILES_TOOL_NAME]: () => new ListFilesTool(),
+  [FILE_READ_TOOL_NAME]: (contextDirectory) => new FileReadTool(contextDirectory),
+  [LIST_FILES_TOOL_NAME]: (contextDirectory) => new ListFilesTool(contextDirectory),
 };
 
 /**
@@ -28,9 +31,10 @@ const AVAILABLE_TOOLS: Record<string, () => ToolImplementation> = {
  * a warning is issued and the tool is skipped.
  * 
  * @param agentConfig - Agent configuration containing optional tools.
+ * @param contextDirectory - Optional absolute path to the context directory for file access tools.
  * @returns Tool registry for the agent (empty if no tools configured).
  */
-export function buildToolRegistry(agentConfig: AgentConfig): ToolRegistry {
+export function buildToolRegistry(agentConfig: AgentConfig, contextDirectory?: string): ToolRegistry {
   const registry = new ToolRegistry();
 
   // If agent has no tools configured, return empty registry
@@ -54,7 +58,7 @@ export function buildToolRegistry(agentConfig: AgentConfig): ToolRegistry {
       continue;
     }
 
-    const toolImplementation = createImplementation();
+    const toolImplementation = createImplementation(contextDirectory);
     
     // TODO: Support tool configuration overrides from toolConfig if needed
     // For now, use default implementation

@@ -21,8 +21,6 @@ describe('FileReadTool', () => {
   let testDirPath: string;
 
   beforeEach(() => {
-    tool = new FileReadTool();
-    
     // Create temporary directory for tests
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-read-tool-test-'));
     testFilePath = path.join(tempDir, 'test-file.txt');
@@ -30,6 +28,9 @@ describe('FileReadTool', () => {
     
     // Create test directory
     fs.mkdirSync(testDirPath, { recursive: true });
+    
+    // Create tool with tempDir as context directory
+    tool = new FileReadTool(tempDir);
   });
 
   afterEach(() => {
@@ -323,6 +324,106 @@ describe('FileReadTool', () => {
       readFileSyncSpy.mockRestore();
       existsSyncSpy.mockRestore();
       statSyncSpy.mockRestore();
+    });
+  });
+
+  describe('Context Directory Security', () => {
+    let contextDir: string;
+    let fileInContext: string;
+    let fileOutsideContext: string;
+    let parentDir: string;
+
+    beforeEach(() => {
+      // Create context directory structure
+      contextDir = path.join(tempDir, 'context');
+      parentDir = tempDir;
+      fileInContext = path.join(contextDir, 'allowed.txt');
+      fileOutsideContext = path.join(parentDir, 'outside.txt');
+
+      fs.mkdirSync(contextDir, { recursive: true });
+      fs.writeFileSync(fileInContext, FILE_CONTENT_TEST, 'utf-8');
+      fs.writeFileSync(fileOutsideContext, FILE_CONTENT_TEST, 'utf-8');
+    });
+
+    it('should allow reading files within context directory', () => {
+      const toolWithContext = new FileReadTool(contextDir);
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: fileInContext });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.content).toBe(FILE_CONTENT_TEST);
+    });
+
+    it('should reject files outside context directory', () => {
+      const toolWithContext = new FileReadTool(contextDir);
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: fileOutsideContext });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe('Access denied: path is outside the context directory');
+    });
+
+    it('should reject paths with .. traversal outside context directory', () => {
+      const toolWithContext = new FileReadTool(contextDir);
+      const traversalPath = path.join(contextDir, '..', 'outside.txt');
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: traversalPath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe('Access denied: path is outside the context directory');
+    });
+
+    it('should allow relative paths within context directory', () => {
+      const toolWithContext = new FileReadTool(contextDir);
+      // Note: path.resolve() resolves relative paths relative to process.cwd(),
+      // so we need to change the working directory to contextDir for relative paths to work
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(contextDir);
+        const relativePath = path.relative(contextDir, fileInContext);
+        const result = toolWithContext.execute({ [PARAM_NAME_PATH]: relativePath });
+        const parsed = JSON.parse(result);
+
+        expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+        expect(parsed.result.content).toBe(FILE_CONTENT_TEST);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should default to current working directory when context directory not provided', () => {
+      const toolDefault = new FileReadTool();
+      const cwd = process.cwd();
+      const fileInCwd = path.join(cwd, 'test-file.txt');
+      
+      // Create file in CWD for test
+      fs.writeFileSync(fileInCwd, FILE_CONTENT_TEST, 'utf-8');
+      
+      try {
+        const result = toolDefault.execute({ [PARAM_NAME_PATH]: fileInCwd });
+        const parsed = JSON.parse(result);
+        // File should be accessible since it's in CWD and tool defaults to CWD
+        expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      } finally {
+        // Clean up
+        if (fs.existsSync(fileInCwd)) {
+          fs.unlinkSync(fileInCwd);
+        }
+      }
+    });
+
+    it('should handle nested directories within context directory', () => {
+      const nestedDir = path.join(contextDir, 'nested', 'deep');
+      const nestedFile = path.join(nestedDir, 'file.txt');
+      fs.mkdirSync(nestedDir, { recursive: true });
+      fs.writeFileSync(nestedFile, FILE_CONTENT_TEST, 'utf-8');
+
+      const toolWithContext = new FileReadTool(contextDir);
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: nestedFile });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.content).toBe(FILE_CONTENT_TEST);
     });
   });
 });

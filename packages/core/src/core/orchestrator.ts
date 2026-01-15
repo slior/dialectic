@@ -131,6 +131,7 @@ export interface OrchestratorHooks {
  */
 export class DebateOrchestrator {
   private tracingContext?: TracingContext;
+  private contextDirectory?: string;
 
   constructor(
     private agents: Agent[],
@@ -138,10 +139,14 @@ export class DebateOrchestrator {
     private stateManager: StateManager,
     private config: DebateConfig,
     private hooks?: OrchestratorHooks,
-    tracingContext?: TracingContext
+    tracingContext?: TracingContext,
+    contextDirectory?: string
   ) {
     if (tracingContext !== undefined) {
       this.tracingContext = tracingContext;
+    }
+    if (contextDirectory !== undefined) {
+      this.contextDirectory = contextDirectory;
     }
   }
 
@@ -211,6 +216,7 @@ export class DebateOrchestrator {
     const base: DebateContext = {
       problem: state.problem,
       ...(state.context !== undefined && { context: state.context }),
+      ...(this.contextDirectory && { contextDirectory: this.contextDirectory }),
       ...(this.config.includeFullHistory && { history: state.rounds }),
       includeFullHistory: this.config.includeFullHistory,
       ...(state.clarifications && { clarifications: state.clarifications }),
@@ -340,7 +346,7 @@ export class DebateOrchestrator {
   private async buildProposalContributionFromLLM( agent: Agent, state: DebateState, preparedContexts: Map<string, DebateContext>, startedAtMs: number ): Promise<Contribution>
   {
     const ctx = preparedContexts.get(agent.config.id) || this.buildContext(state);
-    const enhancedProblem = enhanceProblemWithContext(state.problem, state.context);
+    const enhancedProblem = enhanceProblemWithContext(state.problem, state.context, this.contextDirectory);
     const proposal = await agent.propose(enhancedProblem, ctx, state);
     return this.buildContribution( agent, CONTRIBUTION_TYPES.PROPOSAL, proposal.content, proposal.metadata, startedAtMs );
   }
@@ -477,7 +483,7 @@ export class DebateOrchestrator {
     }
     
     const ctx = this.buildContext(state);
-    const enhancedProblem = enhanceProblemWithContext(state.problem, state.context);
+    const enhancedProblem = enhanceProblemWithContext(state.problem, state.context, this.contextDirectory);
     const solution = await this.judge.synthesize(enhancedProblem, state.rounds, ctx);
     return solution;
   }

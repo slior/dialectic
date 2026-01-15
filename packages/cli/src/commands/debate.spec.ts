@@ -1240,8 +1240,8 @@ describe('Tracing context', () => {
     process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
     process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
     
-    const contextFile = path.join(tmpDir, 'context.txt');
-    fs.writeFileSync(contextFile, 'Additional context');
+    const contextDir = path.join(tmpDir, 'context');
+    fs.mkdirSync(contextDir, { recursive: true });
     
     const configPath = getTestConfigPath(tmpDir);
     const configContent = createTestConfigContent(undefined, {
@@ -1250,7 +1250,7 @@ describe('Tracing context', () => {
     
     fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
     
-    await runCli(['debate', 'Design a system', '--context', contextFile, '--config', configPath, '--rounds', '1']);
+    await runCli(['debate', 'Design a system', '--context', contextDir, '--config', configPath, '--rounds', '1']);
     
     // Should complete successfully (metadata includes contextFileName)
     expect(stdoutSpy).toHaveBeenCalled();
@@ -2037,9 +2037,10 @@ describe('CLI clarifications phase', () => {
     });
   });
 
-  describe('Context file handling', () => {
+  describe('Context directory handling', () => {
     let tmpDir: string;
     const originalEnv = process.env;
+    const originalCwd = process.cwd();
 
     beforeEach(() => {
       process.env = { ...originalEnv, OPENAI_API_KEY: 'test' };
@@ -2053,83 +2054,91 @@ describe('CLI clarifications phase', () => {
         // Ignore cleanup errors
       }
       process.env = originalEnv;
+      process.chdir(originalCwd);
     });
 
-    it('should return undefined when context file does not exist', async () => {
-      const nonExistentFile = path.join(tmpDir, 'nonexistent.txt');
+    it('should accept a valid directory path', async () => {
+      // Create a subdirectory to use as context directory
+      const contextDir = path.join(tmpDir, 'context');
+      fs.mkdirSync(contextDir, { recursive: true });
       
-      await runCli(['debate', 'Design a system', '--context', nonExistentFile]);
+      // Should complete successfully without errors
+      await runCli(['debate', 'Design a system', '--context', contextDir]);
       
-      // Should complete successfully with warning
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Context file not found')
-      );
-    });
-
-    it('should return undefined when context path is a directory', async () => {
-      await runCli(['debate', 'Design a system', '--context', tmpDir]);
-      
-      // Should complete successfully with warning
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Context path is a directory')
-      );
-    });
-
-    it('should return undefined when context file is empty', async () => {
-      const emptyFile = path.join(tmpDir, 'empty.txt');
-      fs.writeFileSync(emptyFile, '');
-      
-      await runCli(['debate', 'Design a system', '--context', emptyFile]);
-      
-      // Should complete successfully with warning
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Context file is empty')
-      );
-    });
-
-    it('should truncate context file exceeding MAX_CONTEXT_LENGTH', async () => {
-      const longFile = path.join(tmpDir, 'long.txt');
-      const longContent = 'x'.repeat(6000); // Exceeds 5000 character limit
-      fs.writeFileSync(longFile, longContent);
-      
-      await runCli(['debate', 'Design a system', '--context', longFile]);
-      
-      // Should complete successfully with truncation warning
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Context file exceeds 5000 characters')
-      );
-    });
-
-    it('should return undefined when context file read fails', async () => {
-      const contextFile = path.join(tmpDir, 'context.txt');
-      fs.writeFileSync(contextFile, 'Some context');
-      
-      // Mock fs.promises.readFile to throw an error
-      jest.spyOn(fs.promises, 'readFile').mockRejectedValueOnce(new Error('Permission denied'));
-      
-      await runCli(['debate', 'Design a system', '--context', contextFile]);
-      
-      // Should complete successfully with warning
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to read context file')
-      );
-      
-      jest.spyOn(fs.promises, 'readFile').mockRestore();
-    });
-
-    it('should return context content when file is valid', async () => {
-      const contextFile = path.join(tmpDir, 'context.txt');
-      const contextContent = 'Additional context information';
-      fs.writeFileSync(contextFile, contextContent);
-      
-      await runCli(['debate', 'Design a system', '--context', contextFile]);
-      
-      // Should complete successfully without warnings about missing/empty context
+      // No error should be thrown
       expect(consoleErrorSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('Context file not found')
+        expect.stringContaining('Context directory not found')
       );
       expect(consoleErrorSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('Context file is empty')
+        expect.stringContaining('Context path is not a directory')
+      );
+    });
+
+    it('should throw error when context directory does not exist', async () => {
+      const nonExistentDir = path.join(tmpDir, 'nonexistent');
+      
+      // Error should have correct exit code and message
+      await expect(runCli(['debate', 'Design a system', '--context', nonExistentDir]))
+        .rejects.toMatchObject({
+          code: EXIT_INVALID_ARGS,
+          message: expect.stringContaining('Context directory not found')
+        });
+    });
+
+    it('should throw error when context path is a file (not a directory)', async () => {
+      const contextFile = path.join(tmpDir, 'context.txt');
+      fs.writeFileSync(contextFile, 'Some content');
+      
+      // Error should have correct exit code and message
+      await expect(runCli(['debate', 'Design a system', '--context', contextFile]))
+        .rejects.toMatchObject({
+          code: EXIT_INVALID_ARGS,
+          message: expect.stringContaining('Context path is not a directory')
+        });
+    });
+
+    it('should default to current working directory when context is not provided', async () => {
+      // Change to tmpDir to test default behavior
+      process.chdir(tmpDir);
+      
+      // Should complete successfully without errors
+      await runCli(['debate', 'Design a system']);
+      
+      // No error should be thrown
+      expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Context directory')
+      );
+    });
+
+    it('should resolve relative paths relative to current working directory', async () => {
+      // Create a nested directory structure
+      const baseDir = path.join(tmpDir, 'base');
+      const nestedDir = path.join(baseDir, 'nested');
+      fs.mkdirSync(nestedDir, { recursive: true });
+      
+      // Change to baseDir and use relative path
+      process.chdir(baseDir);
+      
+      // Should accept relative path 'nested'
+      await runCli(['debate', 'Design a system', '--context', 'nested']);
+      
+      // No error should be thrown
+      expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Context directory not found')
+      );
+    });
+
+    it('should accept absolute paths', async () => {
+      // Create a directory to use as context directory
+      const contextDir = path.join(tmpDir, 'context');
+      fs.mkdirSync(contextDir, { recursive: true });
+      
+      // Use absolute path
+      await runCli(['debate', 'Design a system', '--context', contextDir]);
+      
+      // No error should be thrown
+      expect(consoleErrorSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Context directory not found')
       );
     });
   });
@@ -2177,19 +2186,16 @@ describe('CLI clarifications phase', () => {
         jest.spyOn(fs.promises, 'readFile').mockRestore();
       });
 
-      it('should handle readContextFile error with EXIT_INVALID_ARGS code', async () => {
+      it('should handle validateContextDirectory error with EXIT_INVALID_ARGS code', async () => {
         const contextFile = path.join(tmpDir, 'context.txt');
         fs.writeFileSync(contextFile, 'Some context');
         
-        // Mock fs.promises.readFile to throw an error with EXIT_INVALID_ARGS code
-        const errorWithCode = Object.assign(new Error('Invalid file'), { code: EXIT_INVALID_ARGS });
-        jest.spyOn(fs.promises, 'readFile').mockRejectedValueOnce(errorWithCode);
-        
-        // rethrowIfErrorCode will throw errors with EXIT_INVALID_ARGS code
+        // validateContextDirectory throws error with EXIT_INVALID_ARGS when path is a file
         await expect(runCli(['debate', 'Design a system', '--context', contextFile]))
-          .rejects.toHaveProperty('code', EXIT_INVALID_ARGS);
-        
-        jest.spyOn(fs.promises, 'readFile').mockRestore();
+          .rejects.toMatchObject({
+            code: EXIT_INVALID_ARGS,
+            message: expect.stringContaining('Context path is not a directory')
+          });
       });
     });
 
@@ -2718,9 +2724,9 @@ describe('CLI clarifications phase', () => {
         expect(stdoutSpy).toHaveBeenCalled();
       });
 
-      it('should extract context file name when provided', async () => {
-        const contextFile = path.join(tmpDir, 'context.txt');
-        fs.writeFileSync(contextFile, 'Context content');
+      it('should extract context directory name when provided', async () => {
+        const contextDir = path.join(tmpDir, 'context');
+        fs.mkdirSync(contextDir, { recursive: true });
         
         process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
         process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
@@ -2732,7 +2738,7 @@ describe('CLI clarifications phase', () => {
         
         fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
         
-        await runCli(['debate', 'Design a system', '--context', contextFile, '--config', configPath, '--rounds', '1']);
+        await runCli(['debate', 'Design a system', '--context', contextDir, '--config', configPath, '--rounds', '1']);
         
         // Should complete successfully (function is used internally for tracing metadata)
         expect(stdoutSpy).toHaveBeenCalled();
@@ -2802,8 +2808,8 @@ describe('CLI clarifications phase', () => {
         process.env.LANGFUSE_SECRET_KEY = 'test-secret-key';
         process.env.LANGFUSE_PUBLIC_KEY = 'test-public-key';
         
-        const contextFile = path.join(tmpDir, 'context.txt');
-        fs.writeFileSync(contextFile, 'Additional context');
+        const contextDir = path.join(tmpDir, 'context');
+        fs.mkdirSync(contextDir, { recursive: true });
         
         const configPath = getTestConfigPath(tmpDir);
         const configContent = createTestConfigContent(undefined, {
@@ -2812,7 +2818,7 @@ describe('CLI clarifications phase', () => {
         
         fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
         
-        await runCli(['debate', 'Design a system', '--context', contextFile, '--config', configPath, '--rounds', '1']);
+        await runCli(['debate', 'Design a system', '--context', contextDir, '--config', configPath, '--rounds', '1']);
         
         // Should complete successfully
         expect(stdoutSpy).toHaveBeenCalled();

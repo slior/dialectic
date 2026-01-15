@@ -2,11 +2,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { DebateConfig, DebateRound, DebateState, Solution, AgentConfig, 
-          Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, ToolCall, ToolResult, AgentRole, Contribution } from 'dialectic-core';
-
 import { LLMProvider } from '../providers/llm-provider';
 import { CONTEXT_SEARCH_TOOL_NAME } from '../tools/context-search-tool';
+import { AgentConfig, Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, AgentRole } from '../types/agent.types';
+import { DebateConfig, DebateRound, DebateState, Solution, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, Contribution } from '../types/debate.types';
+import { ToolCall, ToolResult } from '../types/tool.types';
 
 import { Agent } from './agent';
 import { JudgeAgent } from './judge';
@@ -1028,6 +1028,64 @@ describe('DebateOrchestrator - Critique Activity String', () => {
     // Verify refinement activities are unchanged
     const refinementActivities = activityCalls.filter(call => call.activity === 'refining');
     expect(refinementActivities.length).toBeGreaterThan(0);
+  });
+});
+
+describe('DebateOrchestrator - Context Directory', () => {
+  it('should pass context directory through buildContext', async () => {
+    const contextDir = '/test/context';
+    const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+    const stateManager = createMockStateManager();
+    const config: DebateConfig = {
+      rounds: 1,
+      terminationCondition: { type: TERMINATION_TYPES.FIXED },
+      synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+      includeFullHistory: true,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
+    };
+
+    const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config, undefined, undefined, contextDir);
+    
+    // Use a spy to capture the context passed to agents
+    let capturedContext: DebateContext | undefined;
+    const originalPropose = agent.propose;
+    agent.propose = async (problem: string, context: DebateContext): Promise<Proposal> => {
+      capturedContext = context;
+      return originalPropose.call(agent, problem, context);
+    };
+
+    await orchestrator.runDebate('Test problem');
+
+    // Verify context directory was included in the context
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext?.contextDirectory).toBe(contextDir);
+  });
+
+  it('should work without context directory', async () => {
+    const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+    const stateManager = createMockStateManager();
+    const config: DebateConfig = {
+      rounds: 1,
+      terminationCondition: { type: TERMINATION_TYPES.FIXED },
+      synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+      includeFullHistory: true,
+      timeoutPerRound: DEFAULT_TIMEOUT_MS,
+    };
+
+    const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+    
+    let capturedContext: DebateContext | undefined;
+    const originalPropose = agent.propose;
+    agent.propose = async (problem: string, context: DebateContext): Promise<Proposal> => {
+      capturedContext = context;
+      return originalPropose.call(agent, problem, context);
+    };
+
+    await orchestrator.runDebate('Test problem');
+
+    // Verify context directory is undefined when not provided
+    expect(capturedContext).toBeDefined();
+    expect(capturedContext?.contextDirectory).toBeUndefined();
   });
 });
 

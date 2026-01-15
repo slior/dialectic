@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { ToolSchema } from '../types/tool.types';
+import { isPathWithinDirectory } from '../utils/path-security';
 
 import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
 
@@ -31,9 +32,23 @@ interface FileSystemEntry {
 /**
  * List Files tool allows agents to list files and directories in a given directory.
  * Returns an array of entries with their absolute paths and types.
+ * 
+ * All directory access is restricted to the context directory for security.
  */
 export class ListFilesTool implements ToolImplementation {
+  private readonly contextDirectory: string;
+
   name = LIST_FILES_TOOL_NAME;
+
+  /**
+   * Creates a new ListFilesTool instance.
+   * 
+   * @param contextDirectory - Optional absolute path to the context directory.
+   *                            If not provided, defaults to current working directory.
+   */
+  constructor(contextDirectory?: string) {
+    this.contextDirectory = contextDirectory || process.cwd();
+  }
 
   schema: ToolSchema = {
     name: LIST_FILES_TOOL_NAME,
@@ -74,6 +89,11 @@ export class ListFilesTool implements ToolImplementation {
       // Resolve to absolute path
       const absolutePath = path.resolve(dirPath);
 
+      // Security check: ensure path is within context directory
+      if (!isPathWithinDirectory(absolutePath, this.contextDirectory)) {
+        return createToolErrorJson('Access denied: path is outside the context directory');
+      }
+
       // Check if directory exists
       if (!fs.existsSync(absolutePath)) {
         return createToolErrorJson(`Directory not found: ${absolutePath}`);
@@ -89,15 +109,18 @@ export class ListFilesTool implements ToolImplementation {
       const entries = fs.readdirSync(absolutePath, { withFileTypes: true });
 
       // Build result array with absolute paths and types
-      const result: FileSystemEntry[] = entries.map((entry) => {
-        const entryPath = path.join(absolutePath, entry.name);
-        const absoluteEntryPath = path.resolve(entryPath);
+      // Filter out entries that are outside the context directory for security
+      const result: FileSystemEntry[] = entries
+        .map((entry) => {
+          const entryPath = path.join(absolutePath, entry.name);
+          const absoluteEntryPath = path.resolve(entryPath);
 
-        return {
-          path: absoluteEntryPath,
-          type: entry.isDirectory() ? FILE_SYSTEM_ENTRY_TYPE.DIRECTORY : FILE_SYSTEM_ENTRY_TYPE.FILE,
-        };
-      });
+          return {
+            path: absoluteEntryPath,
+            type: entry.isDirectory() ? FILE_SYSTEM_ENTRY_TYPE.DIRECTORY : FILE_SYSTEM_ENTRY_TYPE.FILE,
+          };
+        })
+        .filter((entry) => isPathWithinDirectory(entry.path, this.contextDirectory));
 
       return createToolSuccessJson({
         entries: result,

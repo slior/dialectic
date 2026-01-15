@@ -83,7 +83,6 @@ const FILE_ENCODING_UTF8 = 'utf-8';
 const JSON_FILE_EXTENSION = '.json';
 const MARKDOWN_FILE_EXTENSION = '.md';
 const JSON_INDENT_SPACES = 2;
-const MAX_CONTEXT_LENGTH = 5000;
 
 // Problem resolution error messages
 const ERROR_BOTH_PROBLEM_SOURCES = 'Invalid arguments: provide exactly one of <problem> or --problemDescription';
@@ -447,10 +446,11 @@ interface CreateAgentParams {
   systemSummaryConfig: SummarizationConfig;
   collect: AgentPromptMetadataCollection;
   logger?: AgentLogger | undefined;
+  contextDirectory?: string | undefined;
 }
 
 function createAgentWithPromptResolution(params: CreateAgentParams): Agent {
-  const { cfg, provider, configDir, systemSummaryConfig, collect, logger } = params;
+  const { cfg, provider, configDir, systemSummaryConfig, collect, logger, contextDirectory } = params;
   const defaultText = RoleBasedAgent.defaultSystemPrompt(cfg.role);
   const res = resolvePrompt({
     label: cfg.name,
@@ -489,7 +489,7 @@ function createAgentWithPromptResolution(params: CreateAgentParams): Agent {
     defaultText: ''
   });
 
-  const agentToolRegistry = buildToolRegistry(cfg);
+  const agentToolRegistry = buildToolRegistry(cfg, contextDirectory);
 
   // Display tool availability info
   const toolSchemas = agentToolRegistry.getAllSchemas();
@@ -534,14 +534,15 @@ interface BuildAgentsParams {
   collect: AgentPromptMetadataCollection;
   logger?: AgentLogger | undefined;
   tracingContext?: TracingContext | undefined;
+  contextDirectory?: string;
 }
 
 function buildAgents(params: BuildAgentsParams): Agent[] {
-  const { agentConfigs, configDir, systemSummaryConfig, collect, logger, tracingContext } = params;
+  const { agentConfigs, configDir, systemSummaryConfig, collect, logger, tracingContext, contextDirectory } = params;
   return agentConfigs.map((cfg) => {
     const provider = createProvider(cfg.provider);
     const wrappedProvider = createTracingProvider(provider, tracingContext);
-    const agent = createAgentWithPromptResolution({ cfg, provider: wrappedProvider, configDir, systemSummaryConfig, collect, logger });
+    const agent = createAgentWithPromptResolution({ cfg, provider: wrappedProvider, configDir, systemSummaryConfig, collect, logger, contextDirectory });
     return createTracingAgent(agent, tracingContext);
   });
 }
@@ -651,49 +652,25 @@ async function readAndValidateFileContent(filePath: string): Promise<string> {
 }
 
 /**
- * Reads and validates a context file, with non-fatal error handling.
- * If the file is missing, invalid, or empty, a warning is issued and undefined is returned.
- * If the file content exceeds the maximum length, it is truncated with a warning.
- *
- * @param contextPath - Path to the context file (relative to current working directory).
- * @returns The context content string (trimmed and truncated if needed), or undefined if the file cannot be read.
+ * Validates and resolves a context directory path.
+ * 
+ * @param contextPath - Path to the context directory (relative or absolute).
+ * @returns The absolute path to the context directory, or undefined if validation fails.
+ * @throws {Error} If the path is invalid (not a directory, doesn't exist, or access denied).
  */
-async function readContextFile(contextPath: string): Promise<string | undefined> {
-  const filePath = path.resolve(process.cwd(), contextPath);
+function validateContextDirectory(contextPath: string): string {
+  const resolvedPath = path.resolve(process.cwd(), contextPath);
 
-  if (!fs.existsSync(filePath)) {
-    warnUser(`Context file not found: ${filePath}. Continuing without context.`);
-    return undefined;
+  if (!fs.existsSync(resolvedPath)) {
+    throw createValidationError(`Context directory not found: ${resolvedPath}`, EXIT_INVALID_ARGS);
   }
 
-  
-  const stats = fs.statSync(filePath);
-  if (stats.isDirectory()) { // Validate it's not a directory
-    warnUser(`Context path is a directory: ${filePath}. Continuing without context.`);
-    return undefined;
+  const stats = fs.statSync(resolvedPath);
+  if (!stats.isDirectory()) {
+    throw createValidationError(`Context path is not a directory: ${resolvedPath}`, EXIT_INVALID_ARGS);
   }
 
-  try {
-    const content = await fs.promises.readFile(filePath, FILE_ENCODING_UTF8);
-    
-    const trimmedContent = content.trim();
-    
-    if (trimmedContent.length === 0) {
-      warnUser(`Context file is empty: ${filePath}. Continuing without context.`);
-      return undefined;
-    }
-
-    if (trimmedContent.length > MAX_CONTEXT_LENGTH) {
-      warnUser(`Context file exceeds ${MAX_CONTEXT_LENGTH} characters (${trimmedContent.length}). Truncating to ${MAX_CONTEXT_LENGTH} characters.`);
-      return trimmedContent.substring(0, MAX_CONTEXT_LENGTH);
-    }
-
-    return trimmedContent;
-  } catch (error: unknown) {
-    const errorWithCode = rethrowIfErrorCode(error, EXIT_INVALID_ARGS);
-    warnUser(`Failed to read context file: ${filePath}. Error: ${errorWithCode.message}. Continuing without context.`);
-    return undefined;
-  }
+  return resolvedPath;
 }
 
 /**
@@ -883,12 +860,12 @@ function extractProblemFileName(options: { problemDescription?: string }): strin
 }
 
 /**
- * Extracts the context file name from options if provided via --context.
+ * Extracts the context directory name from options if provided via --context.
  * 
- * @param options - Command-line options containing optional context path.
- * @returns The filename if provided, undefined if not provided.
+ * @param options - Command-line options containing optional context directory path.
+ * @returns The directory name if provided, undefined if not provided.
  */
-function extractContextFileName(options: { context?: string }): string | undefined {
+function extractContextDirectoryName(options: { context?: string }): string | undefined {
   if (options.context) {
     return path.basename(options.context);
   }
@@ -933,11 +910,11 @@ function initializeTracingContext(params: InitializeTracingContextParams): Traci
 
     // Build trace metadata
     const problemFileName = extractProblemFileName(options);
-    const contextFileName = extractContextFileName(options);
+    const contextDirectoryName = extractContextDirectoryName(options);
     const traceMetadata: TraceMetadata = {
       debateId,
       ...(problemFileName !== undefined && { problemFileName }),
-      ...(contextFileName !== undefined && { contextFileName }),
+      ...(contextDirectoryName !== undefined && { contextFileName: contextDirectoryName }),
       clarificationRequested,
       verboseRun: options.verbose === true,
       configFileName: path.basename(resolvedConfigPath),
@@ -1117,7 +1094,7 @@ export function debateCommand(program: Command): void {
     .option('-c, --config <path>', 'Path to configuration file (default ./debate-config.json)')
     .option('-o, --output <path>', 'Output file; .json writes full state, others write final solution text')
     .option('-p, --problemDescription <path>', 'Path to a text file containing the problem description')
-    .option('--context <path>', 'Path to a context file providing additional context for the problem')
+    .option('--context <path>', 'Path to a context directory for file access tools (default: current working directory)')
     .option('-e, --env-file <path>', 'Path to environment file (default: .env)')
     .option('-v, --verbose', 'Verbose output')
     .option('--report <path>', 'Generate markdown report file')
@@ -1129,8 +1106,11 @@ export function debateCommand(program: Command): void {
         
         const resolvedProblem = await resolveProblemDescription(problem, options);
         
-        // Read context file if provided
-        const contextString = options.context ? await readContextFile(options.context) : undefined;
+        // Validate and resolve context directory if provided
+        // Default to current working directory if not specified
+        const contextDirectory: string = options.context 
+          ? validateContextDirectory(options.context)
+          : process.cwd();
         
         const sysConfig = await loadConfig(options.config);
         const debateCfg = debateConfigFromSysConfig(sysConfig, options);
@@ -1172,7 +1152,8 @@ export function debateCommand(program: Command): void {
           systemSummaryConfig,
           collect: promptSources,
           logger: agentLogger,
-          tracingContext
+          tracingContext,
+          contextDirectory
         });
 
         // Create judge with prompt resolution
@@ -1186,11 +1167,11 @@ export function debateCommand(program: Command): void {
         // Create orchestrator hooks to drive progress UI
         const hooks = createOrchestratorHooks(progressUI, options);
 
-        const orchestrator = new DebateOrchestrator(agents, judge, stateManager, debateCfg, hooks, tracingContext);
+        const orchestrator = new DebateOrchestrator(agents, judge, stateManager, debateCfg, hooks, tracingContext, contextDirectory);
         
         // Start progress UI and run debate
         await progressUI.start();
-        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, contextString, finalClarifications, debateId);
+        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, undefined, finalClarifications, debateId);
         await progressUI.complete();
 
         // Flush trace if tracing was enabled

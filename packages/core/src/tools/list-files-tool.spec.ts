@@ -17,6 +17,7 @@ const FILE_NAME_1 = 'file1.txt';
 const FILE_NAME_2 = 'file2.txt';
 const DIR_NAME_1 = 'subdir1';
 const DIR_NAME_2 = 'subdir2';
+const FILE_CONTENT_TEST = 'This is test file content\nWith multiple lines\nAnd special chars: !@#$%';
 
 describe('ListFilesTool', () => {
   let tool: ListFilesTool;
@@ -25,10 +26,12 @@ describe('ListFilesTool', () => {
   let testFilePath: string;
 
   beforeEach(() => {
-    tool = new ListFilesTool();
-    
     // Create temporary directory for tests
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'list-files-tool-test-'));
+    
+    // Create tool with tempDir as context directory
+    tool = new ListFilesTool(tempDir);
+    
     testDirPath = path.join(tempDir, 'test-dir');
     testFilePath = path.join(tempDir, 'test-file.txt');
     
@@ -131,13 +134,21 @@ describe('ListFilesTool', () => {
       const file1Path = path.join(testDirPath, FILE_NAME_1);
       fs.writeFileSync(file1Path, 'content', 'utf-8');
 
-      // Use relative path
-      const relativePath = path.relative(process.cwd(), testDirPath);
-      const result = tool.execute({ [PARAM_NAME_PATH]: relativePath });
-      const parsed = JSON.parse(result);
+      // Use relative path from context directory (tempDir)
+      // Note: path.resolve() resolves relative paths relative to process.cwd(),
+      // so we temporarily change the working directory to tempDir to test relative paths
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(tempDir);
+        const relativePath = path.relative(tempDir, testDirPath);
+        const result = tool.execute({ [PARAM_NAME_PATH]: relativePath });
+        const parsed = JSON.parse(result);
 
-      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
-      expect(parsed.result.entries.length).toBeGreaterThan(0);
+        expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+        expect(parsed.result.entries.length).toBeGreaterThan(0);
+      } finally {
+        process.chdir(originalCwd);
+      }
     });
 
     it('should handle absolute paths', () => {
@@ -267,7 +278,9 @@ describe('ListFilesTool', () => {
     });
 
     it('should return JSON string with status and error for failures', () => {
-      const result = tool.execute({ [PARAM_NAME_PATH]: '/non/existent/path' });
+      // Use a path within context directory that doesn't exist
+      const nonExistentPath = path.join(tempDir, 'non-existent-dir');
+      const result = tool.execute({ [PARAM_NAME_PATH]: nonExistentPath });
 
       expect(typeof result).toBe('string');
       const parsed = JSON.parse(result);
@@ -339,6 +352,8 @@ describe('ListFilesTool', () => {
 
       const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      // Mock realpathSync to allow path validation to pass
+      const realpathSyncSpy = jest.spyOn(fs, 'realpathSync').mockImplementation((p) => String(p));
 
       const result = tool.execute({ [PARAM_NAME_PATH]: testDirPath });
       const parsed = JSON.parse(result);
@@ -351,6 +366,7 @@ describe('ListFilesTool', () => {
       readdirSyncSpy.mockRestore();
       existsSyncSpy.mockRestore();
       statSyncSpy.mockRestore();
+      realpathSyncSpy.mockRestore();
     });
 
     it('should handle errors without code property', () => {
@@ -360,6 +376,8 @@ describe('ListFilesTool', () => {
 
       const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      // Mock realpathSync to allow path validation to pass
+      const realpathSyncSpy = jest.spyOn(fs, 'realpathSync').mockImplementation((p) => String(p));
 
       const result = tool.execute({ [PARAM_NAME_PATH]: testDirPath });
       const parsed = JSON.parse(result);
@@ -372,6 +390,7 @@ describe('ListFilesTool', () => {
       readdirSyncSpy.mockRestore();
       existsSyncSpy.mockRestore();
       statSyncSpy.mockRestore();
+      realpathSyncSpy.mockRestore();
     });
 
     it('should handle non-Error objects thrown', () => {
@@ -381,6 +400,8 @@ describe('ListFilesTool', () => {
 
       const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      // Mock realpathSync to allow path validation to pass
+      const realpathSyncSpy = jest.spyOn(fs, 'realpathSync').mockImplementation((p) => String(p));
 
       const result = tool.execute({ [PARAM_NAME_PATH]: testDirPath });
       const parsed = JSON.parse(result);
@@ -392,6 +413,7 @@ describe('ListFilesTool', () => {
       readdirSyncSpy.mockRestore();
       existsSyncSpy.mockRestore();
       statSyncSpy.mockRestore();
+      realpathSyncSpy.mockRestore();
     });
 
     it('should handle primitive error values', () => {
@@ -401,6 +423,8 @@ describe('ListFilesTool', () => {
 
       const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      // Mock realpathSync to allow path validation to pass
+      const realpathSyncSpy = jest.spyOn(fs, 'realpathSync').mockImplementation((p) => String(p));
 
       const result = tool.execute({ [PARAM_NAME_PATH]: testDirPath });
       const parsed = JSON.parse(result);
@@ -412,6 +436,118 @@ describe('ListFilesTool', () => {
       readdirSyncSpy.mockRestore();
       existsSyncSpy.mockRestore();
       statSyncSpy.mockRestore();
+      realpathSyncSpy.mockRestore();
+    });
+  });
+
+  describe('Context Directory Security', () => {
+    let contextDir: string;
+    let subDirInContext: string;
+    let fileInContext: string;
+    let dirOutsideContext: string;
+    let parentDir: string;
+
+    beforeEach(() => {
+      // Create context directory structure
+      contextDir = path.join(tempDir, 'context');
+      parentDir = tempDir;
+      subDirInContext = path.join(contextDir, 'subdir');
+      fileInContext = path.join(contextDir, 'file.txt');
+      dirOutsideContext = path.join(parentDir, 'outside');
+
+      fs.mkdirSync(contextDir, { recursive: true });
+      fs.mkdirSync(subDirInContext, { recursive: true });
+      fs.mkdirSync(dirOutsideContext, { recursive: true });
+      fs.writeFileSync(fileInContext, FILE_CONTENT_TEST, 'utf-8');
+    });
+
+    it('should allow listing directories within context directory', () => {
+      const toolWithContext = new ListFilesTool(contextDir);
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: subDirInContext });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.entries).toBeDefined();
+    });
+
+    it('should reject directories outside context directory', () => {
+      const toolWithContext = new ListFilesTool(contextDir);
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: dirOutsideContext });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe('Access denied: path is outside the context directory');
+    });
+
+    it('should reject paths with .. traversal outside context directory', () => {
+      const toolWithContext = new ListFilesTool(contextDir);
+      const traversalPath = path.join(contextDir, '..', 'outside');
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: traversalPath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe('Access denied: path is outside the context directory');
+    });
+
+    it('should filter out entries outside context directory', () => {
+      // Create a symlink or entry that points outside (simulated by creating entry outside)
+      const toolWithContext = new ListFilesTool(contextDir);
+      
+      // Create a file outside the context directory
+      const fileOutside = path.join(parentDir, 'outside-file.txt');
+      fs.writeFileSync(fileOutside, FILE_CONTENT_TEST, 'utf-8');
+
+      // List the context directory - should only show files within context
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: contextDir });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      // Should only contain entries within context directory
+      parsed.result.entries.forEach((entry: { path: string }) => {
+        expect(entry.path).toContain(contextDir);
+      });
+    });
+
+    it('should allow relative paths within context directory', () => {
+      const toolWithContext = new ListFilesTool(contextDir);
+      // Note: path.resolve() resolves relative paths relative to process.cwd(),
+      // so we need to change the working directory to contextDir for relative paths to work
+      const originalCwd = process.cwd();
+      try {
+        process.chdir(contextDir);
+        const relativePath = path.relative(contextDir, subDirInContext);
+        const result = toolWithContext.execute({ [PARAM_NAME_PATH]: relativePath });
+        const parsed = JSON.parse(result);
+
+        expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+        expect(parsed.result.entries).toBeDefined();
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    it('should default to current working directory when context directory not provided', () => {
+      const toolDefault = new ListFilesTool();
+      // Use an absolute path to ensure it resolves correctly
+      const cwdPath = path.resolve(process.cwd());
+      const result = toolDefault.execute({ [PARAM_NAME_PATH]: cwdPath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.entries).toBeDefined();
+    });
+
+    it('should handle nested directories within context directory', () => {
+      const nestedDir = path.join(contextDir, 'nested', 'deep');
+      fs.mkdirSync(nestedDir, { recursive: true });
+      fs.writeFileSync(path.join(nestedDir, 'file.txt'), FILE_CONTENT_TEST, 'utf-8');
+
+      const toolWithContext = new ListFilesTool(contextDir);
+      const result = toolWithContext.execute({ [PARAM_NAME_PATH]: nestedDir });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.entries.length).toBeGreaterThan(0);
     });
   });
 });

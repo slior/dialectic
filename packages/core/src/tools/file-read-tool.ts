@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { ToolSchema } from '../types/tool.types';
+import { isPathWithinDirectory } from '../utils/path-security';
 
 import { ToolImplementation, createToolErrorJson, createToolSuccessJson } from './tool-implementation';
 
@@ -13,9 +14,23 @@ export const FILE_READ_TOOL_NAME = 'file_read';
 /**
  * File Read tool allows agents to read the contents of text files.
  * Returns the file content as a string, or an error message if the file cannot be read.
+ * 
+ * All file access is restricted to the context directory for security.
  */
 export class FileReadTool implements ToolImplementation {
+  private readonly contextDirectory: string;
+
   name = FILE_READ_TOOL_NAME;
+
+  /**
+   * Creates a new FileReadTool instance.
+   * 
+   * @param contextDirectory - Optional absolute path to the context directory.
+   *                            If not provided, defaults to current working directory.
+   */
+  constructor(contextDirectory?: string) {
+    this.contextDirectory = contextDirectory || process.cwd();
+  }
 
   schema: ToolSchema = {
     name: FILE_READ_TOOL_NAME,
@@ -55,6 +70,11 @@ export class FileReadTool implements ToolImplementation {
     try {
       // Resolve to absolute path
       const absolutePath = path.resolve(filePath);
+
+      // Security check: ensure path is within context directory
+      if (!isPathWithinDirectory(absolutePath, this.contextDirectory)) {
+        return createToolErrorJson('Access denied: path is outside the context directory');
+      }
 
       // Check if file exists
       if (!fs.existsSync(absolutePath)) {

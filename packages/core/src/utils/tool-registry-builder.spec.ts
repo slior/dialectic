@@ -281,5 +281,73 @@ describe('buildToolRegistry', () => {
       expect(registry2.has(TOOL_NAME_CONTEXT_SEARCH)).toBe(false);
     });
   });
+
+  describe('Context Directory', () => {
+    it('should pass context directory to file_read tool', () => {
+      const contextDir = '/test/context';
+      agentConfig.tools = [
+        {
+          name: TOOL_NAME_FILE_READ
+        }
+      ];
+
+      const registry = buildToolRegistry(agentConfig, contextDir);
+      const tool = registry.get(TOOL_NAME_FILE_READ);
+      
+      expect(tool).toBeDefined();
+      // Verify tool has context directory by checking it rejects paths outside
+      const result = tool!.execute({ path: '/outside/file.txt' }, undefined, undefined);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe('error');
+      expect(parsed.error).toBe('Access denied: path is outside the context directory');
+    });
+
+    it('should pass context directory to list_files tool', () => {
+      const contextDir = '/test/context';
+      agentConfig.tools = [
+        {
+          name: TOOL_NAME_LIST_FILES
+        }
+      ];
+
+      const registry = buildToolRegistry(agentConfig, contextDir);
+      const tool = registry.get(TOOL_NAME_LIST_FILES);
+      
+      expect(tool).toBeDefined();
+      // Verify tool has context directory by checking it rejects paths outside
+      const result = tool!.execute({ path: '/outside/dir' }, undefined, undefined);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe('error');
+      expect(parsed.error).toBe('Access denied: path is outside the context directory');
+    });
+
+    it('should not require context directory for context_search tool', () => {
+      agentConfig.tools = [
+        {
+          name: TOOL_NAME_CONTEXT_SEARCH
+        }
+      ];
+
+      const registry = buildToolRegistry(agentConfig, '/test/context');
+      const tool = registry.get(TOOL_NAME_CONTEXT_SEARCH);
+      
+      expect(tool).toBeDefined();
+      // Context search tool doesn't need context directory, so it should work
+      expect(tool).toBeDefined();
+    });
+
+    it('should work without context directory (defaults to cwd)', () => {
+      agentConfig.tools = [
+        {
+          name: TOOL_NAME_FILE_READ
+        }
+      ];
+
+      const registry = buildToolRegistry(agentConfig);
+      const tool = registry.get(TOOL_NAME_FILE_READ);
+      
+      expect(tool).toBeDefined();
+    });
+  });
 });
 

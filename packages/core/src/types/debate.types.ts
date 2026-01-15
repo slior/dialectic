@@ -216,6 +216,7 @@ export interface DebateContext {
   
   problem: string; /** Problem statement. */
   context?: string; /** Optional additional context for the current request. */
+  contextDirectory?: string; /** Optional absolute path to the context directory for file access tools. */
   history?: DebateRound[]; /** Optional full history of rounds when enabled. */
   includeFullHistory?: boolean; /** Whether to fall back to full history when no summary is found. */
   clarifications?: AgentClarifications[]; /** Optional clarifications to include in prompts (grouped by agent). */

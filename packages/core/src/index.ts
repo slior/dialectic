@@ -48,6 +48,7 @@ export { ContextSummarizer, LengthBasedSummarizer } from './utils/context-summar
 export { EXIT_GENERAL_ERROR, EXIT_INVALID_ARGS, EXIT_CONFIG_ERROR, EXIT_PROVIDER_ERROR, ErrorWithCode } from './utils/exit-codes';
 export { logInfo, logSuccess, logWarning, writeStderr, MessageType, MESSAGE_ICONS } from './utils/console';
 export { Logger } from './utils/logger';
+export { isPathWithinDirectory } from './utils/path-security';
 
 // Tracing utilities
 export { 

@@ -26,10 +26,10 @@ dialectic debate --problemDescription problem.txt
 dialectic debate --problemDescription ./problems/rate-limiting.md
 ```
 
-**With additional context:**
+**With context directory for file access:**
 ```bash
-dialectic debate "Design a rate limiting system" --context ./context/requirements.md
-dialectic debate --problemDescription problem.txt --context ./context/background.md
+dialectic debate "Design a rate limiting system" --context ./context
+dialectic debate --problemDescription problem.txt --context ./project-files
 ```
 
 ### Command Options
@@ -41,14 +41,13 @@ dialectic debate --problemDescription problem.txt --context ./context/background
   - **Content**: Must be non-empty (whitespace-only files are rejected)
   - **Path resolution**: Relative paths resolved from current working directory
   - **Mutual exclusivity**: Cannot provide both string problem and `--problemDescription` file
-- `--context <path>` - Path to a text file containing additional context
-  - **Encoding**: UTF-8
-  - **Format**: Any text format (plain text, markdown, etc.)
-  - **Content**: Optional; if file is missing, empty, or invalid, a warning is issued and the debate continues without context
-  - **Character limit**: Maximum 5000 characters; content exceeding this limit is truncated with a warning
-  - **Path resolution**: Relative paths resolved from current working directory
-  - **Storage**: Context is stored separately in `DebateState.context` and combined with the problem when building prompts
-  - **Combination**: Context is appended to the problem statement under a markdown heading `# Extra Context` when passed to agents and judge
+- `--context <path>` - Path to a context directory for file access tools (default: current working directory)
+  - **Type**: Directory path (not a file)
+  - **Validation**: Directory must exist and be accessible; if invalid, an error is raised
+  - **Path resolution**: Relative paths resolved from current working directory, then converted to absolute path
+  - **Security**: All file access via `file_read` and `list_files` tools is restricted to this directory
+  - **Agent instructions**: Context directory path is injected into agent system prompts with instructions to use file access tools
+  - **Default**: If not specified, defaults to current working directory (`.`)
 - `--agents <list>` - Comma-separated agent roles to participate (default: `architect,performance,kiss`)
   - Available roles: `architect`, `performance`, `security`, `testing`, `kiss`, `generalist`
   - Filters agents from configuration file by role; uses defaults if no matches found
@@ -117,7 +116,7 @@ dialectic debate --problemDescription problems/rate-limiting.md --verbose --repo
 ```bash
 dialectic debate \
   --problemDescription ./problems/rate-limiting.md \
-  --context ./context/requirements.md \
+  --context ./context \
   --config ./configs/production.json \
   --agents architect,performance,security \
   --rounds 5 \
@@ -206,12 +205,12 @@ dialectic debate "Design a distributed cache system" --clarify
 - Files are saved incrementally during execution and upon completion
 - Context (if provided) is stored in `DebateState.context` separately from the problem
 
-**Shared Context:**
-- The `--context` option allows you to provide additional context that supplements the problem statement
-- Context is stored separately in `DebateState.context` and combined with the problem when building prompts
-- Context is appended to the problem under a markdown heading `# Extra Context` when passed to agents and judge
-- If the context file is missing, empty, or invalid, a warning is issued and the debate continues without context
-- Context content is limited to 5000 characters; exceeding content is truncated with a warning
+**Context Directory:**
+- The `--context` option specifies a directory where agents can access files using the `file_read` and `list_files` tools
+- All file access is restricted to this directory for security (prevents path traversal attacks)
+- The context directory path is injected into agent system prompts with instructions to explore and read relevant files
+- If the directory doesn't exist or is invalid, an error is raised before the debate starts
+- Defaults to current working directory if not specified
 - This feature is useful for providing background information, constraints, or requirements that complement the main problem statement
 
 **Agent Roles:**

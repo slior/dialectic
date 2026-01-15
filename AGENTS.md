@@ -467,6 +467,7 @@ dialectic debate "Design a system" || echo "Failed with code: $?"
 - `--agents <list>` - Comma-separated agent roles (default: `architect,performance,kiss`)
 - `--rounds <n>` - Number of debate rounds (default: `3`, minimum: `1`)
 - `--config <path>` - Path to configuration file (default: `./debate-config.json`)
+- `--context <path>` - Path to context directory for file access tools (default: current working directory)
 - `--env-file <path>` - Path to environment file (default: `.env`)
 - `--output <path>` - Output file path (JSON or text based on extension)
 - `--verbose` - Enable detailed logging to stderr

@@ -261,11 +261,20 @@ The tool returns a JSON string with the following structure:
   - `content`: The file contents as a UTF-8 string (string)
 - `error`: Error message describing what went wrong (on error)
 
+#### Security
+
+**Context Directory Restriction**: All file access via `file_read` is restricted to the context directory specified by the `--context` CLI option (defaults to current working directory). This security boundary prevents path traversal attacks and ensures agents can only access files within the intended directory.
+
+- **Path validation**: Before reading a file, the tool validates that the resolved path is within the context directory
+- **Path traversal prevention**: Paths containing `..` sequences or pointing outside the context directory are rejected
+- **Symlink resolution**: Symlinks are resolved to their real paths before validation to prevent symlink-based attacks
+- **Error message**: If a path is outside the context directory, the tool returns: `"Access denied: path is outside the context directory"`
+
 #### Behavior
 
 - **File encoding**: Files are read as UTF-8 text
-- **Path resolution**: Relative paths are resolved to absolute paths using `path.resolve()`
-- **File validation**: The tool checks that the path exists and is a file (not a directory)
+- **Path resolution**: Relative paths are resolved relative to the context directory, then validated
+- **File validation**: The tool checks that the path exists, is within the context directory, and is a file (not a directory)
 - **Error handling**: Returns descriptive error messages for common file system errors:
   - File not found (`ENOENT`)
   - Permission denied (`EACCES`, `EPERM`)
@@ -371,12 +380,23 @@ The tool returns a JSON string with the following structure:
     - `type`: Either `"file"` or `"directory"` (string)
 - `error`: Error message describing what went wrong (on error)
 
+#### Security
+
+**Context Directory Restriction**: All directory access via `list_files` is restricted to the context directory specified by the `--context` CLI option (defaults to current working directory). This security boundary prevents path traversal attacks and ensures agents can only list files within the intended directory.
+
+- **Path validation**: Before listing a directory, the tool validates that the resolved path is within the context directory
+- **Path traversal prevention**: Paths containing `..` sequences or pointing outside the context directory are rejected
+- **Symlink resolution**: Symlinks are resolved to their real paths before validation to prevent symlink-based attacks
+- **Entry filtering**: Entries outside the context directory are automatically filtered out from the results
+- **Error message**: If a path is outside the context directory, the tool returns: `"Access denied: path is outside the context directory"`
+
 #### Behavior
 
-- **Path resolution**: Relative paths are resolved to absolute paths using `path.resolve()`
-- **Directory validation**: The tool checks that the path exists and is a directory (not a file)
+- **Path resolution**: Relative paths are resolved relative to the context directory, then validated
+- **Directory validation**: The tool checks that the path exists, is within the context directory, and is a directory (not a file)
 - **Absolute paths**: All returned paths are absolute paths, making them suitable for use with other tools like `file_read`
 - **Entry types**: Each entry includes a `type` field indicating whether it's a file or directory
+- **Entry filtering**: Only entries within the context directory are returned in the results
 - **Empty directories**: Returns an empty array for directories with no contents
 - **Error handling**: Returns descriptive error messages for common file system errors:
   - Directory not found (`ENOENT`)
