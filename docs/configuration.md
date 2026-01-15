@@ -56,7 +56,7 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 | `systemPromptPath` | `string` | No | Path to a markdown/text file containing the system prompt. If omitted, a built-in prompt for the role is used. |
 | `enabled` | `boolean` | No | Whether the agent is enabled. Defaults to `true` if omitted. |
 | `clarificationPromptPath` | `string` | No | Path to a markdown/text file containing the clarifications prompt for this agent. If omitted, a built-in role-specific prompt is used. |
-| `tools` | `ToolSchema[]` | No | Array of tool schemas available to this agent. Uses OpenAI function calling schema format. Currently, only base registry tools are supported; agent-specific tools require implementation factories (future enhancement). See [Tool Calling](#tool-calling) section for details. |
+| `tools` | `ToolConfig[]` | No | Array of tool configurations available to this agent. Each tool is specified by name only; schemas are automatically resolved from tool implementations. Currently, only tools with available implementations can be used. See [Tool Calling](#tool-calling) section for details. |
 | `toolCallLimit` | `number` | No | Maximum number of tool call iterations per phase (proposal, critique, or refinement). Defaults to `10`. Each iteration counts toward this limit, including failed tool invocations. The limit applies independently to each phase. |
 
 ### Field Details
@@ -125,13 +125,13 @@ Each agent (including the judge) is configured using the `AgentConfig` schema:
 - **Example**: `true`
 
 #### `tools`
-- **Type**: Array of `ToolSchema` objects (optional)
-- **Accepted Values**: Array of tool schema objects following OpenAI function calling format
-- **Default**: Empty array (agent receives base registry tools only)
-- **Semantics**: Defines custom tool schemas available to this agent. Tools allow agents to interact with external functionality during proposal, critique, and refinement phases. Each tool schema must include `name`, `description`, and `parameters` fields matching OpenAI's function calling format.
-- **Current Limitation**: Only base registry tools (e.g., Context Search) are currently supported. Agent-specific tools from this configuration require tool implementation factories (future enhancement). When tool schemas are provided but implementations are not available, the agent will use base registry tools only.
-- **Tool Registry**: If tools are configured, an extended registry is created that inherits from the base registry. If no tools are configured, the agent uses the base registry directly.
-- **Example**: See [Tool Calling](#tool-calling) section for detailed examples
+- **Type**: Array of `ToolConfig` objects (optional)
+- **Accepted Values**: Array of tool configuration objects, each containing only a `name` field
+- **Default**: Empty array (agent receives no tools)
+- **Semantics**: Defines which tools are available to this agent. Tools allow agents to interact with external functionality during proposal, critique, and refinement phases. Each tool is specified by name only; tool schemas (description, parameters) are automatically resolved from the tool implementations.
+- **Tool Name Resolution**: The system looks up tool implementations by name from the available tools registry. Tool schemas come from the tool implementations themselves, not from the configuration.
+- **Tool Registry**: If tools are configured, a tool registry is created for the agent containing the specified tools. If no tools are configured, the agent receives no tools.
+- **Example**: `[{"name": "list_files"}, {"name": "file_read"}]` - See [Tool Calling](#tool-calling) section for detailed examples
 
 #### `toolCallLimit`
 - **Type**: Number (optional)
@@ -266,39 +266,32 @@ Tool calls, results, and iteration counts are stored in contribution metadata fo
 
 #### Tool Configuration
 
-Tools are configured per agent in the `AgentConfig` using the `tools` field. Each tool must follow the OpenAI function calling schema format:
+Tools are configured per agent in the `AgentConfig` using the `tools` field. Each tool is specified by name only; the system automatically resolves tool schemas from the tool implementations.
 
 ```json
 {
   "tools": [
     {
-      "name": "tool_name",
-      "description": "Description of what the tool does",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "paramName": {
-            "type": "string",
-            "description": "Parameter description"
-          }
-        },
-        "required": ["paramName"]
-      }
+      "name": "list_files"
+    },
+    {
+      "name": "file_read"
     }
   ],
   "toolCallLimit": 10
 }
 ```
 
-**Schema Requirements**:
-- `name`: Unique tool identifier (string, required)
-- `description`: Human-readable description explaining what the tool does (string, required)
-- `parameters`: JSON Schema object defining tool parameters (object, required)
-  - `type`: Must be `"object"`
-  - `properties`: Object mapping parameter names to their schemas
-  - `required`: Array of required parameter names (optional)
+**Configuration Requirements**:
+- `name`: Unique tool identifier (string, required) - must match an available tool name from the tool registry
 
-**Parameter Types**: Supported JSON Schema types include `string`, `number`, `boolean`, `array`, and `object`. Each parameter can include a `description` field to help the LLM understand its purpose.
+**How It Works**:
+1. The system looks up tool implementations by name from the available tools registry
+2. Tool schemas (description, parameters) are automatically retrieved from the tool implementation
+3. Unknown tool names result in warnings and are skipped
+4. The agent receives a tool registry containing only successfully registered tools
+
+**Note**: Tool schemas are defined in the tool implementation classes themselves (e.g., `ListFilesTool.schema`, `FileReadTool.schema`). You don't need to specify descriptions or parameters in the configuration - the system handles this automatically.
 
 #### Tool Registry System
 
@@ -466,7 +459,7 @@ These messages are written to stderr, ensuring they don't interfere with stdout 
 }
 ```
 
-This agent will have access to base registry tools (Context Search) with default tool call limit of 10.
+This agent will have no tools available (empty tools array). To enable tools, add a `tools` array with tool names.
 
 ##### Agent with Custom Tool Call Limit
 
@@ -482,9 +475,9 @@ This agent will have access to base registry tools (Context Search) with default
 }
 ```
 
-This agent uses base tools but with a lower iteration limit for faster execution.
+This agent has no tools configured but uses a lower iteration limit for faster execution (if tools were configured).
 
-##### Agent with Tool Schemas (Future Enhancement)
+##### Agent with Tools
 
 ```json
 {
@@ -496,29 +489,24 @@ This agent uses base tools but with a lower iteration limit for faster execution
   "temperature": 0.5,
   "tools": [
     {
-      "name": "custom_tool",
-      "description": "A custom tool for the architect",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "input": {
-            "type": "string",
-            "description": "Input parameter"
-          },
-          "options": {
-            "type": "object",
-            "description": "Optional configuration"
-          }
-        },
-        "required": ["input"]
-      }
+      "name": "list_files"
+    },
+    {
+      "name": "file_read"
     }
   ],
   "toolCallLimit": 15
 }
 ```
 
-**Note**: Currently, only base registry tools (like Context Search) are available. Agent-specific tools from configuration require tool implementation factories (future enhancement). When tool implementation factories are available, agents with custom tool schemas will have access to both base tools and their custom tools.
+This agent has access to the `list_files` and `file_read` tools. Tool schemas are automatically resolved from the tool implementations - you only need to specify the tool names.
+
+**Available Tools**: Currently available tools include:
+- `context_search` - Search debate history
+- `list_files` - List files and directories
+- `file_read` - Read file contents
+
+**Note**: Custom tools require tool implementation factories (future enhancement). When custom tools are implemented, they can be added to the available tools registry and then referenced by name in agent configurations.
 
 #### Best Practices
 

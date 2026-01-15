@@ -4,11 +4,11 @@ Tools allow agents to interact with external functionality during debate phases 
 
 ## Tool Configuration
 
-Tools are configured per agent in the debate configuration file using the `tools` field in `AgentConfig`. Each tool must follow the OpenAI function calling schema format.
+Tools are configured per agent in the debate configuration file using the `tools` field in `AgentConfig`. Each tool is specified by name only; tool schemas are automatically resolved from the tool implementations.
 
 ### Basic Configuration
 
-To enable tools for an agent, add a `tools` array to the agent's configuration:
+To enable tools for an agent, add a `tools` array to the agent's configuration with tool names:
 
 ```json
 {
@@ -20,76 +20,62 @@ To enable tools for an agent, add a `tools` array to the agent's configuration:
   "temperature": 0.5,
   "tools": [
     {
-      "name": "context_search",
-      "description": "Search for a term in the debate history. Returns relevant contributions containing the search term.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "term": {
-            "type": "string",
-            "description": "The search term to find in debate history"
-          }
-        },
-        "required": ["term"]
-      }
+      "name": "context_search"
+    },
+    {
+      "name": "list_files"
+    },
+    {
+      "name": "file_read"
     }
   ],
   "toolCallLimit": 10
 }
 ```
 
+**How It Works**: The system looks up tool implementations by name and automatically retrieves their schemas (description, parameters) from the tool implementation classes. You don't need to specify schemas in the configuration.
+
 ### Configuration Fields
 
 #### `tools`
-- **Type**: Array of `ToolSchema` objects (optional)
+- **Type**: Array of `ToolConfig` objects (optional)
 - **Default**: Empty array (agent receives no tools)
-- **Semantics**: Defines tool schemas available to this agent. Each tool schema must include `name`, `description`, and `parameters` fields matching OpenAI's function calling format.
+- **Semantics**: Defines which tools are available to this agent. Each tool is specified by name only; tool schemas (description, parameters) are automatically resolved from the tool implementations.
 
 #### `toolCallLimit`
 - **Type**: Number (optional)
 - **Default**: `10`
 - **Semantics**: Maximum number of tool call iterations per phase (proposal, critique, or refinement). Each iteration counts toward the limit, including failed tool invocations.
 
-### Tool Schema Format
+### Tool Configuration Format
 
-Each tool schema must follow this structure:
+Each tool configuration is simple - just specify the tool name:
 
 ```json
 {
-  "name": "tool_name",
-  "description": "Human-readable description of what the tool does",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "paramName": {
-        "type": "string",
-        "description": "Parameter description"
-      }
-    },
-    "required": ["paramName"]
-  }
+  "name": "tool_name"
 }
 ```
 
-**Schema Requirements**:
-- `name`: Unique tool identifier (string, required) - must match an available tool name
-- `description`: Human-readable description explaining what the tool does (string, required)
-- `parameters`: JSON Schema object defining tool parameters (object, required)
-  - `type`: Must be `"object"`
-  - `properties`: Object mapping parameter names to their schemas
-  - `required`: Array of required parameter names (optional)
+**Configuration Requirements**:
+- `name`: Unique tool identifier (string, required) - must match an available tool name from the tool registry
 
-**Parameter Types**: Supported JSON Schema types include `string`, `number`, `boolean`, `array`, and `object`. Each parameter can include a `description` field to help the LLM understand its purpose.
+**How Tool Schemas Work**:
+- Tool schemas (description, parameters) are defined in the tool implementation classes (e.g., `ListFilesTool.schema`, `FileReadTool.schema`)
+- The system automatically retrieves schemas from tool implementations when building the tool registry
+- You don't need to specify descriptions or parameters in the configuration
+- Tool schemas follow OpenAI's function calling format internally, but this is handled automatically
 
 ### Tool Registry Behavior
 
 When tools are configured for an agent:
-1. The system validates that each tool name matches an available tool implementation
-2. Unknown or invalid tool names result in warnings and are skipped
-3. The agent receives a tool registry containing only the successfully registered tools
-4. Tool schemas are automatically added to the agent's system prompt, making the agent aware of available tools
+1. The system looks up tool implementations by name from the available tools registry
+2. Tool schemas (description, parameters) are automatically retrieved from the tool implementations
+3. Unknown or invalid tool names result in warnings and are skipped
+4. The agent receives a tool registry containing only the successfully registered tools
+5. Tool schemas are automatically added to the agent's system prompt, making the agent aware of available tools
 
-**Note**: Currently, only tools with available implementations can be used. If a tool name in the configuration doesn't match an available tool, a warning is issued and the tool is skipped.
+**Note**: Currently, only tools with available implementations can be used. If a tool name in the configuration doesn't match an available tool, a warning is issued and the tool is skipped. Tool schemas are defined in the tool implementation classes, not in the configuration file.
 
 ## Available Tools
 
