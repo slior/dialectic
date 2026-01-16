@@ -4,24 +4,19 @@ alwaysApply: false
 # Code Cleanup and Refactoring Rules for TypeScript Projects
 
 ## Overview
-This guide explains systematic code cleanup procedures focusing on three key areas: template method refactoring, removing magic numbers, and proper documentation. Follow these rules to improve code maintainability, readability, and testability.
+This guide explains systematic code cleanup procedures focusing on refactoring patterns, removing magic values, proper documentation, type safety, and common code smells. Follow these rules to improve code maintainability, readability, and testability.
 
 ---
 
-## 1. Template Method Refactoring
+## 1. Core Refactoring Patterns
 
-### What is it?
-When multiple subclasses have similar methods with duplicate logic, extract the common parts into a template method in the base class. Subclasses then only provide the unique parts (like prompts or specific data) and delegate the execution to the template method.
+### Template Method Pattern
 
-### When to use it?
-- You see the same code structure repeated across subclasses
-- Only specific values (prompts, parameters) differ between implementations
-- Methods follow the same execution pattern (call API, build metadata, return result)
+**When to use:** When multiple subclasses have similar methods with duplicate logic, but different values (like prompts).
 
-### Step-by-Step Process
+**Principle:** Extract common logic into a template method in the base class. Subclasses provide only unique values and delegate execution.
 
 **Before - Duplicate code in subclasses:**
-
 ```typescript
 // ArchitectAgent
 async propose(problem: string, context: DebateContext): Promise<Proposal> {
@@ -45,7 +40,6 @@ async propose(problem: string, context: DebateContext): Promise<Proposal> {
 ```
 
 **After - Template method in base class:**
-
 ```typescript
 // Base Agent class
 /**
@@ -84,590 +78,17 @@ async propose(problem: string, context: DebateContext): Promise<Proposal> {
 }
 ```
 
-### Benefits
-✅ **No code duplication** - Common logic exists in one place  
-✅ **Easy to maintain** - Fix bugs once, applies to all subclasses  
-✅ **Clear separation** - Subclasses focus on their unique concerns  
-✅ **Consistent behavior** - All agents handle metadata the same way
+**Benefits:**
+- ✅ **No code duplication** - Common logic exists in one place
+- ✅ **Easy to maintain** - Fix bugs once, applies to all subclasses
+- ✅ **Clear separation** - Subclasses focus on their unique concerns
+- ✅ **Consistent behavior** - All agents handle metadata the same way
 
----
+### General Pattern Extraction
 
-## 2. Removing Magic Numbers and Hardcoded Strings
+**When to use:** The same logic pattern is repeated 3+ times, even if not in a class hierarchy.
 
-### What are they?
-Magic numbers/strings are literal values hardcoded in your code without explanation. They make code harder to understand and maintain.
-
-### Step-by-Step Process
-
-**Bad - Magic numbers and hardcoded strings:**
-
-```typescript
-function buildAgents(configs: AgentConfig[], provider: Provider) {
-  return configs.map((cfg) => {
-    if (cfg.role === 'architect') return new ArchitectAgent(cfg, provider);
-    if (cfg.role === 'performance') return new PerformanceAgent(cfg, provider);
-    return new ArchitectAgent(cfg, provider);
-  });
-}
-
-const debateConfig = {
-  rounds: options.rounds || config.rounds || 3,  // What is 3?
-  timeout: 300000  // What is 300000?
-};
-```
-
-**Good - Named constants:**
-
-```typescript
-// File-level constants with clear names
-const DEFAULT_ROUNDS = 3;
-const DEFAULT_TIMEOUT_MS = 300000;
-
-export const AGENT_ROLES = {
-  ARCHITECT: "architect",
-  SECURITY: "security",
-  PERFORMANCE: "performance",
-  TESTING: "testing",
-  GENERALIST: "generalist",
-} as const;
-
-export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES];
-
-// Now the code is self-documenting
-function buildAgents(configs: AgentConfig[], provider: Provider) {
-  return configs.map((cfg) => {
-    if (cfg.role === AGENT_ROLES.ARCHITECT) return new ArchitectAgent(cfg, provider);
-    if (cfg.role === AGENT_ROLES.PERFORMANCE) return new PerformanceAgent(cfg, provider);
-    return new ArchitectAgent(cfg, provider);
-  });
-}
-
-const debateConfig = {
-  rounds: options.rounds || config.rounds || DEFAULT_ROUNDS,
-  timeout: DEFAULT_TIMEOUT_MS
-};
-```
-
-### Where to define constants
-
-**Function-level constants** - Use when a value is used multiple times within a single function:
-```typescript
-it('should write JSON output when --output ends with .json', async () => {
-  const EXPECTED_REASONING = 'Good';
-  const outputPath = path.join(tmpDir, 'results.json');
-  
-  // Use EXPECTED_REASONING in mock data
-  evalSpy.mockResolvedValueOnce({
-    rawText: JSON.stringify({
-      evaluation: { functional_completeness: { score: 8, reasoning: EXPECTED_REASONING } }
-    })
-  });
-  
-  // Use EXPECTED_REASONING in assertion
-  expect(content.agents.e1.evaluation.functional_completeness.reasoning).toBe(EXPECTED_REASONING);
-});
-```
-
-**File-level constants** - Use when only one file needs them:
-```typescript
-// At top of file, after imports
-const DEFAULT_ROUNDS = 3;
-const MAX_RETRIES = 5;
-```
-
-**Exported constants** - Use when multiple files need them:
-```typescript
-// In types/constants file
-export const AGENT_ROLES = {
-  ARCHITECT: "architect",
-  PERFORMANCE: "performance",
-} as const;
-
-export const LLM_PROVIDERS = {
-  OPENAI: "openai",
-} as const;
-```
-
-### Benefits
-✅ **Self-documenting** - Name explains what the value means  
-✅ **Single source of truth** - Change value in one place  
-✅ **Type safety** - TypeScript can help catch errors  
-✅ **Easier to find** - Search for constant name, not a number
-
----
-
-## 3. Documentation Standards
-
-### JSDoc Comments
-
-Every public function, class, and complex method should have JSDoc documentation.
-
-**Template for functions:**
-
-```typescript
-/**
- * Brief one-line description of what the function does.
- * 
- * Optional longer description explaining the function's behavior,
- * edge cases, or important details.
- *
- * @param paramName - Description of the parameter.
- * @param options - Command-line options containing optional settings.
- * @returns Description of what the function returns.
- * @throws {ErrorType} When and why this error is thrown.
- */
-function myFunction(paramName: string, options: any): ReturnType {
-  // implementation
-}
-```
-
-**Example - Well-documented function:**
-
-```typescript
-/**
- * Creates a DebateConfig from the system configuration and command-line options.
- * Validates that the number of rounds is at least 1.
- *
- * @param sysConfig - The system configuration.
- * @param options - Command-line options containing optional rounds override.
- * @returns The debate configuration.
- * @throws {Error} If rounds is less than 1.
- */
-function debateConfigFromSysConfig(sysConfig: SystemConfig, options: any): DebateConfig {
-  const debateCfg: DebateConfig = {
-    ...sysConfig.debate!,
-    rounds: options.rounds ? parseInt(options.rounds, 10) : (sysConfig.debate?.rounds ?? DEFAULT_ROUNDS),
-  } as DebateConfig;
-  
-  if (!debateCfg.rounds || debateCfg.rounds < 1) {
-    const err: any = new Error('Invalid arguments: --rounds must be >= 1');
-    err.code = EXIT_INVALID_ARGS;
-    throw err;
-  }
-  
-  return debateCfg;
-}
-```
-
-### Special Tags
-
-**@final** - Indicates a method should not be overridden:
-
-```typescript
-/**
- * Template method for generating proposals.
- * 
- * @final
- * @param systemPrompt - The system prompt to use for the LLM.
- * @param userPrompt - The user prompt to use for the LLM.
- * @returns A Promise resolving to a Proposal.
- */
-protected async proposeImpl(systemPrompt: string, userPrompt: string): Promise<Proposal> {
-  // implementation
-}
-```
-
-### Inline Comments for Non-Obvious Choices
-
-When you make a non-obvious technical choice, explain why:
-
-```typescript
-// Use process.stderr.write for immediate, unbuffered output with precise newline control (CLI best practice)
-process.stderr.write(color('yellow', 'Config missing agents. Using built-in defaults.') + '\n');
-
-// NOT console.error() because:
-// - process.stderr.write gives precise control over newlines
-// - It's unbuffered for immediate output
-// - Standard practice for professional CLI tools
-```
-
-### What NOT to document
-
-Don't document obvious things:
-
-```typescript
-// ❌ BAD - Obvious from code
-// Increment counter by one
-counter++;
-
-// ✅ GOOD - Explains WHY
-// Skip first element as it's the header row
-for (let i = 1; i < rows.length; i++) {
-  processRow(rows[i]);
-}
-```
-
----
-
-## 4. Complete Example: Before and After
-
-### Before - Needs cleanup:
-
-```typescript
-class PerformanceAgent extends Agent {
-  async propose(problem: string, context: DebateContext): Promise<Proposal> {
-    const system = this.config.systemPrompt || "You are a performance engineer...";
-    const user = `Problem: ${problem}\n\nPropose solution...`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: any = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
-  }
-
-  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
-    const system = this.config.systemPrompt || "You are a performance engineer...";
-    const user = `Review: ${proposal.content}`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: any = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
-  }
-}
-```
-
-### After - Clean and maintainable:
-
-```typescript
-// Constants at file level
-const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer specializing in system optimization, profiling, and resource management.`;
-
-/**
- * PerformanceAgent is an AI agent specializing in system performance optimization.
- * 
- * Focuses on latency, throughput, resource utilization, caching strategies,
- * and algorithmic complexity.
- *
- * Note: This class cannot be extended. Use the static `create` factory method to instantiate.
- */
-export class PerformanceAgent extends Agent {
-  /**
-   * Private constructor to prevent direct instantiation and extension.
-   * Use the static `create` method instead.
-   */
-  private constructor(config: AgentConfig, provider: LLMProvider) {
-    super(config, provider);
-  }
-
-  /**
-   * Factory method to create a new PerformanceAgent instance.
-   */
-  static create(config: AgentConfig, provider: LLMProvider): PerformanceAgent {
-    return new PerformanceAgent(config, provider);
-  }
-
-  /**
-   * Generates a performance-focused proposal for the given problem.
-   * @param problem - The software/system design problem to solve.
-   * @param context - The current debate context.
-   * @returns A Promise resolving to a Proposal containing the solution and metadata.
-   */
-  async propose(problem: string, context: DebateContext): Promise<Proposal> {
-    const system = this.config.systemPrompt || DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
-    const user = `Problem: ${problem}\n\nAs a performance engineer, propose a solution focusing on latency, throughput, and resource efficiency.`;
-    return this.proposeImpl(context, system, user);
-  }
-
-  /**
-   * Critiques a given proposal from a performance engineering perspective.
-   * @param proposal - The proposal to critique.
-   * @param context - The current debate context.
-   * @returns A Promise resolving to a Critique containing the review and metadata.
-   */
-  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
-    const system = this.config.systemPrompt || DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
-    const user = `Review this proposal as a performance engineer. Identify bottlenecks and improvements.\n\nProposal:\n${proposal.content}`;
-    return this.critiqueImpl(proposal, context, system, user);
-  }
-}
-```
-
----
-
-## 5. Checklist for Code Cleanup
-
-When reviewing code, check:
-
-- [ ] **No duplicate logic** - Extract common patterns to base classes or utility functions
-- [ ] **No magic numbers** - All literal numbers replaced with named constants
-- [ ] **No hardcoded strings** - Especially for types, roles, statuses - use constants
-- [ ] **All public APIs documented** - JSDoc for functions, classes, complex methods
-- [ ] **Non-obvious choices explained** - Inline comments for "why" not "what"
-- [ ] **Constants properly scoped** - Function-level for single-function use, file-level for local, exported for shared
-- [ ] **Template methods marked @final** - When they shouldn't be overridden
-- [ ] **Function extraction** - Large functions broken into smaller, focused ones
-- [ ] **Separation of concerns** - Each function has a single, clear purpose
-
----
-
-## Quick Reference
-
-| Problem | Solution | Example |
-|---------|----------|---------|
-| Duplicate method logic | Template method pattern | `proposeImpl()` in base class |
-| Magic number `3` | Named constant | `DEFAULT_ROUNDS = 3` |
-| String `"architect"` | Constant object | `AGENT_ROLES.ARCHITECT` |
-| String used multiple times in one function | Function-level constant | `const EXPECTED_REASONING = 'Good'` |
-| Long complex function | Extract helper functions | `debateConfigFromSysConfig()` |
-| Unclear technical choice | Inline comment | `// Use stderr.write for unbuffered output` |
-| Public function | JSDoc with @param/@returns | See examples above |
----
-
-## When to Use Type Assertions (`as Type`)
-
-Type assertions should be used **sparingly** and only in specific scenarios where you have information that TypeScript cannot infer.
-
-### ✅ Valid Use Cases
-
-#### 1. Working with Third-Party Libraries
-When dealing with `any` types from external libraries where you know the actual type:
-
-```typescript
-// Third-party library returns 'any'
-const data = externalAPI.fetchData() as UserData;
-```
-
-#### 2. Type Narrowing After Runtime Validation
-When you've validated the type at runtime but TypeScript can't track it:
-
-```typescript
-function processData(data: unknown) {
-  if (isValidUser(data)) {
-    // We've validated it's a User, but TypeScript doesn't know
-    const user = data as User;
-    return user.name;
-  }
-}
-```
-
-#### 3. Complex Type Scenarios TypeScript Cannot Infer
-When working with advanced type transformations that are correct but TypeScript cannot prove:
-
-```typescript
-// Complex mapped type that TypeScript struggles with
-const result = transformData(input) as TransformedType;
-```
-
-### ❌ Invalid Use Cases
-
-#### 1. Hiding Legitimate Type Errors
-**NEVER** use type assertions to bypass valid TypeScript errors:
-
-```typescript
-// ❌ BAD: Hiding a real type mismatch
-const state: DebateState = {
-  context: undefined,  // Type error!
-} as DebateState;
-
-// ✅ GOOD: Fix the actual issue
-const state: DebateState = {
-  ...(context !== undefined && { context }),
-};
-```
-
-#### 2. Working Around Optional Properties
-**NEVER** use assertions to force undefined into optional properties:
-
-```typescript
-// ❌ BAD: Using assertion to hide strictness issue
-const obj = { value: undefined } as MyType;
-
-// ✅ GOOD: Conditionally include the property
-const obj = { ...(value !== undefined && { value }) };
-```
-
-#### 3. Forcing Incompatible Types
-**NEVER** use assertions to force incompatible types:
-
-```typescript
-// ❌ BAD: These types are fundamentally incompatible
-const num = "string" as number;
-
-// ✅ GOOD: Convert properly
-const num = parseInt("string", 10);
-```
-
-## Key Principle
-
-> **Type assertions are for saying "trust me, I know better" — not "ignore this error."**
-
-If you find yourself using `as` to silence an error, stop and ask:
-1. Is this a real type incompatibility I should fix?
-2. Can I narrow the type properly with guards or validation?
-3. Am I hiding a bug that will surface at runtime?
-
-## Alternative Solutions
-
-Before using type assertions, consider:
-
-- **Type guards**: `if (typeof x === 'string')`
-- **Discriminated unions**: Use `type` fields to narrow types
-- **Conditional spreads**: `...(value !== undefined && { value })`
-- **Proper typing**: Fix the type definitions rather than casting
-- **Validation libraries**: Use runtime validators like Zod or io-ts
-
-## Summary
-
-✅ **Use `as Type` when**: You have runtime knowledge TypeScript lacks  
-❌ **Don't use `as Type` when**: TypeScript is catching a real bug
----
-
-# Code Smells
-
-This section  provides guidelines for identifying and fixing common code smells, with real examples from code refactoring sessions.
-
-## Table of Contents
-
-1. [Unnecessary Exports](#1-unnecessary-exports)
-2. [Inline Type Definitions (DRY Violation)](#2-inline-type-definitions-dry-violation)
-3. [Magic Strings and Hardcoded Values](#3-magic-strings-and-hardcoded-values)
-4. [Repeated Code Patterns](#4-repeated-code-patterns)
-5. [Improper stdout/stderr Usage](#5-improper-stdoutstderr-usage)
-6. [Redundant Function Calls](#6-redundant-function-calls)
-7. [Complex Nested Logic](#7-complex-nested-logic)
-8. [Unnecessary Type Casts](#8-unnecessary-type-casts)
-9. [Importing from Built Package Distribution](#9-importing-from-built-package-distribution)
-
----
-
-## 1. Unnecessary Exports
-
-### Problem
-Exporting constants or functions that are only used internally, creating unnecessary public API surface.
-
-### Code Smell
-```typescript
-// ❌ BAD: Constant is exported but only method should be public
-export const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer...`;
-
-export class PerformanceAgent {
-  static defaultSystemPrompt(): string { 
-    return DEFAULT_PERFORMANCE_SYSTEM_PROMPT; 
-  }
-}
-
-// Usage elsewhere
-PerformanceAgent.defaultSystemPrompt(); // Only this is used
-```
-
-### Solution
-```typescript
-// ✅ GOOD: Keep constant private, expose through method
-const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer...`;
-
-export class PerformanceAgent {
-  static defaultSystemPrompt(): string { 
-    return DEFAULT_PERFORMANCE_SYSTEM_PROMPT; 
-  }
-}
-```
-
-### Why It Matters
-- **Encapsulation**: Internal implementation details should not be part of the public API
-- **Maintainability**: Changes to internal constants won't break external consumers
-- **Single Source of Truth**: The static method is the intended public interface
-
----
-
-## 2. Inline Type Definitions (DRY Violation)
-
-### Problem
-Repeating the same inline type definition multiple times across the codebase.
-
-### Code Smell
-```typescript
-// ❌ BAD: Same inline type repeated 8+ times
-function createAgent(
-  promptSource?: { source: 'built-in' | 'file'; absPath?: string }
-) { }
-
-class JudgeAgent {
-  public readonly promptSource?: { source: 'built-in' | 'file'; absPath?: string };
-  constructor(
-    promptSource?: { source: 'built-in' | 'file'; absPath?: string }
-  ) { }
-}
-
-// ... repeated 5+ more times
-```
-
-### Solution
-```typescript
-// ✅ GOOD: Define once, use everywhere
-export interface PromptSource {
-  source: 'built-in' | 'file';
-  absPath?: string;
-}
-
-function createAgent(promptSource?: PromptSource) { }
-
-class JudgeAgent {
-  public readonly promptSource?: PromptSource;
-  constructor(promptSource?: PromptSource) { }
-}
-```
-
-### Why It Matters
-- **DRY Principle**: Single source of truth for type definitions
-- **Maintainability**: Changes only need to be made in one place
-- **Documentation**: Named types are self-documenting
-- **Reusability**: Can extend or compose types easily
-
----
-
-## 3. Magic Strings and Hardcoded Values
-
-### Problem
-Using hardcoded string literals instead of named constants throughout the codebase.
-
-### Code Smell
-```typescript
-// ❌ BAD: Hardcoded strings scattered everywhere
-process.stderr.write(color('yellow', 'Warning message') + '\n');
-// ... in another file
-process.stderr.write(color('yellow', 'Another warning') + '\n');
-// ... in yet another file
-console.log(color('gray', 'Debug info'));
-```
-
-### Solution
-```typescript
-// ✅ GOOD: Define constants once
-// In cli/index.ts
-export const WARNING_COLOR = 'yellow';
-export const INFO_COLOR = 'gray';
-
-// Usage
-import { WARNING_COLOR, INFO_COLOR } from '../cli/index';
-process.stderr.write(color(WARNING_COLOR, 'Warning message') + '\n');
-console.log(color(INFO_COLOR, 'Debug info'));
-```
-
-### Even Better
-Create utility functions:
-```typescript
-// ✅ BEST: Encapsulate the behavior
-export function warnUser(message: string): void {
-  process.stderr.write(color(WARNING_COLOR, message) + '\n');
-}
-
-// Usage
-warnUser('Warning message');
-```
-
-### Why It Matters
-- **Consistency**: All warnings use the same color
-- **Maintainability**: Change color in one place
-- **Discoverability**: Constants appear in autocomplete
-- **Type Safety**: Typos caught at compile time
-
----
-
-## 4. Repeated Code Patterns
-
-### Problem
-The same logic pattern repeated multiple times, violating DRY principle.
-
-### Code Smell
+**Example - Repeated pattern:**
 ```typescript
 // ❌ BAD: Same 18-line pattern repeated 3 times
 function buildAgents() {
@@ -689,7 +110,7 @@ function buildAgents() {
 }
 ```
 
-### Solution
+**Solution - Extract to helper function:**
 ```typescript
 // ✅ GOOD: Extract to helper function
 function createAgentWithPromptResolution(
@@ -727,20 +148,467 @@ function buildAgents() {
 }
 ```
 
-### Why It Matters
-- **DRY**: Changes made once, applied everywhere
-- **Readability**: Main function is now clear and concise
-- **Testability**: Helper function can be tested independently
-- **Maintainability**: Bugs fixed in one place
+---
+
+## 2. Constants and Magic Values
+
+### What are Magic Values?
+Magic numbers/strings are literal values hardcoded in your code without explanation. They make code harder to understand and maintain.
+
+### Removing Magic Numbers
+
+**Bad - Magic numbers:**
+```typescript
+const debateConfig = {
+  rounds: options.rounds || config.rounds || 3,  // What is 3?
+  timeout: 300000  // What is 300000?
+};
+```
+
+**Good - Named constants:**
+```typescript
+const DEFAULT_ROUNDS = 3;
+const DEFAULT_TIMEOUT_MS = 300000;
+
+const debateConfig = {
+  rounds: options.rounds || config.rounds || DEFAULT_ROUNDS,
+  timeout: DEFAULT_TIMEOUT_MS
+};
+```
+
+### Removing Magic Strings
+
+**Bad - Hardcoded strings:**
+```typescript
+function buildAgents(configs: AgentConfig[], provider: Provider) {
+  return configs.map((cfg) => {
+    if (cfg.role === 'architect') return new ArchitectAgent(cfg, provider);
+    if (cfg.role === 'performance') return new PerformanceAgent(cfg, provider);
+    return new ArchitectAgent(cfg, provider);
+  });
+}
+
+process.stderr.write(color('yellow', 'Warning message') + '\n');
+console.log(color('gray', 'Debug info'));
+```
+
+**Good - Named constants:**
+```typescript
+export const AGENT_ROLES = {
+  ARCHITECT: "architect",
+  SECURITY: "security",
+  PERFORMANCE: "performance",
+  TESTING: "testing",
+  GENERALIST: "generalist",
+} as const;
+
+export type AgentRole = (typeof AGENT_ROLES)[keyof typeof AGENT_ROLES];
+
+export const WARNING_COLOR = 'yellow';
+export const INFO_COLOR = 'gray';
+
+// Now the code is self-documenting
+function buildAgents(configs: AgentConfig[], provider: Provider) {
+  return configs.map((cfg) => {
+    if (cfg.role === AGENT_ROLES.ARCHITECT) return new ArchitectAgent(cfg, provider);
+    if (cfg.role === AGENT_ROLES.PERFORMANCE) return new PerformanceAgent(cfg, provider);
+    return new ArchitectAgent(cfg, provider);
+  });
+}
+
+process.stderr.write(color(WARNING_COLOR, 'Warning message') + '\n');
+console.log(color(INFO_COLOR, 'Debug info'));
+```
+
+**Even Better - Encapsulate behavior:**
+```typescript
+export function warnUser(message: string): void {
+  process.stderr.write(color(WARNING_COLOR, message) + '\n');
+}
+
+// Usage
+warnUser('Warning message');
+```
+
+### Where to Define Constants
+
+**Function-level constants** - Use when a value is used multiple times within a single function:
+```typescript
+it('should write JSON output when --output ends with .json', async () => {
+  const EXPECTED_REASONING = 'Good';
+  const outputPath = path.join(tmpDir, 'results.json');
+  
+  // Use EXPECTED_REASONING in mock data and assertion
+  evalSpy.mockResolvedValueOnce({
+    rawText: JSON.stringify({
+      evaluation: { functional_completeness: { score: 8, reasoning: EXPECTED_REASONING } }
+    })
+  });
+  
+  expect(content.agents.e1.evaluation.functional_completeness.reasoning).toBe(EXPECTED_REASONING);
+});
+```
+
+**File-level constants** - Use when only one file needs them:
+```typescript
+// At top of file, after imports
+const DEFAULT_ROUNDS = 3;
+const MAX_RETRIES = 5;
+```
+
+**Exported constants** - Use when multiple files need them:
+```typescript
+// In types/constants file
+export const AGENT_ROLES = {
+  ARCHITECT: "architect",
+  PERFORMANCE: "performance",
+} as const;
+
+export const LLM_PROVIDERS = {
+  OPENAI: "openai",
+} as const;
+```
+
+**Benefits:**
+- ✅ **Self-documenting** - Name explains what the value means
+- ✅ **Single source of truth** - Change value in one place
+- ✅ **Type safety** - TypeScript can help catch errors
+- ✅ **Easier to find** - Search for constant name, not a number
+- ✅ **Consistency** - All usages use the same value
+- ✅ **Maintainability** - Change value in one place
 
 ---
 
-## 5. Improper stdout/stderr Usage
+## 3. Documentation Standards
 
-### Problem
-Writing diagnostic/verbose output to stdout instead of stderr, breaking Unix pipeline conventions.
+### JSDoc Comments
 
-### Code Smell
+Every public function, class, and complex method should have JSDoc documentation.
+
+**Template for functions:**
+```typescript
+/**
+ * Brief one-line description of what the function does.
+ * 
+ * Optional longer description explaining the function's behavior,
+ * edge cases, or important details.
+ *
+ * @param paramName - Description of the parameter.
+ * @param options - Command-line options containing optional settings.
+ * @returns Description of what the function returns.
+ * @throws {ErrorType} When and why this error is thrown.
+ */
+function myFunction(paramName: string, options: any): ReturnType {
+  // implementation
+}
+```
+
+**Example - Well-documented function:**
+```typescript
+/**
+ * Creates a DebateConfig from the system configuration and command-line options.
+ * Validates that the number of rounds is at least 1.
+ *
+ * @param sysConfig - The system configuration.
+ * @param options - Command-line options containing optional rounds override.
+ * @returns The debate configuration.
+ * @throws {Error} If rounds is less than 1.
+ */
+function debateConfigFromSysConfig(sysConfig: SystemConfig, options: any): DebateConfig {
+  const debateCfg: DebateConfig = {
+    ...sysConfig.debate!,
+    rounds: options.rounds ? parseInt(options.rounds, 10) : (sysConfig.debate?.rounds ?? DEFAULT_ROUNDS),
+  } as DebateConfig;
+  
+  if (!debateCfg.rounds || debateCfg.rounds < 1) {
+    const err: any = new Error('Invalid arguments: --rounds must be >= 1');
+    err.code = EXIT_INVALID_ARGS;
+    throw err;
+  }
+  
+  return debateCfg;
+}
+```
+
+### Special Tags
+
+**@final** - Indicates a method should not be overridden:
+```typescript
+/**
+ * Template method for generating proposals.
+ * 
+ * @final
+ * @param systemPrompt - The system prompt to use for the LLM.
+ * @param userPrompt - The user prompt to use for the LLM.
+ * @returns A Promise resolving to a Proposal.
+ */
+protected async proposeImpl(systemPrompt: string, userPrompt: string): Promise<Proposal> {
+  // implementation
+}
+```
+
+### Inline Comments for Non-Obvious Choices
+
+When you make a non-obvious technical choice, explain why:
+```typescript
+// Use process.stderr.write for immediate, unbuffered output with precise newline control (CLI best practice)
+process.stderr.write(color('yellow', 'Config missing agents. Using built-in defaults.') + '\n');
+
+// NOT console.error() because:
+// - process.stderr.write gives precise control over newlines
+// - It's unbuffered for immediate output
+// - Standard practice for professional CLI tools
+```
+
+### What NOT to document
+
+Don't document obvious things:
+```typescript
+// ❌ BAD - Obvious from code
+// Increment counter by one
+counter++;
+
+// ✅ GOOD - Explains WHY
+// Skip first element as it's the header row
+for (let i = 1; i < rows.length; i++) {
+  processRow(rows[i]);
+}
+```
+
+---
+
+## 4. Type Safety
+
+### When to Use Type Assertions (`as Type`)
+
+Type assertions should be used **sparingly** and only in specific scenarios where you have information that TypeScript cannot infer.
+
+#### ✅ Valid Use Cases
+
+**1. Working with Third-Party Libraries**
+When dealing with `any` types from external libraries where you know the actual type:
+```typescript
+// Third-party library returns 'any'
+const data = externalAPI.fetchData() as UserData;
+```
+
+**2. Type Narrowing After Runtime Validation**
+When you've validated the type at runtime but TypeScript can't track it:
+```typescript
+function processData(data: unknown) {
+  if (isValidUser(data)) {
+    // We've validated it's a User, but TypeScript doesn't know
+    const user = data as User;
+    return user.name;
+  }
+}
+```
+
+**3. Complex Type Scenarios TypeScript Cannot Infer**
+When working with advanced type transformations that are correct but TypeScript cannot prove:
+```typescript
+// Complex mapped type that TypeScript struggles with
+const result = transformData(input) as TransformedType;
+```
+
+#### ❌ Invalid Use Cases
+
+**1. Hiding Legitimate Type Errors**
+**NEVER** use type assertions to bypass valid TypeScript errors:
+```typescript
+// ❌ BAD: Hiding a real type mismatch
+const state: DebateState = {
+  context: undefined,  // Type error!
+} as DebateState;
+
+// ✅ GOOD: Fix the actual issue
+const state: DebateState = {
+  ...(context !== undefined && { context }),
+};
+```
+
+**2. Working Around Optional Properties**
+**NEVER** use assertions to force undefined into optional properties:
+```typescript
+// ❌ BAD: Using assertion to hide strictness issue
+const obj = { value: undefined } as MyType;
+
+// ✅ GOOD: Conditionally include the property
+const obj = { ...(value !== undefined && { value }) };
+
+// ❌ BAD: Unnecessary cast for optional property deletion
+async setPromptSources(sources: DebateState['promptSources']): Promise<void> {
+  const state = this.debates.get(debateId);
+  if (sources) {
+    state.promptSources = sources;
+  } else {
+    delete (state as any).promptSources; // Unnecessary!
+  }
+}
+
+// ✅ GOOD: Optional properties can be deleted without cast
+async setPromptSources(sources: DebateState['promptSources']): Promise<void> {
+  const state = this.debates.get(debateId);
+  if (sources) {
+    state.promptSources = sources;
+  } else {
+    delete state.promptSources; // Works fine!
+  }
+}
+```
+
+**3. Forcing Incompatible Types**
+**NEVER** use assertions to force incompatible types:
+```typescript
+// ❌ BAD: These types are fundamentally incompatible
+const num = "string" as number;
+
+// ✅ GOOD: Convert properly
+const num = parseInt("string", 10);
+
+// ❌ BAD: Using 'as any' to bypass type mismatch
+interface Contribution {
+  agentId: string;
+  agentRole: AgentRole;
+  type: ContributionType;
+  content: string;
+  metadata: { tokensUsed?: number; latencyMs?: number };
+}
+
+interface Critique {
+  content: string;
+  metadata: { tokensUsed?: number; latencyMs?: number };
+}
+
+async refinementPhase() {
+  const critiques = contributions.filter(c => c.type === 'critique');
+  
+  // Type error: Contribution[] is not Critique[]
+  const refined = await agent.refine(original, critiques as any, ctx); // BAD!
+}
+
+// ✅ GOOD: Properly map types
+async refinementPhase() {
+  const critiqueContributions = contributions.filter(c => c.type === 'critique');
+  
+  // Map Contribution[] to Critique[] by extracting needed fields
+  const critiques: Critique[] = critiqueContributions.map((c) => ({
+    content: c.content,
+    metadata: c.metadata
+  }));
+  
+  const refined = await agent.refine(original, critiques, ctx); // Type-safe!
+}
+```
+
+### Key Principle
+
+> **Type assertions are for saying "trust me, I know better" — not "ignore this error."**
+
+If you find yourself using `as` to silence an error, stop and ask:
+1. Is this a real type incompatibility I should fix?
+2. Can I narrow the type properly with guards or validation?
+3. Am I hiding a bug that will surface at runtime?
+
+### Alternative Solutions
+
+Before using type assertions, consider:
+- **Type guards**: `if (typeof x === 'string')`
+- **Discriminated unions**: Use `type` fields to narrow types
+- **Conditional spreads**: `...(value !== undefined && { value })`
+- **Proper typing**: Fix the type definitions rather than casting
+- **Validation libraries**: Use runtime validators like Zod or io-ts
+
+---
+
+## 5. Code Smells
+
+This section provides guidelines for identifying and fixing common code smells with real examples.
+
+### 5.1 Unnecessary Exports
+
+**Problem:** Exporting constants or functions that are only used internally, creating unnecessary public API surface.
+
+**Code Smell:**
+```typescript
+// ❌ BAD: Constant is exported but only method should be public
+export const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer...`;
+
+export class PerformanceAgent {
+  static defaultSystemPrompt(): string { 
+    return DEFAULT_PERFORMANCE_SYSTEM_PROMPT; 
+  }
+}
+
+// Usage elsewhere
+PerformanceAgent.defaultSystemPrompt(); // Only this is used
+```
+
+**Solution:**
+```typescript
+// ✅ GOOD: Keep constant private, expose through method
+const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer...`;
+
+export class PerformanceAgent {
+  static defaultSystemPrompt(): string { 
+    return DEFAULT_PERFORMANCE_SYSTEM_PROMPT; 
+  }
+}
+```
+
+**Why It Matters:**
+- **Encapsulation**: Internal implementation details should not be part of the public API
+- **Maintainability**: Changes to internal constants won't break external consumers
+- **Single Source of Truth**: The static method is the intended public interface
+
+### 5.2 Inline Type Definitions (DRY Violation)
+
+**Problem:** Repeating the same inline type definition multiple times across the codebase.
+
+**Code Smell:**
+```typescript
+// ❌ BAD: Same inline type repeated 8+ times
+function createAgent(
+  promptSource?: { source: 'built-in' | 'file'; absPath?: string }
+) { }
+
+class JudgeAgent {
+  public readonly promptSource?: { source: 'built-in' | 'file'; absPath?: string };
+  constructor(
+    promptSource?: { source: 'built-in' | 'file'; absPath?: string }
+  ) { }
+}
+
+// ... repeated 5+ more times
+```
+
+**Solution:**
+```typescript
+// ✅ GOOD: Define once, use everywhere
+export interface PromptSource {
+  source: 'built-in' | 'file';
+  absPath?: string;
+}
+
+function createAgent(promptSource?: PromptSource) { }
+
+class JudgeAgent {
+  public readonly promptSource?: PromptSource;
+  constructor(promptSource?: PromptSource) { }
+}
+```
+
+**Why It Matters:**
+- **DRY Principle**: Single source of truth for type definitions
+- **Maintainability**: Changes only need to be made in one place
+- **Documentation**: Named types are self-documenting
+- **Reusability**: Can extend or compose types easily
+
+### 5.3 Improper stdout/stderr Usage
+
+**Problem:** Writing diagnostic/verbose output to stdout instead of stderr, breaking Unix pipeline conventions.
+
+**Code Smell:**
 ```typescript
 // ❌ BAD: Mixing diagnostic output with results on stdout
 async function outputResults(result: DebateResult) {
@@ -761,7 +629,7 @@ async function outputResults(result: DebateResult) {
 // $ debate "problem" > solution.txt  (verbose output pollutes file)
 ```
 
-### Solution
+**Solution:**
 ```typescript
 // ✅ GOOD: Proper separation
 export function writeStderr(message: string): void {
@@ -787,22 +655,19 @@ async function outputResults(result: DebateResult) {
 // $ debate "problem" 2>/dev/null     (suppress diagnostics)
 ```
 
-### Why It Matters
+**Why It Matters:**
 - **Unix Philosophy**: stdout = data, stderr = diagnostics
 - **Pipeable Output**: Results can be piped without noise
 - **Standard Compliance**: Follows CLI best practices
 - **User Experience**: Users can redirect output as expected
 
----
+### 5.4 Redundant Function Calls
 
-## 6. Redundant Function Calls
+**Problem:** Calling the same function multiple times when the result could be reused.
 
-### Problem
-Calling the same function multiple times when the result could be reused.
-
-### Code Smell
+**Code Smell:**
 ```typescript
-// ❌ BAD: Function called up to 3 times
+// ❌ BAD: Function called up to 4 times
 export async function loadConfig(configPath?: string): Promise<SystemConfig> {
   if (!fs.existsSync(finalPath)) {
     const defaults = builtInDefaults(); // Call 1
@@ -828,7 +693,7 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
 }
 ```
 
-### Solution
+**Solution:**
 ```typescript
 // ✅ GOOD: Call once, reuse everywhere
 export async function loadConfig(configPath?: string): Promise<SystemConfig> {
@@ -858,20 +723,17 @@ export async function loadConfig(configPath?: string): Promise<SystemConfig> {
 }
 ```
 
-### Why It Matters
+**Why It Matters:**
 - **Performance**: Avoid redundant computation
 - **Efficiency**: Especially important if function is expensive
 - **Clarity**: Shows defaults are the same throughout function
 - **Maintainability**: Changes to default computation happen once
 
----
+### 5.5 Complex Nested Logic
 
-## 7. Complex Nested Logic
+**Problem:** Deeply nested loops and conditionals that are hard to read and understand.
 
-### Problem
-Deeply nested loops and conditionals that are hard to read and understand.
-
-### Code Smell
+**Code Smell:**
 ```typescript
 // ❌ BAD: 18+ lines of nested logic embedded in function
 async function outputResults(result: DebateResult) {
@@ -902,7 +764,7 @@ async function outputResults(result: DebateResult) {
 }
 ```
 
-### Solution
+**Solution:**
 ```typescript
 // ✅ GOOD: Extract to focused function
 function outputRoundSummary(round: DebateRound): void {
@@ -936,106 +798,17 @@ async function outputResults(result: DebateResult) {
 }
 ```
 
-### Why It Matters
+**Why It Matters:**
 - **Readability**: Each function has single responsibility
 - **Testability**: `outputRoundSummary` can be tested in isolation
 - **Reusability**: Function can be used elsewhere if needed
 - **Cognitive Load**: Easier to understand smaller, focused functions
 
----
+### 5.6 Importing from Built Package Distribution
 
-## 8. Unnecessary Type Casts
+**Problem:** Importing symbols from the built package distribution (e.g., `'dialectic-core'`) instead of using relative source imports **within the same package**. This applies to both application code and test code.
 
-### Problem
-Using `as any` or other unsafe type casts when proper typing is possible.
-
-### Code Smell 1: Optional Properties
-```typescript
-// ❌ BAD: Unnecessary cast for optional property
-interface DebateState {
-  promptSources?: {
-    agents: AgentPromptMetadata[];
-    judge: JudgePromptMetadata;
-  };
-}
-
-async setPromptSources(sources: DebateState['promptSources']): Promise<void> {
-  const state = this.debates.get(debateId);
-  if (sources) {
-    state.promptSources = sources;
-  } else {
-    delete (state as any).promptSources; // Unnecessary!
-  }
-}
-```
-
-**Solution:**
-```typescript
-// ✅ GOOD: Optional properties can be deleted without cast
-async setPromptSources(sources: DebateState['promptSources']): Promise<void> {
-  const state = this.debates.get(debateId);
-  if (sources) {
-    state.promptSources = sources;
-  } else {
-    delete state.promptSources; // Works fine!
-  }
-}
-```
-
-### Code Smell 2: Type Mismatches
-```typescript
-// ❌ BAD: Using 'as any' to bypass type mismatch
-interface Contribution {
-  agentId: string;
-  agentRole: AgentRole;
-  type: ContributionType;
-  content: string;
-  metadata: { tokensUsed?: number; latencyMs?: number };
-}
-
-interface Critique {
-  content: string;
-  metadata: { tokensUsed?: number; latencyMs?: number };
-}
-
-async refinementPhase() {
-  const critiques = contributions.filter(c => c.type === 'critique');
-  
-  // Type error: Contribution[] is not Critique[]
-  const refined = await agent.refine(original, critiques as any, ctx); // BAD!
-}
-```
-
-**Solution:**
-```typescript
-// ✅ GOOD: Properly map types
-async refinementPhase() {
-  const critiqueContributions = contributions.filter(c => c.type === 'critique');
-  
-  // Map Contribution[] to Critique[] by extracting needed fields
-  const critiques: Critique[] = critiqueContributions.map((c) => ({
-    content: c.content,
-    metadata: c.metadata
-  }));
-  
-  const refined = await agent.refine(original, critiques, ctx); // Type-safe!
-}
-```
-
-### Why It Matters
-- **Type Safety**: Catch errors at compile time
-- **Explicit Transformation**: Clear boundary between different layers
-- **Maintainability**: Type system catches breaking changes
-- **Documentation**: Types document the expected structure
-
----
-
-## 9. Importing from Built Package Distribution
-
-### Problem
-Importing symbols from the built package distribution (e.g., `'dialectic-core'`) instead of using relative source imports **within the same package**. This applies to both application code and test code.
-
-### Code Smell
+**Code Smell:**
 ```typescript
 // ❌ BAD: Importing from built package within the same package
 // File: packages/core/src/utils/context-summarizer.spec.ts
@@ -1048,7 +821,7 @@ import { TracingLLMProvider, LLMProvider, CompletionRequest, TracingContext } fr
 import { Agent, ToolRegistry, LLMProvider, DebateContext, AgentConfig, AGENT_ROLES } from 'dialectic-core';
 ```
 
-### Solution
+**Solution:**
 ```typescript
 // ✅ GOOD: Use relative source imports within the same package
 // File: packages/core/src/utils/context-summarizer.spec.ts
@@ -1070,7 +843,7 @@ import { DebateContext } from '../types/debate.types';
 import { AgentConfig, AGENT_ROLES } from '../types/agent.types';
 ```
 
-### Important Notes
+**Important Notes:**
 
 **This rule applies WITHIN a package only:**
 - ✅ **Within `packages/core/src/`**: Use relative imports like `'./context-summarizer'` or `'../types/debate.types'`
@@ -1082,14 +855,14 @@ import { AgentConfig, AGENT_ROLES } from '../types/agent.types';
 - Application code: `packages/core/src/utils/context-summarizer.ts` should import from `'../providers/llm-provider'`, not `'dialectic-core'`
 - Test code: `packages/core/src/utils/context-summarizer.spec.ts` should also import from `'../providers/llm-provider'`, not `'dialectic-core'`
 
-### Why It Matters
+**Why It Matters:**
 - **No Build Required**: Tests can run without building the package first
 - **Better IDE Support**: IDEs can provide better autocomplete and type checking with direct source imports
 - **Faster Development**: No need to rebuild when making changes during development
 - **Clearer Dependencies**: Relative imports make it immediately clear where symbols come from
 - **Consistency**: Application code and test code follow the same import patterns
 
-### When to Use Package Name Imports
+**When to Use Package Name Imports:**
 
 **✅ Use package name imports (`'dialectic-core'`) when:**
 - Importing from a **different package** (e.g., `packages/cli/src/` importing from `packages/core/`)
@@ -1101,23 +874,7 @@ import { AgentConfig, AGENT_ROLES } from '../types/agent.types';
 
 ---
 
-## Quick Reference Checklist
-
-When reviewing code, ask:
-
-- [ ] Are there exported constants/types that are only accessed through methods?
-- [ ] Are the same inline types repeated multiple times?
-- [ ] Are there hardcoded strings that should be constants?
-- [ ] Is the same code pattern repeated 3+ times?
-- [ ] Is diagnostic output going to stdout instead of stderr?
-- [ ] Are functions called multiple times with the same result?
-- [ ] Are there deeply nested loops/conditionals that could be extracted?
-- [ ] Are there `as any` casts that could be removed with proper typing?
-- [ ] Are imports within a package using relative source paths instead of built package distribution?
-
----
-
-## Additional Best Practices
+## 6. Best Practices
 
 ### Consistent Naming
 ```typescript
@@ -1186,17 +943,132 @@ function validate(config: Config): boolean {
 
 ---
 
+## 7. Complete Example: Before and After
+
+### Before - Needs cleanup:
+```typescript
+class PerformanceAgent extends Agent {
+  async propose(problem: string, context: DebateContext): Promise<Proposal> {
+    const system = this.config.systemPrompt || "You are a performance engineer...";
+    const user = `Problem: ${problem}\n\nPropose solution...`;
+    const { text, usage, latencyMs } = await this.callLLM(system, user);
+    const metadata: any = { latencyMs, model: this.config.model };
+    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
+    return { content: text, metadata };
+  }
+
+  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
+    const system = this.config.systemPrompt || "You are a performance engineer...";
+    const user = `Review: ${proposal.content}`;
+    const { text, usage, latencyMs } = await this.callLLM(system, user);
+    const metadata: any = { latencyMs, model: this.config.model };
+    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
+    return { content: text, metadata };
+  }
+}
+```
+
+### After - Clean and maintainable:
+```typescript
+// Constants at file level
+const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `You are a performance engineer specializing in system optimization, profiling, and resource management.`;
+
+/**
+ * PerformanceAgent is an AI agent specializing in system performance optimization.
+ * 
+ * Focuses on latency, throughput, resource utilization, caching strategies,
+ * and algorithmic complexity.
+ *
+ * Note: This class cannot be extended. Use the static `create` factory method to instantiate.
+ */
+export class PerformanceAgent extends Agent {
+  /**
+   * Private constructor to prevent direct instantiation and extension.
+   * Use the static `create` method instead.
+   */
+  private constructor(config: AgentConfig, provider: LLMProvider) {
+    super(config, provider);
+  }
+
+  /**
+   * Factory method to create a new PerformanceAgent instance.
+   */
+  static create(config: AgentConfig, provider: LLMProvider): PerformanceAgent {
+    return new PerformanceAgent(config, provider);
+  }
+
+  /**
+   * Generates a performance-focused proposal for the given problem.
+   * @param problem - The software/system design problem to solve.
+   * @param context - The current debate context.
+   * @returns A Promise resolving to a Proposal containing the solution and metadata.
+   */
+  async propose(problem: string, context: DebateContext): Promise<Proposal> {
+    const system = this.config.systemPrompt || DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
+    const user = `Problem: ${problem}\n\nAs a performance engineer, propose a solution focusing on latency, throughput, and resource efficiency.`;
+    return this.proposeImpl(context, system, user);
+  }
+
+  /**
+   * Critiques a given proposal from a performance engineering perspective.
+   * @param proposal - The proposal to critique.
+   * @param context - The current debate context.
+   * @returns A Promise resolving to a Critique containing the review and metadata.
+   */
+  async critique(proposal: Proposal, context: DebateContext): Promise<Critique> {
+    const system = this.config.systemPrompt || DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
+    const user = `Review this proposal as a performance engineer. Identify bottlenecks and improvements.\n\nProposal:\n${proposal.content}`;
+    return this.critiqueImpl(proposal, context, system, user);
+  }
+}
+```
+
+---
+
+## 8. Quick Reference
+
+| Problem | Solution | Example |
+|---------|----------|---------|
+| Duplicate method logic | Template method pattern | `proposeImpl()` in base class |
+| Magic number `3` | Named constant | `DEFAULT_ROUNDS = 3` |
+| String `"architect"` | Constant object | `AGENT_ROLES.ARCHITECT` |
+| String used multiple times in one function | Function-level constant | `const EXPECTED_REASONING = 'Good'` |
+| Long complex function | Extract helper functions | `debateConfigFromSysConfig()` |
+| Unclear technical choice | Inline comment | `// Use stderr.write for unbuffered output` |
+| Public function | JSDoc with @param/@returns | See examples above |
+| Repeated pattern 3+ times | Extract to helper function | `createAgentWithPromptResolution()` |
+
+---
+
+## 9. Checklist for Code Cleanup
+
+When reviewing code, check:
+
+- [ ] **No duplicate logic** - Extract common patterns to base classes or utility functions
+- [ ] **No magic numbers** - All literal numbers replaced with named constants
+- [ ] **No hardcoded strings** - Especially for types, roles, statuses - use constants
+- [ ] **All public APIs documented** - JSDoc for functions, classes, complex methods
+- [ ] **Non-obvious choices explained** - Inline comments for "why" not "what"
+- [ ] **Constants properly scoped** - Function-level for single-function use, file-level for local, exported for shared
+- [ ] **Template methods marked @final** - When they shouldn't be overridden
+- [ ] **Function extraction** - Large functions broken into smaller, focused ones
+- [ ] **Separation of concerns** - Each function has a single, clear purpose
+- [ ] **Proper stdout/stderr usage** - Results to stdout, diagnostics to stderr
+- [ ] **No redundant calls** - Functions called once, results reused
+- [ ] **No unnecessary exports** - Internal constants accessed through methods
+- [ ] **No inline type repetition** - Types defined once, reused everywhere
+- [ ] **No unnecessary type casts** - Proper typing instead of `as any`
+- [ ] **Relative imports within package** - Use relative paths, not package name imports
+
+---
+
 ## Summary
 
 Good code is:
-- **DRY**: Don't Repeat Yourself
-- **Type-safe**: Let the compiler help you
-- **Clear**: Easy to read and understand
-- **Focused**: Each function does one thing well
-- **Consistent**: Follows established patterns
+- **DRY**: Don't Repeat Yourself - extract common patterns
+- **Type-safe**: Let the compiler help you - avoid unnecessary type casts
+- **Clear**: Easy to read and understand - self-documenting with good names
+- **Focused**: Each function does one thing well - single responsibility
+- **Consistent**: Follows established patterns throughout the codebase
 
-When in doubt, remember: **If you copy-paste code, you're doing it wrong.**
-
-
-
-
+**Remember:** If you copy-paste code, you're doing it wrong. Extract it to a reusable function or class.
