@@ -629,256 +629,59 @@ export function createOrchestrator(
 
 ### Linting and Formatting
 
-While the project doesn't currently include ESLint or Prettier configuration files, maintain consistency with:
-- 2-space indentation (as seen in `tsconfig.json`)
-- Semicolons at end of statements
-- Trailing commas in multi-line objects and arrays
-- Single quotes for strings (preferred, but double quotes are acceptable)
+The project uses ESLint for code quality and consistency checks. ESLint is configured at the repository root and applies to all TypeScript packages.
+
+**ESLint Configuration:**
+- **Location**: `eslint.config.js` (repository root)
+- **Plugins**: TypeScript ESLint, import ordering, SonarJS code quality
+- **Rules**: TypeScript strict typing, complexity limits, magic number detection, import ordering, and more
+- **Test Files**: Relaxed rules for test files (`.spec.ts`, `.test.ts`)
+
+**Running Lint Checks:**
+
+**Lint all packages:**
+```bash
+npm run lint
+```
+
+**Lint specific package:**
+```bash
+nx lint dialectic-core
+nx lint dialectic
+nx lint @dialectic/web-api
+nx lint @dialectic/web-ui
+```
+
+**Auto-fix linting issues:**
+```bash
+npm run lint:fix
+```
+
+This command automatically fixes auto-fixable ESLint issues across all packages in `packages/*/src/**/*.ts`.
+
+**Note**: The web-ui package uses Next.js's built-in ESLint configuration. Run `npm run lint` from the `packages/web-ui` directory to use Next.js linting.
 
 ## Code Cleanup Guidelines
 
-This section provides guidelines for maintaining clean, maintainable code. Follow these principles to improve code quality and reduce technical debt.
+This project follows comprehensive code cleanup and refactoring guidelines to maintain clean, maintainable code. These guidelines are centralized in the Cursor rules file for consistency across the codebase.
 
-### 1. Template Method Pattern
+**For detailed code cleanup guidelines, refer to:**
+- **`.cursor/rules/basic-code-cleanup.mdc`** - Complete code cleanup rules and best practices
 
-**When to use:** When multiple classes have similar methods with duplicate logic, but different values (like prompts).
+**Key areas covered:**
+- Template method refactoring patterns
+- Removing magic numbers and hardcoded strings
+- Documentation standards (JSDoc)
+- Common code smells and how to fix them
+- Type assertion guidelines
+- Import patterns and best practices
 
-**Principle:** Extract common logic into a template method in the base class. Subclasses provide only unique values and delegate execution.
-
-**Example:**
-
-```typescript
-// ❌ BAD: Duplicate logic in each agent
-class ArchitectAgent {
-  async propose(problem: string): Promise<Proposal> {
-    const system = this.config.systemPrompt || ARCHITECT_SYSTEM_PROMPT;
-    const user = `Problem: ${problem}\n\nProvide architectural solution...`;
-    const { text, usage, latencyMs } = await this.callLLM(system, user);
-    const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
-    if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-    return { content: text, metadata };
-  }
-}
-
-// ✅ GOOD: Template method in base class
-// Base Agent class
-protected async proposeImpl(
-  _context: DebateContext,
-  systemPrompt: string,
-  userPrompt: string
-): Promise<Proposal> {
-  const { text, usage, latencyMs } = await this.callLLM(systemPrompt, userPrompt);
-  const metadata: ContributionMetadata = { latencyMs, model: this.config.model };
-  if (usage?.totalTokens != null) metadata.tokensUsed = usage.totalTokens;
-  return { content: text, metadata };
-}
-
-// Subclass only provides prompts
-class ArchitectAgent {
-  async propose(problem: string, context: DebateContext): Promise<Proposal> {
-    const system = this.config.systemPrompt || ARCHITECT_SYSTEM_PROMPT;
-    const user = `Problem: ${problem}\n\nProvide architectural solution...`;
-    return this.proposeImpl(context, system, user);
-  }
-}
-```
-
-### 2. Remove Magic Numbers and Hardcoded Strings
-
-**Principle:** Replace literal values with named constants that explain their purpose.
-
-**Example:**
-
-```typescript
-// ❌ BAD: Magic numbers
-const debateConfig = {
-  rounds: options.rounds || config.rounds || 3,  // What is 3?
-  timeout: 300000  // What is 300000?
-};
-
-// ✅ GOOD: Named constants
-const DEFAULT_ROUNDS = 3;
-const DEFAULT_TIMEOUT_MS = 300000;
-
-const debateConfig = {
-  rounds: options.rounds || config.rounds || DEFAULT_ROUNDS,
-  timeout: DEFAULT_TIMEOUT_MS
-};
-```
-
-**Where to define constants:**
-- **File-level constants**: Use when only one file needs them
-- **Exported constants**: Use when multiple files need them (in `types/` or `utils/` files)
-
-### 3. Proper Documentation Standards
-
-**JSDoc for public APIs:**
-- Document all public functions, classes, and complex methods
-- Include parameter descriptions (`@param`) and return types (`@returns`)
-- Document errors thrown (`@throws`)
-- Use `@final` tag for template methods that shouldn't be overridden
-
-**Example:**
-
-```typescript
-/**
- * Creates a DebateConfig from the system configuration and command-line options.
- * Validates that the number of rounds is at least 1.
- *
- * @param sysConfig - The system configuration.
- * @param options - Command-line options containing optional rounds override.
- * @returns The debate configuration.
- * @throws {Error} If rounds is less than 1.
- */
-function debateConfigFromSysConfig(sysConfig: SystemConfig, options: any): DebateConfig {
-  // implementation
-}
-```
-
-**Inline comments:** Explain **why**, not **what**. Document non-obvious technical choices.
-
-### 4. Common Code Smells to Avoid
-
-#### Unnecessary Exports
-
-**Problem:** Exporting constants that are only accessed through methods.
-
-```typescript
-// ❌ BAD: Exports internal constant
-export const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `...`;
-
-// ✅ GOOD: Keep constant private, expose through method
-const DEFAULT_PERFORMANCE_SYSTEM_PROMPT = `...`;
-export class PerformanceAgent {
-  static defaultSystemPrompt(): string {
-    return DEFAULT_PERFORMANCE_SYSTEM_PROMPT;
-  }
-}
-```
-
-#### Inline Type Definitions (DRY Violation)
-
-**Problem:** Repeating the same inline type definition multiple times.
-
-```typescript
-// ❌ BAD: Repeated inline type
-function createAgent(promptSource?: { source: 'built-in' | 'file'; absPath?: string }) { }
-
-// ✅ GOOD: Define once, reuse
-export interface PromptSource {
-  source: 'built-in' | 'file';
-  absPath?: string;
-}
-function createAgent(promptSource?: PromptSource) { }
-```
-
-#### Repeated Code Patterns
-
-**Problem:** The same logic pattern repeated 3+ times.
-
-**Solution:** Extract to a helper function that can be reused.
-
-#### Improper stdout/stderr Usage
-
-**Principle:** stdout = data results, stderr = diagnostics/errors.
-
-```typescript
-// ❌ BAD: Diagnostic output on stdout
-process.stdout.write(result.solution.description);
-process.stdout.write('Debug info...');  // Should be stderr
-
-// ✅ GOOD: Proper separation
-process.stdout.write(result.solution.description);  // Main result
-process.stderr.write('Debug info...');  // Diagnostics
-```
-
-#### Redundant Function Calls
-
-**Problem:** Calling the same function multiple times with the same result.
-
-```typescript
-// ❌ BAD: Multiple calls
-if (!fs.existsSync(finalPath)) {
-  return builtInDefaults();  // Call 1
-}
-if (!parsed.judge) {
-  parsed.judge = builtInDefaults().judge;  // Call 2
-}
-
-// ✅ GOOD: Call once, reuse
-const defaults = builtInDefaults();  // Call once
-if (!fs.existsSync(finalPath)) {
-  return defaults;
-}
-if (!parsed.judge) {
-  parsed.judge = defaults.judge;  // Reuse
-}
-```
-
-#### Complex Nested Logic
-
-**Problem:** Deeply nested loops and conditionals that are hard to read.
-
-**Solution:** Extract to focused helper functions with single responsibilities.
-
-### 5. Type Assertions Guidelines
-
-**Use type assertions sparingly** and only when you have information TypeScript cannot infer.
-
-**✅ Valid use cases:**
-- Working with third-party libraries that return `any`
-- Type narrowing after runtime validation
-- Complex type transformations TypeScript struggles with
-
-**❌ Avoid:**
-- Hiding legitimate type errors
-- Bypassing strict null checks
-- Forcing incompatible types
-
-**Before using `as Type`, consider:**
-- Type guards: `if (typeof x === 'string')`
-- Discriminated unions
-- Conditional spreads: `...(value !== undefined && { value })`
-- Proper typing: Fix the type definitions rather than casting
-
-### 6. Code Cleanup Checklist
-
-When reviewing or refactoring code, check:
-
-- [ ] **No duplicate logic** - Extract common patterns to base classes or utilities
-- [ ] **No magic numbers** - All literal numbers replaced with named constants
-- [ ] **No hardcoded strings** - Especially for types, roles, statuses - use constants
-- [ ] **All public APIs documented** - JSDoc for functions, classes, complex methods
-- [ ] **Non-obvious choices explained** - Inline comments for "why" not "what"
-- [ ] **Constants properly scoped** - File-level for local, exported for shared
-- [ ] **Template methods marked @final** - When they shouldn't be overridden
-- [ ] **Function extraction** - Large functions broken into smaller, focused ones
-- [ ] **Separation of concerns** - Each function has a single, clear purpose
-- [ ] **Proper stdout/stderr usage** - Results to stdout, diagnostics to stderr
-- [ ] **No redundant calls** - Functions called once, results reused
-- [ ] **No unnecessary exports** - Internal constants accessed through methods
-- [ ] **No inline type repetition** - Types defined once, reused everywhere
-
-### 7. Quick Reference
-
-| Problem | Solution | Example |
-|---------|----------|---------|
-| Duplicate method logic | Template method pattern | `proposeImpl()` in base class |
-| Magic number `3` | Named constant | `DEFAULT_ROUNDS = 3` |
-| String `"architect"` | Constant object | `AGENT_ROLES.ARCHITECT` |
-| Long complex function | Extract helper functions | `debateConfigFromSysConfig()` |
-| Unclear technical choice | Inline comment | `// Use stderr.write for unbuffered output` |
-| Public function | JSDoc with @param/@returns | See examples above |
-| Repeated pattern 3+ times | Extract to helper function | `createAgentWithPromptResolution()` |
-
-### Key Principles
-
-Good code is:
+**Quick principles:**
 - **DRY**: Don't Repeat Yourself - extract common patterns
-- **Type-safe**: Let the compiler help you - avoid unnecessary `as` casts
+- **Type-safe**: Let the compiler help you - avoid unnecessary type casts
 - **Clear**: Easy to read and understand - self-documenting with good names
 - **Focused**: Each function does one thing well - single responsibility
-- **Consistent**: Follows established patterns - use the same approach throughout
+- **Consistent**: Follows established patterns throughout the codebase
 
 **Remember:** If you copy-paste code, you're doing it wrong. Extract it to a reusable function or class.
 
