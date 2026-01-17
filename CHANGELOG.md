@@ -2,6 +2,29 @@
 
 
 
+## [0.6.0]
+
+### Added
+- **File System Tools**: Added file system tools (`file_read` and `list_files`) for agent file access during debates
+- **Context Directory Feature**: Implemented context directory feature for file access tools, allowing agents to access files from a specified directory
+- **TypeScript Function Type Definitions Rule**: Added TypeScript Function Type Definitions Rule for improved code quality
+- **Extract Function Command**: Added extract function command for code refactoring
+
+### Changed
+- **Test Coverage**: Significantly increased test coverage with unit tests for utilities, prompts, agents, and evaluator functionality
+- **TypeScript Typings**: Enhanced TypeScript typings throughout the codebase, removing lint issues and improving type safety
+- **LLM Provider Structure**: Refactored LLM provider structure for better organization and maintainability
+- **Error Handling**: Enhanced error handling and function signatures across the codebase
+- **ESLint Configuration**: Updated ESLint configuration and improved TypeScript typing practices
+- **Tool Registry**: Enhanced ToolRegistry tests and functionality
+
+### Documentation
+- **AGENTS.md**: Updated AGENTS.md documentation
+- **Publish Documentation**: Updated publish-packages command documentation to clarify versioning and tagging process
+- **General Documentation**: Updated various documentation files
+
+---
+
 ## [0.5.1]
 
 ### Added
