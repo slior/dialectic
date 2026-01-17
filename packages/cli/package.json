@@ -38,7 +38,7 @@
   "author": "Lior Schejter (https://github.com/slior)",
   "license": "MIT",
   "dependencies": {
-    "dialectic-core": "^0.5.2",
+    "dialectic-core": "^0.6.0",
     "chalk": "^4.1.2",
     "commander": "^11.0.0"
   },
