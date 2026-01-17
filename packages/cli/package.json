@@ -1,6 +1,6 @@
 {
   "name": "dialectic",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "CLI tool for multi-agent debates to solve software design problems",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
