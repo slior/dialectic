@@ -1,9 +1,11 @@
 import type { Langfuse } from 'langfuse';
 
 import { LLMProvider, CompletionRequest } from '../providers/llm-provider';
-import { TracingContext } from '../types/tracing.types';
+import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
 
+import * as consoleUtils from './console';
 import { TracingLLMProvider } from './tracing-provider';
+import * as tracingUtils from './tracing-utils';
 
 
 // Test constants
@@ -54,6 +56,15 @@ describe('TracingLLMProvider', () => {
   let tracingProvider: TracingLLMProvider;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(tracingUtils, 'getSpanParent').mockImplementation((context, agentId) => {
+      if (agentId && context.currentSpans.has(agentId)) {
+        return context.currentSpans.get(agentId)!;
+      }
+      return context.trace;
+    });
+    jest.spyOn(consoleUtils, 'logWarning').mockImplementation(() => {});
+
     mockProvider = {
       complete: jest.fn().mockResolvedValue({
         text: 'test response',
@@ -209,8 +220,392 @@ describe('TracingLLMProvider', () => {
           metadata: expect.objectContaining({
             model: 'gpt-4',
             temperature: VERBOSE_TEMPERATURE,
+            provider: 'openai',
+            iteration: 0,
           }),
         })
+      );
+    });
+
+    it('should handle response without usage', async () => {
+      mockProvider.complete = jest.fn().mockResolvedValue({
+        text: 'response without usage',
+      });
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+
+      expect(mockGeneration.end).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: expect.objectContaining({
+            text: 'response without usage',
+          }),
+        })
+      );
+      const endCall = mockGeneration.end.mock.calls[0][0];
+      expect(endCall.usage).toBeUndefined();
+    });
+
+    it('should handle response with toolCalls', async () => {
+      const toolCalls = [
+        {
+          id: 'call-1',
+          name: 'test_tool',
+          arguments: { input: 'test' },
+        },
+      ];
+
+      mockProvider.complete = jest.fn().mockResolvedValue({
+        text: 'response with tools',
+        toolCalls,
+      });
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+
+      expect(mockGeneration.end).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: expect.objectContaining({
+            text: 'response with tools',
+            toolCalls,
+          }),
+        })
+      );
+    });
+
+    it('should handle messages in request', async () => {
+      const messages = [
+        { role: 'system' as const, content: 'System message' },
+        { role: 'user' as const, content: 'User message' },
+      ];
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+        messages,
+      };
+
+      await tracingProvider.complete(request);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            messages,
+          }),
+        })
+      );
+    });
+
+    it('should handle provider errors and end generation with error', async () => {
+      const providerError = new Error('Provider error');
+      mockProvider.complete = jest.fn().mockRejectedValue(providerError);
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await expect(tracingProvider.complete(request)).rejects.toThrow('Provider error');
+
+      expect(mockGeneration.end).toHaveBeenCalledWith({
+        level: SPAN_LEVEL.ERROR,
+        statusMessage: 'Provider error',
+      });
+    });
+
+    it('should use span parent when agentId is set', async () => {
+      const agentId = 'agent-1';
+      tracingContext.currentSpans.set(agentId, mockSpan as unknown as ReturnType<TracingContext['trace']['span']>);
+      tracingProvider.setAgentId(agentId);
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+
+      expect(mockSpan.generation).toHaveBeenCalled();
+      expect(mockTrace.generation).not.toHaveBeenCalled();
+    });
+
+    it('should use trace parent when agentId is undefined', async () => {
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+
+      expect(mockTrace.generation).toHaveBeenCalled();
+      expect(mockSpan.generation).not.toHaveBeenCalled();
+    });
+
+    it('should use trace parent when agentId is set but span not found', async () => {
+      const agentId = 'agent-1';
+      tracingProvider.setAgentId(agentId);
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+
+      expect(mockTrace.generation).toHaveBeenCalled();
+      expect(mockSpan.generation).not.toHaveBeenCalled();
+    });
+
+    it('should handle partial usage fields with null values', async () => {
+      mockProvider.complete = jest.fn().mockResolvedValue({
+        text: 'response',
+        usage: {
+          inputTokens: 10,
+          outputTokens: undefined,
+          totalTokens: undefined,
+        },
+      });
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+
+      const endCall = mockGeneration.end.mock.calls[0][0];
+      expect(endCall.usage).toEqual({
+        input: 10,
+        output: null,
+        total: null,
+        unit: 'TOKENS',
+      });
+    });
+
+    it('should handle empty usage object', async () => {
+      mockProvider.complete = jest.fn().mockResolvedValue({
+        text: 'response',
+        usage: {},
+      });
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+
+      const endCall = mockGeneration.end.mock.calls[0][0];
+      expect(endCall.usage).toEqual({
+        input: null,
+        output: null,
+        total: null,
+        unit: 'TOKENS',
+      });
+    });
+
+    it('should handle error when generation.end throws', async () => {
+      const endError = new Error('End error');
+      mockGeneration.end = jest.fn().mockImplementation(() => {
+        throw endError;
+      });
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      const result = await tracingProvider.complete(request);
+
+      expect(result).toBeDefined();
+      expect(result.text).toBe('test response');
+      expect(consoleUtils.logWarning).toHaveBeenCalledWith(
+        expect.stringContaining('Langfuse tracing failed for LLM call')
+      );
+    });
+
+    it('should handle error when getSpanParent throws', async () => {
+      jest.spyOn(tracingUtils, 'getSpanParent').mockImplementation(() => {
+        throw new Error('getSpanParent error');
+      });
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      const result = await tracingProvider.complete(request);
+
+      expect(result).toBeDefined();
+      expect(result.text).toBe('test response');
+      expect(consoleUtils.logWarning).toHaveBeenCalledWith(
+        expect.stringContaining('Langfuse tracing failed for LLM call')
+      );
+    });
+
+    it('should increment iteration count correctly across multiple calls', async () => {
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+      await tracingProvider.complete(request);
+      await tracingProvider.complete(request);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'llm-generation-0',
+          metadata: expect.objectContaining({ iteration: 0 }),
+        })
+      );
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'llm-generation-1',
+          metadata: expect.objectContaining({ iteration: 1 }),
+        })
+      );
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'llm-generation-2',
+          metadata: expect.objectContaining({ iteration: 2 }),
+        })
+      );
+    });
+  });
+
+  describe('setAgentId', () => {
+    it('should set agentId correctly', () => {
+      const agentId = 'agent-1';
+      tracingProvider.setAgentId(agentId);
+
+      // Verify agentId is set by checking it's used in getSpanParent call
+      tracingContext.currentSpans.set(agentId, mockSpan as unknown as ReturnType<TracingContext['trace']['span']>);
+
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      tracingProvider.complete(request);
+
+      expect(tracingUtils.getSpanParent).toHaveBeenCalledWith(tracingContext, agentId);
+    });
+
+    it('should allow changing agentId', () => {
+      const agentId1 = 'agent-1';
+      const agentId2 = 'agent-2';
+      const mockSpan2: MockLangfuseSpan = {
+        end: jest.fn(),
+        generation: jest.fn().mockReturnValue(mockGeneration),
+      };
+
+      tracingContext.currentSpans.set(agentId1, mockSpan as unknown as ReturnType<TracingContext['trace']['span']>);
+      tracingContext.currentSpans.set(agentId2, mockSpan2 as unknown as ReturnType<TracingContext['trace']['span']>);
+
+      tracingProvider.setAgentId(agentId1);
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      tracingProvider.complete(request);
+      expect(mockSpan.generation).toHaveBeenCalled();
+
+      jest.clearAllMocks();
+      tracingProvider.setAgentId(agentId2);
+      tracingProvider.complete(request);
+      expect(mockSpan2.generation).toHaveBeenCalled();
+    });
+  });
+
+  describe('resetIterationCount', () => {
+    it('should reset iteration count to 0', async () => {
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+      await tracingProvider.complete(request);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'llm-generation-0' })
+      );
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'llm-generation-1' })
+      );
+
+      tracingProvider.resetIterationCount();
+
+      jest.clearAllMocks();
+      await tracingProvider.complete(request);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'llm-generation-0' })
+      );
+    });
+
+    it('should reset iteration count multiple times', async () => {
+      const request: CompletionRequest = {
+        model: 'gpt-4',
+        temperature: DEFAULT_TEMPERATURE,
+        systemPrompt: 'System prompt',
+        userPrompt: 'User prompt',
+      };
+
+      await tracingProvider.complete(request);
+      tracingProvider.resetIterationCount();
+      await tracingProvider.complete(request);
+      tracingProvider.resetIterationCount();
+      await tracingProvider.complete(request);
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'llm-generation-0' })
+      );
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'llm-generation-0' })
+      );
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'llm-generation-0' })
       );
     });
   });
