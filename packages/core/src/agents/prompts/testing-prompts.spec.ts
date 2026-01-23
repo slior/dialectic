@@ -1,5 +1,4 @@
-import type { DebateContext } from '../../types/debate.types';
-
+import { createMockDebateContext, createMockDebateContextWithFullHistory, createMockDebateContextWithSummary, createMockDebateContextWithClarifications } from './test-utils';
 import { testingPrompts } from './testing-prompts';
 
 // Test constants
@@ -20,81 +19,7 @@ const SHORT_CONTENT = 'Short';
 const LONG_CONTENT = 'Very long content '.repeat(100);
 
 // Helper functions for creating mock DebateContext objects
-function createMockDebateContext(): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [],
-  };
-}
 
-function createMockDebateContextWithSummary(agentId: string): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [
-      {
-        roundNumber: 1,
-        contributions: [],
-        summaries: {
-          [agentId]: {
-            agentId,
-            agentRole: 'testing',
-            summary: 'Previous round summary',
-            metadata: {
-              beforeChars: 1000,
-              afterChars: 500,
-              method: 'length-based',
-              timestamp: new Date(),
-            },
-          },
-        },
-        timestamp: new Date(),
-      },
-    ],
-  };
-}
-
-function createMockDebateContextWithClarifications(): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [],
-    clarifications: [
-      {
-        agentId: 'agent-1',
-        agentName: 'Testing Expert',
-        role: 'testing',
-        items: [
-          {
-            id: 'q1',
-            question: 'What is the expected test coverage requirement?',
-            answer: '80% code coverage',
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function createMockDebateContextWithFullHistory(): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [
-      {
-        roundNumber: 1,
-        contributions: [
-          {
-            agentId: 'agent-1',
-            agentRole: 'architect',
-            type: 'proposal',
-            content: 'Previous proposal',
-            metadata: {},
-          },
-        ],
-        summaries: {},
-        timestamp: new Date(),
-      },
-    ],
-  };
-}
 
 describe('Testing Prompts', () => {
   describe('systemPrompt', () => {
@@ -147,7 +72,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt = testingPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -156,7 +81,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = testingPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -165,7 +90,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -182,7 +107,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.proposePrompt(TEST_PROBLEM, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -190,7 +115,13 @@ describe('Testing Prompts', () => {
     });
 
     it('should include clarifications when present in context', () => {
-      const context = createMockDebateContextWithClarifications();
+      const context = createMockDebateContextWithClarifications(
+        'Testing Expert',
+        'testing',
+        'What is the expected test coverage requirement?',
+        '80% code coverage',
+        TEST_PROBLEM
+      );
       const prompt = testingPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -218,7 +149,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt1 = testingPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
       const prompt2 = testingPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
@@ -245,7 +176,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt = testingPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -254,7 +185,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = testingPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -263,7 +194,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -280,7 +211,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -311,7 +242,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt1 = testingPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID);
       const prompt2 = testingPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID);
 
@@ -339,7 +270,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt = testingPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -349,7 +280,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = testingPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -359,7 +290,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -378,7 +309,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -411,7 +342,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt1 = testingPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID);
       const prompt2 = testingPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID);
 
@@ -546,7 +477,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt = testingPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -555,7 +486,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = testingPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -564,7 +495,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -581,7 +512,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = testingPrompts.clarifyPrompt(TEST_PROBLEM, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -589,7 +520,13 @@ describe('Testing Prompts', () => {
     });
 
     it('should include clarifications when present in context', () => {
-      const context = createMockDebateContextWithClarifications();
+      const context = createMockDebateContextWithClarifications(
+        'Testing Expert',
+        'testing',
+        'What is the expected test coverage requirement?',
+        '80% code coverage',
+        TEST_PROBLEM
+      );
       const prompt = testingPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -630,7 +567,7 @@ describe('Testing Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'testing', TEST_PROBLEM);
       const prompt1 = testingPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
       const prompt2 = testingPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 

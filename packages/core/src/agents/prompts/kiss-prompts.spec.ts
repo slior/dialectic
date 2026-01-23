@@ -1,6 +1,5 @@
-import type { DebateContext } from '../../types/debate.types';
-
 import { kissPrompts } from './kiss-prompts';
+import { createMockDebateContext, createMockDebateContextWithFullHistory, createMockDebateContextWithSummary, createMockDebateContextWithClarifications } from './test-utils';
 
 // Test constants
 const TEST_PROBLEM = 'Design a scalable authentication system';
@@ -20,81 +19,7 @@ const LONG_CONTENT = 'Very long content '.repeat(100);
 const TEST_AGENT_ID = 'agent-kiss-1';
 
 // Helper functions for creating mock DebateContext objects
-function createMockDebateContext(): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [],
-  };
-}
 
-function createMockDebateContextWithSummary(agentId: string): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [
-      {
-        roundNumber: 1,
-        contributions: [],
-        summaries: {
-          [agentId]: {
-            agentId,
-            agentRole: 'kiss',
-            summary: 'Previous round summary',
-            metadata: {
-              beforeChars: 1000,
-              afterChars: 500,
-              method: 'length-based',
-              timestamp: new Date(),
-            },
-          },
-        },
-        timestamp: new Date(),
-      },
-    ],
-  };
-}
-
-function createMockDebateContextWithClarifications(): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [],
-    clarifications: [
-      {
-        agentId: 'agent-1',
-        agentName: 'KISS Agent',
-        role: 'kiss',
-        items: [
-          {
-            id: 'q1',
-            question: 'What is the expected user volume?',
-            answer: '10M users',
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function createMockDebateContextWithFullHistory(): DebateContext {
-  return {
-    problem: TEST_PROBLEM,
-    history: [
-      {
-        roundNumber: 1,
-        contributions: [
-          {
-            agentId: 'agent-1',
-            agentRole: 'kiss',
-            type: 'proposal',
-            content: 'Previous proposal',
-            metadata: {},
-          },
-        ],
-        summaries: {},
-        timestamp: new Date(),
-      },
-    ],
-  };
-}
 
 describe('KISS Prompts', () => {
   describe('systemPrompt', () => {
@@ -150,7 +75,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt = kissPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -159,7 +84,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = kissPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -168,7 +93,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -185,7 +110,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.proposePrompt(TEST_PROBLEM, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -193,7 +118,13 @@ describe('KISS Prompts', () => {
     });
 
     it('should include clarifications when present in context', () => {
-      const context = createMockDebateContextWithClarifications();
+      const context = createMockDebateContextWithClarifications(
+        'KISS Agent',
+        'kiss',
+        'What is the expected user volume?',
+        '10M users',
+        TEST_PROBLEM
+      );
       const prompt = kissPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -210,7 +141,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt1 = kissPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
       const prompt2 = kissPrompts.proposePrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
@@ -258,7 +189,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt = kissPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -267,7 +198,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = kissPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -276,7 +207,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -293,7 +224,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -308,7 +239,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt1 = kissPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID);
       const prompt2 = kissPrompts.critiquePrompt(TEST_PROPOSAL_CONTENT, context, TEST_AGENT_ID);
 
@@ -357,7 +288,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt = kissPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -367,7 +298,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = kissPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -377,7 +308,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -396,7 +327,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -412,7 +343,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt1 = kissPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID);
       const prompt2 = kissPrompts.refinePrompt(TEST_ORIGINAL_CONTENT, TEST_CRITIQUES_TEXT, context, TEST_AGENT_ID);
 
@@ -563,7 +494,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context when provided with agentId', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt = kissPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -572,7 +503,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should include context with full history when includeFullHistory is true', () => {
-      const context = createMockDebateContextWithFullHistory();
+      const context = createMockDebateContextWithFullHistory(TEST_PROBLEM);
       const prompt = kissPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID, true);
 
       expect(prompt).toBeDefined();
@@ -581,7 +512,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should not include context when includeFullHistory is false and no summary exists', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID, false);
 
       expect(prompt).toBeDefined();
@@ -598,7 +529,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should handle undefined agentId', () => {
-      const context = createMockDebateContext();
+      const context = createMockDebateContext(TEST_PROBLEM);
       const prompt = kissPrompts.clarifyPrompt(TEST_PROBLEM, context, undefined);
 
       expect(prompt).toBeDefined();
@@ -606,7 +537,13 @@ describe('KISS Prompts', () => {
     });
 
     it('should include clarifications when present in context', () => {
-      const context = createMockDebateContextWithClarifications();
+      const context = createMockDebateContextWithClarifications(
+        'KISS Agent',
+        'kiss',
+        'What is the expected user volume?',
+        '10M users',
+        TEST_PROBLEM
+      );
       const prompt = kissPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 
       expect(prompt).toBeDefined();
@@ -630,7 +567,7 @@ describe('KISS Prompts', () => {
     });
 
     it('should return consistent results with same context', () => {
-      const context = createMockDebateContextWithSummary(TEST_AGENT_ID);
+      const context = createMockDebateContextWithSummary(TEST_AGENT_ID, 'kiss', TEST_PROBLEM);
       const prompt1 = kissPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
       const prompt2 = kissPrompts.clarifyPrompt(TEST_PROBLEM, context, TEST_AGENT_ID);
 

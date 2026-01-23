@@ -1,11 +1,14 @@
 import { 
   appendSharedInstructions, 
   INSTRUCTION_TYPES, 
+  REQUIREMENTS_COVERAGE_SECTION_TITLE,
   getSharedSystemInstructions,
   getSharedProposalInstructions,
   getSharedCritiqueInstructions,
   getSharedRefinementInstructions,
-  getSharedSummarizationInstructions
+  getSharedSummarizationInstructions,
+  getSharedClarificationInstructions,
+  type InstructionType
 } from 'dialectic-core';
 
 // Test constants
@@ -25,6 +28,7 @@ const INSTRUCTION_TYPE_PROPOSAL = 'proposal';
 const INSTRUCTION_TYPE_CRITIQUE = 'critique';
 const INSTRUCTION_TYPE_REFINEMENT = 'refinement';
 const INSTRUCTION_TYPE_SUMMARIZATION = 'summarization';
+const INSTRUCTION_TYPE_CLARIFICATION = 'clarification';
 
 describe('Shared Prompts', () => {
   describe('INSTRUCTION_TYPES constants', () => {
@@ -34,6 +38,7 @@ describe('Shared Prompts', () => {
       expect(INSTRUCTION_TYPES.CRITIQUE).toBeDefined();
       expect(INSTRUCTION_TYPES.REFINEMENT).toBeDefined();
       expect(INSTRUCTION_TYPES.SUMMARIZATION).toBeDefined();
+      expect(INSTRUCTION_TYPES.CLARIFICATION).toBeDefined();
     });
 
     it('should have correct string values', () => {
@@ -42,6 +47,7 @@ describe('Shared Prompts', () => {
       expect(INSTRUCTION_TYPES.CRITIQUE).toBe(INSTRUCTION_TYPE_CRITIQUE);
       expect(INSTRUCTION_TYPES.REFINEMENT).toBe(INSTRUCTION_TYPE_REFINEMENT);
       expect(INSTRUCTION_TYPES.SUMMARIZATION).toBe(INSTRUCTION_TYPE_SUMMARIZATION);
+      expect(INSTRUCTION_TYPES.CLARIFICATION).toBe(INSTRUCTION_TYPE_CLARIFICATION);
     });
 
     it('should be usable in function calls', () => {
@@ -49,6 +55,22 @@ describe('Shared Prompts', () => {
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
       expect(result.length).toBeGreaterThan(PROMPT_TEST.length);
+    });
+  });
+
+  describe('REQUIREMENTS_COVERAGE_SECTION_TITLE constant', () => {
+    it('should export REQUIREMENTS_COVERAGE_SECTION_TITLE constant', () => {
+      expect(REQUIREMENTS_COVERAGE_SECTION_TITLE).toBeDefined();
+      expect(typeof REQUIREMENTS_COVERAGE_SECTION_TITLE).toBe('string');
+    });
+
+    it('should have correct value', () => {
+      expect(REQUIREMENTS_COVERAGE_SECTION_TITLE).toBe('Requirements Coverage');
+    });
+
+    it('should be used in proposal instructions', () => {
+      const proposalInstructions = getSharedProposalInstructions();
+      expect(proposalInstructions).toContain(REQUIREMENTS_COVERAGE_SECTION_TITLE);
     });
   });
 
@@ -68,6 +90,9 @@ describe('Shared Prompts', () => {
       
       expect(getSharedSummarizationInstructions()).toBeDefined();
       expect(getSharedSummarizationInstructions().length).toBeGreaterThan(0);
+
+      expect(getSharedClarificationInstructions()).toBeDefined();
+      expect(getSharedClarificationInstructions().length).toBeGreaterThan(0);
     });
 
     it('should return different content for different instruction types', () => {
@@ -76,21 +101,28 @@ describe('Shared Prompts', () => {
       const critiqueInstructions = getSharedCritiqueInstructions();
       const refinementInstructions = getSharedRefinementInstructions();
       const summarizationInstructions = getSharedSummarizationInstructions();
+      const clarificationInstructions = getSharedClarificationInstructions();
 
       // All should be different from each other
       expect(systemInstructions).not.toBe(proposalInstructions);
       expect(systemInstructions).not.toBe(critiqueInstructions);
       expect(systemInstructions).not.toBe(refinementInstructions);
       expect(systemInstructions).not.toBe(summarizationInstructions);
+      expect(systemInstructions).not.toBe(clarificationInstructions);
       
       expect(proposalInstructions).not.toBe(critiqueInstructions);
       expect(proposalInstructions).not.toBe(refinementInstructions);
       expect(proposalInstructions).not.toBe(summarizationInstructions);
+      expect(proposalInstructions).not.toBe(clarificationInstructions);
       
       expect(critiqueInstructions).not.toBe(refinementInstructions);
       expect(critiqueInstructions).not.toBe(summarizationInstructions);
+      expect(critiqueInstructions).not.toBe(clarificationInstructions);
       
       expect(refinementInstructions).not.toBe(summarizationInstructions);
+      expect(refinementInstructions).not.toBe(clarificationInstructions);
+
+      expect(summarizationInstructions).not.toBe(clarificationInstructions);
     });
 
     it('should return consistent results across multiple calls', () => {
@@ -113,6 +145,59 @@ describe('Shared Prompts', () => {
       const summarization1 = getSharedSummarizationInstructions();
       const summarization2 = getSharedSummarizationInstructions();
       expect(summarization1).toBe(summarization2);
+
+      const clarification1 = getSharedClarificationInstructions();
+      const clarification2 = getSharedClarificationInstructions();
+      expect(clarification1).toBe(clarification2);
+    });
+
+    it('should include expected content in system instructions', () => {
+      const instructions = getSharedSystemInstructions();
+      expect(instructions).toContain('General Guidelines');
+      expect(instructions).toContain('Requirements-First Approach');
+      expect(instructions).toContain('major requirements');
+      expect(instructions).toContain('minor requirements');
+    });
+
+    it('should include expected content in proposal instructions', () => {
+      const instructions = getSharedProposalInstructions();
+      expect(instructions).toContain('Response Guidelines');
+      expect(instructions).toContain(REQUIREMENTS_COVERAGE_SECTION_TITLE);
+      expect(instructions).toContain('Lists major requirements');
+      expect(instructions).toContain('Maps each major requirement');
+    });
+
+    it('should include expected content in critique instructions', () => {
+      const instructions = getSharedCritiqueInstructions();
+      expect(instructions).toContain('Critique Guidelines');
+      expect(instructions).toContain('Requirements Check');
+      expect(instructions).toContain('Review the proposal\'s Requirements Coverage section');
+      expect(instructions).toContain('Critical Rule');
+      expect(instructions).toContain('MUST NOT suggest changes');
+    });
+
+    it('should include expected content in refinement instructions', () => {
+      const instructions = getSharedRefinementInstructions();
+      expect(instructions).toContain('Refinement Guidelines');
+      expect(instructions).toContain('Requirements Preservation');
+      expect(instructions).toContain('REJECT any critique suggestions');
+      expect(instructions).toContain('Major requirements are non-negotiable');
+    });
+
+    it('should include expected content in summarization instructions', () => {
+      const instructions = getSharedSummarizationInstructions();
+      expect(instructions).toContain('Summary Guidelines');
+      expect(instructions).toContain('Preserve key architectural decisions');
+      expect(instructions).toContain('specialized perspective');
+      expect(instructions).toContain('concise but include all critical reasoning');
+    });
+
+    it('should include expected content in clarification instructions', () => {
+      const instructions = getSharedClarificationInstructions();
+      expect(instructions).toContain('Clarification Guidelines');
+      expect(instructions).toContain('ONLY JSON');
+      expect(instructions).toContain('{"questions":');
+      expect(instructions).toContain('improve the overall solution quality');
     });
   });
 
@@ -160,6 +245,16 @@ describe('Shared Prompts', () => {
       expect(typeof result).toBe('string');
       expect(result).toContain(PROMPT_SUMMARIZE);
       expect(result.length).toBeGreaterThan(PROMPT_SUMMARIZE.length);
+    });
+
+    it('should append clarification instructions correctly', () => {
+      const prompt = 'Ask clarifying questions about the problem.';
+      const result = appendSharedInstructions(prompt, INSTRUCTION_TYPES.CLARIFICATION);
+      
+      expect(result).toBeDefined();
+      expect(typeof result).toBe('string');
+      expect(result).toContain(prompt);
+      expect(result.length).toBeGreaterThan(prompt.length);
     });
 
     it('should return original prompt plus appended instructions', () => {
@@ -227,6 +322,7 @@ describe('Shared Prompts', () => {
       const critiqueResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.CRITIQUE);
       const refinementResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.REFINEMENT);
       const summarizationResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.SUMMARIZATION);
+      const clarificationResult = appendSharedInstructions(PROMPT_SAME_FOR_ALL, INSTRUCTION_TYPES.CLARIFICATION);
 
       // All should contain the original prompt
       expect(systemResult).toContain(PROMPT_SAME_FOR_ALL);
@@ -234,21 +330,28 @@ describe('Shared Prompts', () => {
       expect(critiqueResult).toContain(PROMPT_SAME_FOR_ALL);
       expect(refinementResult).toContain(PROMPT_SAME_FOR_ALL);
       expect(summarizationResult).toContain(PROMPT_SAME_FOR_ALL);
+      expect(clarificationResult).toContain(PROMPT_SAME_FOR_ALL);
 
       // But should be different from each other
       expect(systemResult).not.toBe(proposalResult);
       expect(systemResult).not.toBe(critiqueResult);
       expect(systemResult).not.toBe(refinementResult);
       expect(systemResult).not.toBe(summarizationResult);
+      expect(systemResult).not.toBe(clarificationResult);
       
       expect(proposalResult).not.toBe(critiqueResult);
       expect(proposalResult).not.toBe(refinementResult);
       expect(proposalResult).not.toBe(summarizationResult);
+      expect(proposalResult).not.toBe(clarificationResult);
       
       expect(critiqueResult).not.toBe(refinementResult);
       expect(critiqueResult).not.toBe(summarizationResult);
+      expect(critiqueResult).not.toBe(clarificationResult);
       
       expect(refinementResult).not.toBe(summarizationResult);
+      expect(refinementResult).not.toBe(clarificationResult);
+
+      expect(summarizationResult).not.toBe(clarificationResult);
     });
 
     it('should preserve original prompt content exactly', () => {
@@ -299,6 +402,7 @@ Requirements:
       const critiqueResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.CRITIQUE);
       const refinementResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.REFINEMENT);
       const summarizationResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.SUMMARIZATION);
+      const clarificationResult = appendSharedInstructions(PROMPT_BASE_TESTING, INSTRUCTION_TYPES.CLARIFICATION);
 
       // All should work without errors
       expect(systemResult).toBeDefined();
@@ -306,6 +410,7 @@ Requirements:
       expect(critiqueResult).toBeDefined();
       expect(refinementResult).toBeDefined();
       expect(summarizationResult).toBeDefined();
+      expect(clarificationResult).toBeDefined();
 
       // All should contain the base prompt
       expect(systemResult).toContain(PROMPT_BASE_TESTING);
@@ -313,6 +418,7 @@ Requirements:
       expect(critiqueResult).toContain(PROMPT_BASE_TESTING);
       expect(refinementResult).toContain(PROMPT_BASE_TESTING);
       expect(summarizationResult).toContain(PROMPT_BASE_TESTING);
+      expect(clarificationResult).toContain(PROMPT_BASE_TESTING);
 
       // All should be longer than the base prompt
       expect(systemResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
@@ -320,6 +426,30 @@ Requirements:
       expect(critiqueResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
       expect(refinementResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
       expect(summarizationResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
+      expect(clarificationResult.length).toBeGreaterThan(PROMPT_BASE_TESTING.length);
+    });
+  });
+
+  describe('Error handling', () => {
+    it('should throw error for unknown instruction type', () => {
+      // Use type assertion to bypass TypeScript's type checking for testing
+      const invalidType = 'invalid-type' as unknown as InstructionType;
+      
+      expect(() => {
+        appendSharedInstructions(PROMPT_TEST, invalidType);
+      }).toThrow('Unknown instruction type: invalid-type');
+    });
+
+    it('should throw error with correct message format', () => {
+      const invalidType = 'unknown' as unknown as InstructionType;
+      
+      expect(() => {
+        appendSharedInstructions(PROMPT_TEST, invalidType);
+      }).toThrow(Error);
+      
+      expect(() => {
+        appendSharedInstructions(PROMPT_TEST, invalidType);
+      }).toThrow('Unknown instruction type: unknown');
     });
   });
 });
