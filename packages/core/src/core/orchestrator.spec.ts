@@ -5,8 +5,9 @@ import path from 'path';
 import { LLMProvider } from '../providers/llm-provider';
 import { CONTEXT_SEARCH_TOOL_NAME } from '../tools/context-search-tool';
 import { AgentConfig, Proposal, Critique, AGENT_ROLES, LLM_PROVIDERS, AgentRole } from '../types/agent.types';
-import { DebateConfig, DebateRound, DebateState, Solution, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, Contribution } from '../types/debate.types';
+import { DebateConfig, DebateRound, DebateState, Solution, DebateContext, DebateSummary, ContextPreparationResult, TERMINATION_TYPES, SYNTHESIS_METHODS, SUMMARIZATION_METHODS, CONTRIBUTION_TYPES, Contribution, AgentClarifications } from '../types/debate.types';
 import { ToolCall, ToolResult } from '../types/tool.types';
+import { TracingContext } from '../types/tracing.types';
 
 import { Agent } from './agent';
 import { JudgeAgent } from './judge';
@@ -101,7 +102,18 @@ function createMockStateManager(): StateManager {
   } as DebateState;
 
   return {
-    createDebate: async (problem: string) => ({ ...state, problem }),
+    createDebate: async (problem: string, context?: string, id?: string) => {
+      state.problem = problem;
+      if (context !== undefined) {
+        (state as DebateState & { context?: string }).context = context;
+      } else {
+        delete (state as DebateState & { context?: string }).context;
+      }
+      if (id !== undefined) {
+        state.id = id;
+      }
+      return state;
+    },
     beginRound: async (_id: string) => {
       const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
       state.rounds.push(round);
@@ -113,6 +125,13 @@ function createMockStateManager(): StateManager {
       const round = state.rounds[state.currentRound - 1];
       if (!round) throw new Error('No active round');
       round.contributions.push(contrib);
+      state.updatedAt = new Date();
+    },
+    setClarifications: async (_id: string, clarifications: AgentClarifications[]) => {
+      state.clarifications = clarifications;
+      state.updatedAt = new Date();
+    },
+    addJudgeSummary: async (_id: string, _summary: DebateSummary) => {
       state.updatedAt = new Date();
     },
     completeDebate: async (_id: string, solution: Solution) => {
@@ -1086,6 +1105,671 @@ describe('DebateOrchestrator - Context Directory', () => {
     // Verify context directory is undefined when not provided
     expect(capturedContext).toBeDefined();
     expect(capturedContext?.contextDirectory).toBeUndefined();
+  });
+});
+
+describe('DebateOrchestrator - Branch Coverage', () => {
+  let tmpDir: string;
+  
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'debate-orch-branch-'));
+  });
+
+  afterEach(() => {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  describe('formatCritiqueActivity', () => {
+    it('should return base activity string when critiqued agent is not found', async () => {
+      const agent1Config: AgentConfig = {
+        id: 'agent-1',
+        name: 'Agent A',
+        role: AGENT_ROLES.ARCHITECT,
+        model: 'gpt-4',
+        provider: LLM_PROVIDERS.OPENAI,
+        temperature: 0.5
+      };
+
+      const agent1 = new MockAgent(agent1Config);
+      const judge = new MockJudge();
+      const stateManager = new StateManager(tmpDir);
+
+      const onAgentStart = jest.fn();
+      const hooks = { onAgentStart };
+
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent1], judge as unknown as JudgeAgent, stateManager, config, hooks);
+      
+      // Create a state with a proposal from a non-existent agent
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      // Manually add a proposal from a non-existent agent
+      const fakeProposal: Contribution = {
+        agentId: 'non-existent-agent',
+        agentRole: AGENT_ROLES.ARCHITECT,
+        type: CONTRIBUTION_TYPES.PROPOSAL,
+        content: 'Fake proposal',
+        metadata: { latencyMs: 100 }
+      };
+      await stateManager.addContribution(state.id, fakeProposal);
+      
+      // Access private method to test critique phase with non-existent agent
+      const preparedContexts = new Map<string, DebateContext>();
+      preparedContexts.set('agent-1', { problem: 'Test problem' });
+      
+      await (orchestrator as unknown as { critiquePhase: (state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) => Promise<void> }).critiquePhase(state, 1, preparedContexts);
+
+      // Verify that critique activity was called with base string (no agent name)
+      const critiqueCalls = onAgentStart.mock.calls.filter(call => call[1] === 'critiquing');
+      expect(critiqueCalls.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('runDebate with clarifications', () => {
+    it('should set clarifications when provided', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      const setClarificationsSpy = jest.spyOn(stateManager, 'setClarifications');
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const clarifications: AgentClarifications[] = [
+        {
+          agentId: 'agent-1',
+          agentName: 'Agent 1',
+          role: AGENT_ROLES.ARCHITECT,
+          items: [
+            { id: 'q1', question: 'Question 1', answer: 'Answer 1' }
+          ]
+        }
+      ];
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      await orchestrator.runDebate('Test problem', undefined, clarifications);
+
+      expect(setClarificationsSpy).toHaveBeenCalledWith(expect.any(String), clarifications);
+    });
+
+    it('should not set clarifications when empty array is provided', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      const setClarificationsSpy = jest.spyOn(stateManager, 'setClarifications');
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      await orchestrator.runDebate('Test problem', undefined, []);
+
+      expect(setClarificationsSpy).not.toHaveBeenCalled();
+    });
+
+    it('should not set clarifications when undefined', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      const setClarificationsSpy = jest.spyOn(stateManager, 'setClarifications');
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      await orchestrator.runDebate('Test problem', undefined, undefined);
+
+      expect(setClarificationsSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('buildContext conditional spreads', () => {
+    it('should include context when state.context is defined', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      let capturedContext: DebateContext | undefined;
+      const originalPropose = agent.propose;
+      agent.propose = async (problem: string, context: DebateContext): Promise<Proposal> => {
+        capturedContext = context;
+        return originalPropose.call(agent, problem, context);
+      };
+
+      await orchestrator.runDebate('Test problem', 'Additional context');
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.context).toBe('Additional context');
+    });
+
+    it('should not include context when state.context is undefined', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: false,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      let capturedContext: DebateContext | undefined;
+      const originalPropose = agent.propose;
+      agent.propose = async (problem: string, context: DebateContext): Promise<Proposal> => {
+        capturedContext = context;
+        return originalPropose.call(agent, problem, context);
+      };
+
+      await orchestrator.runDebate('Test problem');
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.context).toBeUndefined();
+      expect(capturedContext?.includeFullHistory).toBe(false);
+      expect(capturedContext?.history).toBeUndefined();
+    });
+
+    it('should include history when includeFullHistory is true', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      let capturedContext: DebateContext | undefined;
+      const originalPropose = agent.propose;
+      agent.propose = async (problem: string, context: DebateContext): Promise<Proposal> => {
+        capturedContext = context;
+        return originalPropose.call(agent, problem, context);
+      };
+
+      await orchestrator.runDebate('Test problem');
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.includeFullHistory).toBe(true);
+      expect(capturedContext?.history).toBeDefined();
+    });
+
+    it('should include clarifications when state.clarifications is defined', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const clarifications: AgentClarifications[] = [
+        {
+          agentId: 'agent-1',
+          agentName: 'Agent 1',
+          role: AGENT_ROLES.ARCHITECT,
+          items: [{ id: 'q1', question: 'Question 1', answer: 'Answer 1' }]
+        }
+      ];
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      let capturedContext: DebateContext | undefined;
+      const originalPropose = agent.propose;
+      agent.propose = async (problem: string, context: DebateContext): Promise<Proposal> => {
+        capturedContext = context;
+        return originalPropose.call(agent, problem, context);
+      };
+
+      await orchestrator.runDebate('Test problem', undefined, clarifications);
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.clarifications).toBeDefined();
+      expect(capturedContext?.clarifications).toEqual(clarifications);
+    });
+
+    it('should include tracingContext when provided', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      // Create a minimal mock TracingContext - we just need to verify it's passed through
+      const mockLangfuse = {} as unknown as import('langfuse').Langfuse;
+      const mockTrace = {} as ReturnType<typeof mockLangfuse.trace>;
+      const tracingContext: TracingContext = {
+        langfuse: mockLangfuse,
+        trace: mockTrace,
+        currentSpans: new Map()
+      };
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config, undefined, tracingContext);
+      
+      let capturedContext: DebateContext | undefined;
+      const originalPropose = agent.propose;
+      agent.propose = async (problem: string, context: DebateContext): Promise<Proposal> => {
+        capturedContext = context;
+        return originalPropose.call(agent, problem, context);
+      };
+
+      await orchestrator.runDebate('Test problem');
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext?.tracingContext).toBeDefined();
+      expect(capturedContext?.tracingContext).toEqual(tracingContext);
+    });
+  });
+
+  describe('buildContribution without targetAgentId', () => {
+    it('should create contribution without targetAgentId for non-critique types', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      await orchestrator.runDebate('Test problem');
+
+      const state = (stateManager as unknown as { getState: () => DebateState }).getState();
+      const proposal = state.rounds[0]?.contributions.find((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
+      
+      expect(proposal).toBeDefined();
+      expect(proposal?.targetAgentId).toBeUndefined();
+    });
+  });
+
+  describe('buildCritiqueContribution fallback', () => {
+    it('should fallback to buildContext when preparedContexts missing agent', async () => {
+      const agent1 = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const agent2 = createMockAgent('agent-2', AGENT_ROLES.PERFORMANCE);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent1, agent2], mockJudge, stateManager, config);
+      
+      // Access private method to test with empty preparedContexts
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      // Add proposals
+      const proposal1: Contribution = {
+        agentId: 'agent-1',
+        agentRole: AGENT_ROLES.ARCHITECT,
+        type: CONTRIBUTION_TYPES.PROPOSAL,
+        content: 'Proposal 1',
+        metadata: { latencyMs: 100 }
+      };
+      const proposal2: Contribution = {
+        agentId: 'agent-2',
+        agentRole: AGENT_ROLES.PERFORMANCE,
+        type: CONTRIBUTION_TYPES.PROPOSAL,
+        content: 'Proposal 2',
+        metadata: { latencyMs: 100 }
+      };
+      await stateManager.addContribution(state.id, proposal1);
+      await stateManager.addContribution(state.id, proposal2);
+      
+      // Use empty preparedContexts to trigger fallback
+      const emptyPreparedContexts = new Map<string, DebateContext>();
+      
+      await (orchestrator as unknown as { critiquePhase: (state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) => Promise<void> }).critiquePhase(state, 1, emptyPreparedContexts);
+
+      const finalState = (stateManager as unknown as { getState: () => DebateState }).getState();
+      const critiques = finalState.rounds[0]?.contributions.filter((c: Contribution) => c.type === CONTRIBUTION_TYPES.CRITIQUE);
+      
+      expect(critiques).toBeDefined();
+      expect(critiques?.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('buildProposalContributionFromLLM fallback', () => {
+    it('should fallback to buildContext when preparedContexts missing agent', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      // Access private method to test with empty preparedContexts
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      // Use empty preparedContexts to trigger fallback
+      const emptyPreparedContexts = new Map<string, DebateContext>();
+      
+      await (orchestrator as unknown as { proposalPhase: (state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) => Promise<void> }).proposalPhase(state, 1, emptyPreparedContexts);
+
+      const finalState = (stateManager as unknown as { getState: () => DebateState }).getState();
+      const proposals = finalState.rounds[0]?.contributions.filter((c: Contribution) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
+      
+      expect(proposals).toBeDefined();
+      expect(proposals?.length).toBe(1);
+    });
+  });
+
+  describe('critiquePhase edge cases', () => {
+    it('should handle critiquePhase when lastRound does not exist', async () => {
+      const agent1 = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const agent2 = createMockAgent('agent-2', AGENT_ROLES.PERFORMANCE);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent1, agent2], mockJudge, stateManager, config);
+      
+      // Access private method to test with state that has no rounds
+      const state = await stateManager.createDebate('Test problem');
+      // Don't begin a round, so state.rounds is empty
+      
+      const preparedContexts = new Map<string, DebateContext>();
+      preparedContexts.set('agent-1', { problem: 'Test problem' });
+      preparedContexts.set('agent-2', { problem: 'Test problem' });
+      
+      await (orchestrator as unknown as { critiquePhase: (state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) => Promise<void> }).critiquePhase(state, 1, preparedContexts);
+
+      // Should complete without errors even when no proposals exist
+      const finalState = (stateManager as unknown as { getState: () => DebateState }).getState();
+      expect(finalState.rounds.length).toBe(0);
+    });
+  });
+
+  describe('refinementPhase edge cases', () => {
+    it('should handle refinementPhase when prevRound does not exist', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      // Access private method to test with state that has no previous rounds
+      const state = await stateManager.createDebate('Test problem');
+      // Begin a round so we can add contributions, but don't add any proposals
+      await stateManager.beginRound(state.id);
+      
+      const preparedContexts = new Map<string, DebateContext>();
+      preparedContexts.set('agent-1', { problem: 'Test problem' });
+      
+      await (orchestrator as unknown as { refinementPhase: (state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) => Promise<void> }).refinementPhase(state, 1, preparedContexts);
+
+      // Should complete without errors, using empty string for original content
+      const finalState = (stateManager as unknown as { getState: () => DebateState }).getState();
+      const refinements = finalState.rounds[0]?.contributions.filter((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
+      expect(refinements).toBeDefined();
+      expect(refinements?.length).toBe(1);
+      // Verify it used empty string for original content when prevRound has no proposals
+      expect(refinements?.[0]?.content).toBe('architect refined');
+    });
+
+    it('should fallback to buildContext when preparedContexts missing agent in refinementPhase', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      // Access private method
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      // Add proposal and critique
+      const proposal: Contribution = {
+        agentId: 'agent-1',
+        agentRole: AGENT_ROLES.ARCHITECT,
+        type: CONTRIBUTION_TYPES.PROPOSAL,
+        content: 'Proposal',
+        metadata: { latencyMs: 100 }
+      };
+      await stateManager.addContribution(state.id, proposal);
+      
+      // Use empty preparedContexts to trigger fallback
+      const emptyPreparedContexts = new Map<string, DebateContext>();
+      
+      await (orchestrator as unknown as { refinementPhase: (state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) => Promise<void> }).refinementPhase(state, 1, emptyPreparedContexts);
+
+      const finalState = (stateManager as unknown as { getState: () => DebateState }).getState();
+      const refinements = finalState.rounds[0]?.contributions.filter((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
+      
+      expect(refinements).toBeDefined();
+      expect(refinements?.length).toBe(1);
+    });
+
+    it('should handle refinementPhase when original proposal does not exist', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      // Access private method
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      // Don't add proposal, so original will be undefined
+      
+      const preparedContexts = new Map<string, DebateContext>();
+      preparedContexts.set('agent-1', { problem: 'Test problem' });
+      
+      await (orchestrator as unknown as { refinementPhase: (state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>) => Promise<void> }).refinementPhase(state, 1, preparedContexts);
+
+      // Should complete using empty string for original content
+      const finalState = (stateManager as unknown as { getState: () => DebateState }).getState();
+      const refinements = finalState.rounds[0]?.contributions.filter((c: Contribution) => c.type === CONTRIBUTION_TYPES.REFINEMENT);
+      
+      expect(refinements).toBeDefined();
+      expect(refinements?.length).toBe(1);
+    });
+  });
+
+  describe('synthesisPhase edge cases', () => {
+    it('should handle synthesisPhase when judge summary does not exist', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      const addJudgeSummarySpy = jest.spyOn(stateManager, 'addJudgeSummary');
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      // Use mockJudge which doesn't return a summary
+      const orchestrator = new DebateOrchestrator([agent], mockJudge, stateManager, config);
+      
+      // Access private method
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      await (orchestrator as unknown as { synthesisPhase: (state: DebateState) => Promise<Solution> }).synthesisPhase(state);
+
+      // Should not call addJudgeSummary when no summary is returned
+      expect(addJudgeSummarySpy).not.toHaveBeenCalled();
+    });
+
+    it('should store judge summary when judge returns a summary', async () => {
+      const agent = createMockAgent('agent-1', AGENT_ROLES.ARCHITECT);
+      const stateManager = createMockStateManager();
+      const addJudgeSummarySpy = jest.spyOn(stateManager, 'addJudgeSummary');
+      
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const judgeSummary: DebateSummary = {
+        agentId: 'judge',
+        agentRole: AGENT_ROLES.GENERALIST,
+        summary: 'Judge summary',
+        metadata: {
+          beforeChars: 1000,
+          afterChars: 500,
+          method: SUMMARIZATION_METHODS.LENGTH_BASED,
+          timestamp: new Date(),
+          latencyMs: 200,
+          tokensUsed: 50
+        }
+      };
+
+      // Create a mock judge that returns a summary
+      const judgeWithSummary = {
+        synthesize: async (_problem: string, _rounds: DebateRound[]) => ({
+          description: 'final',
+          tradeoffs: [],
+          recommendations: [],
+          confidence: 80,
+          synthesizedBy: 'judge',
+        } as Solution),
+        prepareContext: async (_rounds: DebateRound[]) => ({ 
+          context: { problem: '', history: [] },
+          summary: judgeSummary
+        }),
+      } as unknown as JudgeAgent;
+
+      const orchestrator = new DebateOrchestrator([agent], judgeWithSummary, stateManager, config);
+      
+      // Access private method
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      await (orchestrator as unknown as { synthesisPhase: (state: DebateState) => Promise<Solution> }).synthesisPhase(state);
+
+      // Should call addJudgeSummary when summary is returned
+      expect(addJudgeSummarySpy).toHaveBeenCalledWith(state.id, judgeSummary);
+    });
+  });
+
+  describe('summarizationPhase onSummarizationEnd hook', () => {
+    it('should call onSummarizationEnd when no summary is produced', async () => {
+      const agentConfig: AgentConfig = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        role: AGENT_ROLES.ARCHITECT,
+        model: 'gpt-4',
+        provider: LLM_PROVIDERS.OPENAI,
+        temperature: 0.5
+      };
+
+      const agent = new MockAgent(agentConfig); // No summary provided
+      const judge = new MockJudge();
+      const stateManager = new StateManager(tmpDir);
+
+      const onSummarizationEnd = jest.fn();
+      const hooks = {
+        onSummarizationEnd
+      };
+
+      const config: DebateConfig = {
+        rounds: SINGLE_ROUND,
+        terminationCondition: { type: TERMINATION_TYPES.FIXED },
+        synthesisMethod: SYNTHESIS_METHODS.JUDGE,
+        includeFullHistory: true,
+        timeoutPerRound: DEFAULT_TIMEOUT_MS,
+      };
+
+      const orchestrator = new DebateOrchestrator([agent], judge as unknown as JudgeAgent, stateManager, config, hooks);
+      
+      const state = await stateManager.createDebate('Test problem');
+      await stateManager.beginRound(state.id);
+      
+      await (orchestrator as unknown as { summarizationPhase: (state: DebateState, roundNumber: number) => Promise<Map<string, DebateContext>> }).summarizationPhase(state, 1);
+
+      expect(onSummarizationEnd).toHaveBeenCalledWith('Agent 1');
+    });
   });
 });
 

@@ -96,7 +96,7 @@ class TestAgent extends Agent {
     super(config, provider, toolRegistry, toolCallLimit, logger);
     const self = this as unknown as TestAgentAccess;
     self.toolRegistry = toolRegistry;
-    self.toolCallLimit = toolCallLimit ?? 10;
+    // Don't override toolCallLimit - let the parent constructor handle it
   }
 
   async propose(_problem: string, _context: DebateContext): Promise<Proposal> {
@@ -124,9 +124,25 @@ class TestAgent extends Agent {
   }
 
   // Expose callLLM for testing
-  async testCallLLM(systemPrompt: string, userPrompt: string, context?: DebateContext): Promise<AgentLLMResponse> {
+  async testCallLLM(systemPrompt: string, userPrompt: string, context?: DebateContext, state?: DebateState): Promise<AgentLLMResponse> {
     const self = this as unknown as TestAgentAccess;
-    return self.callLLM(systemPrompt, userPrompt, context);
+    return self.callLLM(systemPrompt, userPrompt, context, state);
+  }
+
+  // Expose proposeImpl, critiqueImpl, refineImpl for testing
+  async testProposeImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal> {
+    const self = this as unknown as TestAgentAccess;
+    return (self as unknown as { proposeImpl: typeof Agent.prototype['proposeImpl'] }).proposeImpl(context, systemPrompt, userPrompt, state);
+  }
+
+  async testCritiqueImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Critique> {
+    const self = this as unknown as TestAgentAccess;
+    return (self as unknown as { critiqueImpl: typeof Agent.prototype['critiqueImpl'] }).critiqueImpl(context, systemPrompt, userPrompt, state);
+  }
+
+  async testRefineImpl(context: DebateContext, systemPrompt: string, userPrompt: string, state?: DebateState): Promise<Proposal> {
+    const self = this as unknown as TestAgentAccess;
+    return (self as unknown as { refineImpl: typeof Agent.prototype['refineImpl'] }).refineImpl(context, systemPrompt, userPrompt, state);
   }
 }
 
@@ -811,6 +827,593 @@ describe('Agent Tool Calling', () => {
       const resultMessages = loggedMessages.filter(m => m.message.includes('execution result'));
       expect(resultMessages.length).toBeGreaterThan(0);
       expect(resultMessages[0]?.onlyVerbose).toBe(true);
+    });
+  });
+
+  describe('callLLMWithoutTools path', () => {
+    it('should use callLLMWithoutTools when no tool registry provided', async () => {
+      const agentWithoutTools = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        undefined, // No tool registry
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Simple response without tools',
+        },
+      ]);
+
+      const response = await agentWithoutTools.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.text).toBe('Simple response without tools');
+      expect(response.toolCalls).toBeUndefined();
+      expect(response.toolResults).toBeUndefined();
+      expect(response.toolCallIterations).toBeUndefined();
+      expect(response.usage).toBeDefined();
+    });
+
+    it('should use callLLMWithoutTools when tool registry has no tools', async () => {
+      const emptyRegistry = new ToolRegistry();
+      const agentWithEmptyRegistry = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        emptyRegistry,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response with empty registry',
+        },
+      ]);
+
+      const response = await agentWithEmptyRegistry.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.text).toBe('Response with empty registry');
+      expect(response.toolCalls).toBeUndefined();
+      expect(response.toolResults).toBeUndefined();
+    });
+  });
+
+  describe('Template methods (proposeImpl, critiqueImpl, refineImpl)', () => {
+    it('should build proposal metadata correctly in proposeImpl', async () => {
+      const agentWithoutTools = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        undefined, // No tools
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Proposal content',
+        },
+      ]);
+
+      const proposal = await agentWithoutTools.testProposeImpl(mockContext, 'System', 'User prompt');
+      
+      expect(proposal.content).toBe('Proposal content');
+      expect(proposal.metadata.latencyMs).toBeGreaterThanOrEqual(0);
+      expect(proposal.metadata.model).toBe('gpt-4');
+      expect(proposal.metadata.tokensUsed).toBe(MOCK_TOTAL_TOKENS);
+    });
+
+    it('should build critique metadata correctly in critiqueImpl', async () => {
+      const agentWithoutTools = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        undefined, // No tools
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Critique content',
+        },
+      ]);
+
+      const critique = await agentWithoutTools.testCritiqueImpl(mockContext, 'System', 'User prompt');
+      
+      expect(critique.content).toBe('Critique content');
+      expect(critique.metadata.latencyMs).toBeGreaterThanOrEqual(0);
+      expect(critique.metadata.model).toBe('gpt-4');
+      expect(critique.metadata.tokensUsed).toBe(MOCK_TOTAL_TOKENS);
+    });
+
+    it('should build refined proposal metadata correctly in refineImpl', async () => {
+      const agentWithoutTools = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        undefined, // No tools
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Refined proposal content',
+        },
+      ]);
+
+      const refined = await agentWithoutTools.testRefineImpl(mockContext, 'System', 'User prompt');
+      
+      expect(refined.content).toBe('Refined proposal content');
+      expect(refined.metadata.latencyMs).toBeGreaterThanOrEqual(0);
+      expect(refined.metadata.model).toBe('gpt-4');
+      expect(refined.metadata.tokensUsed).toBe(MOCK_TOTAL_TOKENS);
+    });
+
+    it('should include tool calls and results in metadata when present', async () => {
+      mockProvider.setResponses([
+        {
+          text: 'Proposal with tools',
+          toolCalls: [
+            {
+              id: 'call_1',
+              name: 'mock_tool',
+              arguments: '{"input":"test"}',
+            },
+          ],
+        },
+        {
+          text: 'Final response',
+        },
+      ]);
+
+      const proposal = await agent.testProposeImpl(mockContext, 'System', 'User prompt');
+      
+      expect(proposal.metadata.toolCalls).toBeDefined();
+      expect(proposal.metadata.toolCalls?.length).toBe(1);
+      expect(proposal.metadata.toolResults).toBeDefined();
+      expect(proposal.metadata.toolResults?.length).toBe(1);
+      expect(proposal.metadata.toolCallIterations).toBe(1);
+    });
+
+    it('should handle missing usage in metadata', async () => {
+      const providerWithoutUsage = new MockProviderWithTools();
+      providerWithoutUsage.setResponses([
+        {
+          text: 'Response without usage',
+        },
+      ]);
+      
+      // Override to not include usage
+      const originalComplete = providerWithoutUsage.complete.bind(providerWithoutUsage);
+      providerWithoutUsage.complete = async (): Promise<CompletionResponse> => {
+        const res = await originalComplete({} as CompletionRequest);
+        return { text: res.text };
+      };
+
+      const agentWithoutUsage = new TestAgent(
+        createTestAgentConfig(),
+        providerWithoutUsage,
+        undefined,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      const proposal = await agentWithoutUsage.testProposeImpl(mockContext, 'System', 'User prompt');
+      
+      expect(proposal.metadata.tokensUsed).toBeUndefined();
+    });
+  });
+
+  describe('Constructor and toolCallLimit', () => {
+    it('should use toolCallLimit from parameter when provided', () => {
+      const agent = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        toolRegistry,
+        5
+      );
+      
+      const self = agent as unknown as TestAgentAccess;
+      expect(self.toolCallLimit).toBe(5);
+    });
+
+    it('should use toolCallLimit from config when parameter not provided', () => {
+      const config = createTestAgentConfig({ toolCallLimit: 7 });
+      const agent = new TestAgent(
+        config,
+        mockProvider,
+        toolRegistry,
+        undefined // Explicitly pass undefined to test config fallback
+      );
+      
+      const self = agent as unknown as TestAgentAccess;
+      expect(self.toolCallLimit).toBe(7);
+    });
+
+    it('should use DEFAULT_TOOL_CALL_LIMIT when neither parameter nor config provided', () => {
+      const agent = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        toolRegistry
+      );
+      
+      const self = agent as unknown as TestAgentAccess;
+      expect(self.toolCallLimit).toBe(DEFAULT_TOOL_CALL_LIMIT);
+    });
+  });
+
+  describe('Error handling in processToolCall', () => {
+    it('should handle errors thrown during tool processing', async () => {
+      // Create a tool registry that throws when get() is called
+      const throwingRegistry = new ToolRegistry();
+      // Register a tool so hasTools() returns true
+      throwingRegistry.register(new MockTool());
+      
+      // Override get() to throw
+      const originalGet = throwingRegistry.get.bind(throwingRegistry);
+      throwingRegistry.get = (name: string): ToolImplementation | undefined => {
+        if (name === 'mock_tool') {
+          throw new Error('Registry error');
+        }
+        return originalGet(name);
+      };
+
+      const agentWithThrowingRegistry = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        throwingRegistry,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Calling tool',
+          toolCalls: [
+            {
+              id: 'call_1',
+              name: 'mock_tool',
+              arguments: '{"input":"test"}',
+            },
+          ],
+        },
+        {
+          text: 'Final response',
+        },
+      ]);
+
+      const response = await agentWithThrowingRegistry.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.toolResults?.length).toBe(1);
+      const toolResult = response.toolResults?.[0];
+      if (toolResult) {
+        const result = JSON.parse(toolResult.content);
+        expect(result.status).toBe('error');
+        expect(result.error).toContain('Registry error');
+      }
+    });
+  });
+
+  describe('Error handling in executeTool', () => {
+    it('should handle errors thrown during tool execution', async () => {
+      // Create a tool that throws when execute() is called
+      class ThrowingTool implements ToolImplementation {
+        name = 'throwing_tool';
+        schema = {
+          name: 'throwing_tool',
+          description: 'A tool that throws',
+          parameters: {
+            type: 'object' as const,
+            properties: {},
+            required: [],
+          },
+        };
+
+        execute(): string {
+          throw new Error('Tool execution error');
+        }
+      }
+
+      const registryWithThrowingTool = new ToolRegistry();
+      registryWithThrowingTool.register(new ThrowingTool());
+
+      const agentWithThrowingTool = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        registryWithThrowingTool,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Calling throwing tool',
+          toolCalls: [
+            {
+              id: 'call_1',
+              name: 'throwing_tool',
+              arguments: '{}',
+            },
+          ],
+        },
+        {
+          text: 'Final response',
+        },
+      ]);
+
+      const response = await agentWithThrowingTool.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.toolResults?.length).toBe(1);
+      const toolResult = response.toolResults?.[0];
+      if (toolResult) {
+        const result = JSON.parse(toolResult.content);
+        expect(result.status).toBe('error');
+        expect(result.error).toContain('Tool execution error');
+      }
+    });
+  });
+
+  describe('formatToolInformation', () => {
+    it('should return empty string when no tools available', async () => {
+      const emptyRegistry = new ToolRegistry();
+      const agentWithEmptyRegistry = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        emptyRegistry,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response',
+        },
+      ]);
+
+      const response = await agentWithEmptyRegistry.testCallLLM('System', 'User prompt', mockContext);
+      
+      // Should complete successfully without tool information in prompt
+      expect(response.text).toBe('Response');
+    });
+
+    it('should handle empty toolSchemas array in formatToolInformation', async () => {
+      // Create a registry that hasTools() returns true but getAllSchemas() returns empty array
+      // This tests the edge case where formatToolInformation receives an empty array
+      const mockRegistry = new ToolRegistry();
+      // Register a tool so hasTools() returns true
+      mockRegistry.register(new MockTool());
+      
+      // Override getAllSchemas to return empty array
+      const originalGetAllSchemas = mockRegistry.getAllSchemas.bind(mockRegistry);
+      mockRegistry.getAllSchemas = (): ReturnType<typeof originalGetAllSchemas> => {
+        return []; // Return empty array to test the early return in formatToolInformation
+      };
+
+      const agentWithMockRegistry = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        mockRegistry,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response with empty schemas',
+        },
+      ]);
+
+      const response = await agentWithMockRegistry.testCallLLM('System', 'User prompt', mockContext);
+      
+      // Should complete successfully - formatToolInformation should return empty string
+      expect(response.text).toBe('Response with empty schemas');
+    });
+
+    it('should format tool information with all optional fields', async () => {
+      // Create a tool with missing optional fields
+      class ToolWithOptionalFields implements ToolImplementation {
+        name = 'optional_tool';
+        schema = {
+          name: 'optional_tool',
+          description: 'A tool with optional fields',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              param1: { type: 'string' as const }, // No description
+              param2: { type: 'number' as const, description: 'Has description' },
+            },
+            // No required field
+          },
+        };
+
+        execute(): string {
+          return JSON.stringify({ result: 'success' });
+        }
+      }
+
+      const registryWithOptionalTool = new ToolRegistry();
+      registryWithOptionalTool.register(new ToolWithOptionalFields());
+
+      const agentWithOptionalTool = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        registryWithOptionalTool,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response with optional tool',
+        },
+      ]);
+
+      const response = await agentWithOptionalTool.testCallLLM('System', 'User prompt', mockContext);
+      
+      // Should complete successfully - the tool information should be formatted
+      expect(response.text).toBe('Response with optional tool');
+    });
+
+    it('should format tool information with empty parameters', async () => {
+      class ToolWithNoParams implements ToolImplementation {
+        name = 'no_params_tool';
+        schema = {
+          name: 'no_params_tool',
+          description: 'A tool with no parameters',
+          parameters: {
+            type: 'object' as const,
+            properties: {},
+            required: [],
+          },
+        };
+
+        execute(): string {
+          return JSON.stringify({ result: 'success' });
+        }
+      }
+
+      const registryWithNoParamsTool = new ToolRegistry();
+      registryWithNoParamsTool.register(new ToolWithNoParams());
+
+      const agentWithNoParamsTool = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        registryWithNoParamsTool,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response with no params tool',
+        },
+      ]);
+
+      const response = await agentWithNoParamsTool.testCallLLM('System', 'User prompt', mockContext);
+      
+      // Should complete successfully
+      expect(response.text).toBe('Response with no params tool');
+    });
+  });
+
+  describe('Edge cases in metadata building', () => {
+    it('should not include toolCalls in metadata when array is empty', async () => {
+      mockProvider.setResponses([
+        {
+          text: 'Response without tool calls',
+        },
+      ]);
+
+      const proposal = await agent.testProposeImpl(mockContext, 'System', 'User prompt');
+      
+      expect(proposal.metadata.toolCalls).toBeUndefined();
+    });
+
+    it('should not include toolResults in metadata when array is empty', async () => {
+      mockProvider.setResponses([
+        {
+          text: 'Response without tool results',
+        },
+      ]);
+
+      const proposal = await agent.testProposeImpl(mockContext, 'System', 'User prompt');
+      
+      expect(proposal.metadata.toolResults).toBeUndefined();
+    });
+
+    it('should handle toolCallIterations being 0', async () => {
+      const emptyRegistry = new ToolRegistry();
+      const agentWithEmptyRegistry = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        emptyRegistry,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response',
+        },
+      ]);
+
+      const response = await agentWithEmptyRegistry.testCallLLM('System', 'User prompt', mockContext);
+      
+      // When no tools, toolCallIterations should be undefined
+      expect(response.toolCallIterations).toBeUndefined();
+    });
+
+    it('should not include toolCalls in response when array is empty', async () => {
+      const emptyRegistry = new ToolRegistry();
+      const agentWithEmptyRegistry = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        emptyRegistry,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response',
+        },
+      ]);
+
+      const response = await agentWithEmptyRegistry.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.toolCalls).toBeUndefined();
+    });
+
+    it('should not include toolResults in response when array is empty', async () => {
+      const emptyRegistry = new ToolRegistry();
+      const agentWithEmptyRegistry = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        emptyRegistry,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response',
+        },
+      ]);
+
+      const response = await agentWithEmptyRegistry.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.toolResults).toBeUndefined();
+    });
+
+    it('should handle usage being undefined in callLLMWithoutTools', async () => {
+      const providerWithoutUsage = new MockProviderWithTools();
+      providerWithoutUsage.setResponses([
+        {
+          text: 'Response without usage',
+        },
+      ]);
+      
+      // Override to not include usage
+      const originalComplete = providerWithoutUsage.complete.bind(providerWithoutUsage);
+      providerWithoutUsage.complete = async (): Promise<CompletionResponse> => {
+        const res = await originalComplete({} as CompletionRequest);
+        return { text: res.text }; // No usage field
+      };
+
+      const agentWithoutUsage = new TestAgent(
+        createTestAgentConfig(),
+        providerWithoutUsage,
+        undefined,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      const response = await agentWithoutUsage.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.usage).toBeUndefined();
+    });
+
+    it('should handle toolCallIterations being undefined when no tools', async () => {
+      const agentWithoutTools = new TestAgent(
+        createTestAgentConfig(),
+        mockProvider,
+        undefined,
+        DEFAULT_TOOL_CALL_LIMIT
+      );
+
+      mockProvider.setResponses([
+        {
+          text: 'Response',
+        },
+      ]);
+
+      const response = await agentWithoutTools.testCallLLM('System', 'User prompt', mockContext);
+      
+      expect(response.toolCallIterations).toBeUndefined();
     });
   });
 });
