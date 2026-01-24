@@ -14,6 +14,20 @@ import { DebateController } from './debate.controller';
  */
 type MockResponse = Pick<Response, 'setHeader'>;
 
+/**
+ * Replaces the controller's private stateManager for tests.
+ * Accepts StateManager or a partial mock with updateUserFeedback or getDebate.
+ */
+function setControllerStateManager(
+  controller: DebateController,
+  value:
+    | StateManager
+    | { updateUserFeedback: (id: string, feedback: number) => Promise<unknown> }
+    | { getDebate: (id: string) => Promise<unknown> }
+): void {
+  Object.defineProperty(controller, 'stateManager', { value, writable: true, configurable: true });
+}
+
 // Mock dialectic-core dependencies
 jest.mock('dialectic-core', () => {
   const actual = jest.requireActual('dialectic-core');
@@ -44,10 +58,7 @@ describe('DebateController', () => {
     }).compile();
 
     controller = module.get<DebateController>(DebateController);
-    // Replace the StateManager instance with one pointing to our test directory
-    // Using type assertion to access private property for testing purposes
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (controller as any).stateManager = stateManager;
+    setControllerStateManager(controller, stateManager);
   });
 
   afterEach(() => {
@@ -111,6 +122,36 @@ describe('DebateController', () => {
         controller.submitFeedback('nonexistent-id', { feedback: TEST_FEEDBACK_POSITIVE })
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should rethrow NotFoundException from StateManager', async () => {
+      const notFound = new NotFoundException('Debate missing');
+      const mockSm = { updateUserFeedback: jest.fn().mockRejectedValue(notFound) };
+      setControllerStateManager(controller, mockSm);
+
+      await expect(controller.submitFeedback('id', { feedback: TEST_FEEDBACK_POSITIVE })).rejects.toThrow(
+        NotFoundException
+      );
+      await expect(controller.submitFeedback('id', { feedback: TEST_FEEDBACK_POSITIVE })).rejects.toMatchObject({
+        message: 'Debate missing',
+      });
+    });
+
+    it('should rethrow non-not-found errors from StateManager', async () => {
+      const err = new Error('Permission denied');
+      const mockSm = { updateUserFeedback: jest.fn().mockRejectedValue(err) };
+      setControllerStateManager(controller, mockSm);
+
+      await expect(controller.submitFeedback('id', { feedback: TEST_FEEDBACK_POSITIVE })).rejects.toThrow(
+        'Permission denied'
+      );
+    });
+
+    it('should rethrow non-Error exceptions from StateManager', async () => {
+      const mockSm = { updateUserFeedback: jest.fn().mockRejectedValue('disk error') };
+      setControllerStateManager(controller, mockSm);
+
+      await expect(controller.submitFeedback('id', { feedback: TEST_FEEDBACK_POSITIVE })).rejects.toEqual('disk error');
+    });
   });
 
   describe('GET /api/debates/:id/download', () => {
@@ -159,6 +200,32 @@ describe('DebateController', () => {
           userFeedback: TEST_FEEDBACK_POSITIVE,
         })
       );
+    });
+
+    it('should return 404 when getDebate throws with "not found" in message', async () => {
+      const mockResponse: MockResponse = { setHeader: jest.fn() };
+      const mockSm = { getDebate: jest.fn().mockRejectedValue(new Error('Debate x not found')) };
+      setControllerStateManager(controller, mockSm);
+
+      await expect(controller.downloadDebate('id', mockResponse as Response)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should rethrow when getDebate throws non-not-found error', async () => {
+      const err = new Error('ENOENT');
+      const mockResponse: MockResponse = { setHeader: jest.fn() };
+      const mockSm = { getDebate: jest.fn().mockRejectedValue(err) };
+      setControllerStateManager(controller, mockSm);
+
+      await expect(controller.downloadDebate('id', mockResponse as Response)).rejects.toThrow('ENOENT');
+    });
+
+    it('should rethrow NotFoundException when getDebate throws it', async () => {
+      const notFound = new NotFoundException('Not found');
+      const mockResponse: MockResponse = { setHeader: jest.fn() };
+      const mockSm = { getDebate: jest.fn().mockRejectedValue(notFound) };
+      setControllerStateManager(controller, mockSm);
+
+      await expect(controller.downloadDebate('id', mockResponse as Response)).rejects.toThrow(NotFoundException);
     });
   });
 });

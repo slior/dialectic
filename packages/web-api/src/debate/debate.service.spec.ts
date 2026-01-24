@@ -3,6 +3,7 @@ jest.mock('dialectic-core', () => {
   const actual = jest.requireActual('dialectic-core');
   return {
     ...actual,
+    logWarning: jest.fn(),
     StateManager: jest.fn(),
     DebateOrchestrator: jest.fn(),
     JudgeAgent: jest.fn(),
@@ -23,7 +24,6 @@ import {
   JudgeAgent,
   RoleBasedAgent,
   AgentConfig,
-  DebateConfig,
   DebateResult,
   AgentClarifications,
   Agent,
@@ -36,6 +36,7 @@ import {
   collectClarifications,
   resolvePrompt,
   buildToolRegistry,
+  logWarning,
   LLMProvider,
 } from 'dialectic-core';
 
@@ -335,6 +336,36 @@ describe('DebateService', () => {
     it('should throw error when no agents provided', async () => {
       await expect(service.collectClarifications(TEST_PROBLEM, [])).rejects.toThrow('No agents configured');
     });
+
+    it('should throw error when agents is null', async () => {
+      await expect(
+        service.collectClarifications(TEST_PROBLEM, null as unknown as AgentConfig[])
+      ).rejects.toThrow('No agents configured');
+    });
+
+    it('should throw when summarization is not configured', async () => {
+      const config = service.getDefaultConfig();
+      const { summarization: _s, ...debateRest } = config.debate;
+      jest.spyOn(service, 'getDefaultConfig').mockReturnValue({
+        ...config,
+        debate: { ...debateRest },
+      });
+      await expect(
+        service.collectClarifications(TEST_PROBLEM, createMockAgentConfigs())
+      ).rejects.toThrow('Summarization configuration is required');
+    });
+
+    it('should pass logWarning callback that is invoked by collectClarifications', async () => {
+      const mockAgents = createMockAgentConfigs();
+      (collectClarifications as jest.Mock).mockImplementation(
+        async (_problem: string, _agents: unknown, _max: number, warn: (msg: string) => void) => {
+          if (typeof warn === 'function') warn('test warning');
+          return createMockAgentClarifications();
+        }
+      );
+      await service.collectClarifications(TEST_PROBLEM, mockAgents);
+      expect(logWarning).toHaveBeenCalledWith('test warning');
+    });
   });
 
   describe('runDebate', () => {
@@ -452,6 +483,16 @@ describe('DebateService', () => {
       expect(buildToolRegistry).toHaveBeenCalled();
       expect(JudgeAgent).toHaveBeenCalled();
     });
+
+    it('should throw when agents is omitted and defaults to empty', async () => {
+      await expect(service.runDebate(TEST_PROBLEM)).rejects.toThrow('No agents configured');
+    });
+
+    it('should throw when agents is null', async () => {
+      await expect(
+        service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, null as unknown as AgentConfig[])
+      ).rejects.toThrow('No agents configured');
+    });
   });
 
   describe('getAgentConfigs', () => {
@@ -459,9 +500,9 @@ describe('DebateService', () => {
       const configs = service.getAgentConfigs();
 
       expect(configs).toHaveLength(3);
-      expect(configs[0].id).toBe(TEST_AGENT_ID_ARCHITECT);
-      expect(configs[1].id).toBe(TEST_AGENT_ID_PERFORMANCE);
-      expect(configs[2].id).toBe(TEST_AGENT_ID_KISS);
+      expect(configs[0]!.id).toBe(TEST_AGENT_ID_ARCHITECT);
+      expect(configs[1]!.id).toBe(TEST_AGENT_ID_PERFORMANCE);
+      expect(configs[2]!.id).toBe(TEST_AGENT_ID_KISS);
     });
 
     it('should return same configs as getDefaultConfig', () => {

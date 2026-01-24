@@ -206,6 +206,31 @@ function createMockDebateResult(): DebateResult {
 }
 
 /**
+ * Creates a mock DebateResult with a contribution that has targetAgentId set.
+ */
+function createMockDebateResultWithTargetAgent(): DebateResult {
+  return {
+    ...createMockDebateResult(),
+    rounds: [
+      {
+        roundNumber: 1,
+        contributions: [
+          {
+            agentId: TEST_AGENT_ID_ARCHITECT,
+            agentRole: TEST_AGENT_ROLE_ARCHITECT,
+            type: TEST_PHASE_CRITIQUE,
+            content: 'Test critique',
+            targetAgentId: 'agent-performance',
+            metadata: {},
+          } as Contribution,
+        ],
+        timestamp: new Date(),
+      },
+    ],
+  };
+}
+
+/**
  * Creates a mock Contribution.
  */
 function createMockContribution(): Contribution {
@@ -348,6 +373,15 @@ describe('DebateGateway', () => {
       });
     });
 
+    it('should reject undefined problem', async () => {
+      await gateway.handleStartDebate(
+        { problem: undefined as unknown as string, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith('Problem description is required');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'Problem description is required' });
+    });
+
     it('should reject whitespace-only problem', async () => {
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM_WHITESPACE, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -470,6 +504,23 @@ describe('DebateGateway', () => {
         message: `Failed to collect clarifications: ${errorMessage}`,
       });
       expect(mockDebateService.runDebate).toHaveBeenCalled(); // Should continue with debate
+    });
+
+    it('should handle clarification collection non-Error rejection (String error branch)', async () => {
+      mockDebateService.collectClarifications.mockRejectedValue('non-Error string');
+      const mockResult = createMockDebateResult();
+      mockDebateService.runDebate.mockResolvedValue(mockResult);
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith('Failed to collect clarifications: non-Error string');
+      expect(mockSocket.emit).toHaveBeenCalledWith('warning', {
+        message: 'Failed to collect clarifications: non-Error string',
+      });
+      expect(mockDebateService.runDebate).toHaveBeenCalled();
     });
 
     it('should run debate without clarifications when disabled', async () => {
@@ -603,6 +654,106 @@ describe('DebateGateway', () => {
       expect(mockSocket.emit).toHaveBeenCalledWith('error', {
         message: expect.stringContaining('Temperature must be between'),
       });
+    });
+
+    it('should reject empty agent id', async () => {
+      const invalidAgents = [{ ...createMockAgentConfigInputs()[0]!, id: '' }];
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith('All agents must have a non-empty ID');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'All agents must have a non-empty ID' });
+    });
+
+    it('should reject whitespace-only agent id', async () => {
+      const invalidAgents = [{ ...createMockAgentConfigInputs()[0]!, id: '   ' }];
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith('All agents must have a non-empty ID');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'All agents must have a non-empty ID' });
+    });
+
+    it('should reject empty agent name', async () => {
+      const invalidAgents = [{ ...createMockAgentConfigInputs()[0]!, name: '' }];
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith('All agents must have a non-empty name');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'All agents must have a non-empty name' });
+    });
+
+    it('should reject empty agent model', async () => {
+      const invalidAgents = [{ ...createMockAgentConfigInputs()[0]!, model: '' }];
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith('All agents must have a model');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'All agents must have a model' });
+    });
+
+    it('should reject missing agent provider', async () => {
+      const invalidAgents = [{ ...createMockAgentConfigInputs()[0]!, provider: '' }];
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith('All agents must have a provider');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'All agents must have a provider' });
+    });
+
+    it('should reject empty agent role', async () => {
+      const invalidAgents = [{ ...createMockAgentConfigInputs()[0]!, role: '' }];
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith('All agents must have a role');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'All agents must have a role' });
+    });
+
+    it('should reject NaN temperature', async () => {
+      const invalidAgents = [{ ...createMockAgentConfigInputs()[0]!, temperature: NaN }];
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: invalidAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith(expect.stringContaining('Temperature must be between'));
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: expect.stringContaining('Temperature must be between'),
+      });
+    });
+
+    it('should reject when more than 8 agents', async () => {
+      const base = createMockAgentConfigInputs();
+      const manyAgents = Array.from({ length: 9 }, (_, i) => ({
+        ...base[i % base.length]!,
+        id: `agent-${i}`,
+        name: `Agent ${i}`,
+      }));
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: manyAgents },
+        mockSocket
+      );
+      expect(logWarning).toHaveBeenCalledWith(expect.stringContaining('Maximum 8 agents allowed'));
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: expect.stringContaining('Maximum 8 agents allowed'),
+      });
+    });
+
+    it('should emit error when configuredAgents is null in clarifications block', async () => {
+      (gateway as unknown as { convertToAgentConfig: () => null }).convertToAgentConfig = (): null => null;
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+      expect(mockSocket.emit).toHaveBeenCalledWith('collectingClarifications');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'No agents configured' });
+      expect(mockDebateService.collectClarifications).not.toHaveBeenCalled();
     });
   });
 
@@ -912,6 +1063,36 @@ describe('DebateGateway', () => {
         metadata: mockResult.metadata,
       });
     });
+
+    it('should include targetAgentId in contributions when present', async () => {
+      const mockResult = createMockDebateResultWithTargetAgent();
+      mockDebateService.runDebate.mockResolvedValue(mockResult);
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('debateComplete', {
+        debateId: TEST_DEBATE_ID,
+        solution: mockResult.solution,
+        rounds: [
+          {
+            roundNumber: 1,
+            contributions: [
+              {
+                agentId: TEST_AGENT_ID_ARCHITECT,
+                agentRole: TEST_AGENT_ROLE_ARCHITECT,
+                type: TEST_PHASE_CRITIQUE,
+                content: 'Test critique',
+                targetAgentId: 'agent-performance',
+              },
+            ],
+          },
+        ],
+        metadata: mockResult.metadata,
+      });
+    });
   });
 
   describe('error handling', () => {
@@ -942,6 +1123,29 @@ describe('DebateGateway', () => {
       expect((gateway as unknown as GatewayWithPrivateAccess).debateInProgress).toBe(false);
       expect((gateway as unknown as GatewayWithPrivateAccess).currentProblem).toBe('');
     });
+
+    it('should handle non-Error rejection in runDebate (String error branch)', async () => {
+      mockDebateService.runDebate.mockRejectedValue('crash string');
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith('Debate failed: crash string');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'Debate failed: crash string' });
+    });
+
+    it('should emit error when runDebate is called with configuredAgents null', async () => {
+      await (gateway as unknown as { runDebate: (c: Socket, cl?: AgentClarifications[], r?: number) => Promise<void> }).runDebate(
+        mockSocket,
+        undefined,
+        3
+      );
+      expect(logWarning).toHaveBeenCalledWith('No agents configured');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'No agents configured' });
+      expect(mockDebateService.runDebate).not.toHaveBeenCalled();
+    });
   });
 
   describe('phase label mapping', () => {
@@ -958,6 +1162,30 @@ describe('DebateGateway', () => {
     it('should map refinement phase correctly', () => {
       const phaseLabel = (gateway as unknown as GatewayWithPrivateAccess).getPhaseLabel(TEST_PHASE_REFINEMENT);
       expect(phaseLabel).toBe('Refinements');
+    });
+  });
+
+  describe('validateAgents (private, for branch coverage)', () => {
+    it('returns NO_AGENTS_CONFIGURED when agents is empty', () => {
+      const result = (gateway as unknown as { validateAgents: (a: AgentConfigInput[]) => string | undefined }).validateAgents(
+        []
+      );
+      expect(result).toBe('No agents configured');
+    });
+
+    it('returns NO_AGENTS_CONFIGURED when agents is null', () => {
+      const result = (gateway as unknown as { validateAgents: (a: AgentConfigInput[] | null) => string | undefined }).validateAgents(
+        null as unknown as AgentConfigInput[]
+      );
+      expect(result).toBe('No agents configured');
+    });
+
+    it('returns MIN_AGENTS_REQUIRED when agents length is between 0 and MIN_AGENTS', () => {
+      // An array-like with length in (0,1) hits the branch that is unreachable with real arrays
+      const result = (gateway as unknown as { validateAgents: (a: { length: number }) => string | undefined }).validateAgents(
+        { length: 0.5 } as unknown as AgentConfigInput[]
+      );
+      expect(result).toBe('At least 1 agent is required');
     });
   });
 
