@@ -394,6 +394,25 @@ describe('EvaluatorAgent', () => {
           `[${TEST_EVALUATOR_ID}] Evaluation failed: Custom error object\n`
         );
       });
+
+      it('should use "unknown error" when thrown value has no message property', async () => {
+        const errWithoutMessage = {};
+        mockProvider = new MockLLMProvider('', true, errWithoutMessage as Error);
+        const config = createMockEvaluatorConfig();
+        const agent = new EvaluatorAgent(
+          config,
+          mockProvider,
+          TEST_SYSTEM_PROMPT,
+          TEST_USER_PROMPT_TEMPLATE
+        );
+        const inputs = createMockEvaluatorInputs();
+
+        await expect(agent.evaluate(inputs)).rejects.toBe(errWithoutMessage);
+
+        expect(writeStderrSpy).toHaveBeenCalledWith(
+          `[${TEST_EVALUATOR_ID}] Evaluation failed: unknown error\n`
+        );
+      });
     });
   });
 });

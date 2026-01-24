@@ -12,8 +12,9 @@ import { TracingLLMProvider } from './tracing-provider';
 
 /**
  * Default Langfuse base URL if not specified in environment.
+ * Exported for tests that assert the default is used when LANGFUSE_BASE_URL is unset.
  */
-const DEFAULT_LANGFUSE_BASE_URL = 'https://cloud.langfuse.com';
+export const DEFAULT_LANGFUSE_BASE_URL = 'https://cloud.langfuse.com';
 
 /**
  * Environment variable names for Langfuse configuration.

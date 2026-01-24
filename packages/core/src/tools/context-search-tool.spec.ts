@@ -25,6 +25,10 @@ const SEARCH_TERM_NONEXISTENT = 'nonexistentterm12345';
 const SEARCH_TERM_TEST = 'test';
 const SEARCH_TERM_AUTHENTICATION = 'authentication';
 const SEARCH_TERM_DATABASE = 'database';
+const SEARCH_TERM_TRUNCATE = 'truncate';
+const MAX_CONTENT_SNIPPET_LENGTH = 200;
+const ERROR_CONTEXT_REQUIRED = 'Context is required for context search';
+const ERROR_TERM_REQUIRED = 'Search term is required and must be a string';
 const RESULT_STATUS_SUCCESS = 'success';
 const RESULT_STATUS_ERROR = 'error';
 const PARAM_TYPE_OBJECT = 'object';
@@ -155,9 +159,8 @@ describe('ContextSearchTool', () => {
     it('should handle missing context gracefully', () => {
       const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, undefined);
       const parsed = JSON.parse(result);
-      
       expect(parsed.status).toBe(RESULT_STATUS_ERROR);
-      expect(parsed.error).toBeDefined();
+      expect(parsed.error).toBe(ERROR_CONTEXT_REQUIRED);
     });
 
     it('should handle context without history', () => {
@@ -172,14 +175,104 @@ describe('ContextSearchTool', () => {
       expect(parsed.result.matches).toEqual([]);
     });
 
+    it('should return empty matches when context.history is empty array', () => {
+      const contextWithEmptyHistory: DebateContext = {
+        problem: PROBLEM_TEST,
+        history: [],
+      };
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, contextWithEmptyHistory);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.matches).toEqual([]);
+    });
+
     it('should handle invalid arguments', () => {
       // Test with invalid arguments (missing required 'term' property)
       const invalidArgs: Record<string, unknown> = { invalid: 'arg' };
       const result = tool.execute(invalidArgs as { term?: string }, mockContext);
       const parsed = JSON.parse(result);
       
-      // Should either error or return empty results
-      expect(parsed.status).toBeDefined();
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(ERROR_TERM_REQUIRED);
+    });
+
+    it('should reject empty string as search term', () => {
+      const result = tool.execute({ [PARAM_NAME_TERM]: '' }, mockContext);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(ERROR_TERM_REQUIRED);
+    });
+
+    it('should reject non-string search term', () => {
+      const result = tool.execute({ [PARAM_NAME_TERM]: 123 } as unknown as { term?: string }, mockContext);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(ERROR_TERM_REQUIRED);
+    });
+
+  });
+
+  describe('Round and contribution edge cases', () => {
+    it('should skip rounds with undefined or missing contributions', () => {
+      const roundNoContributions = {
+        roundNumber: ROUND_NUMBER_1,
+        timestamp: new Date(),
+      } as DebateRound;
+      const contextWithRoundNoContrib: DebateContext = {
+        problem: PROBLEM_TEST,
+        history: [roundNoContributions],
+      };
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, contextWithRoundNoContrib);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.matches).toEqual([]);
+    });
+
+    it('should truncate content snippets longer than max length with ellipsis', () => {
+      const longContent =
+        'a'.repeat(MAX_CONTENT_SNIPPET_LENGTH - SEARCH_TERM_TRUNCATE.length) + SEARCH_TERM_TRUNCATE + 'z'.repeat(50);
+      const round: DebateRound = {
+        roundNumber: ROUND_NUMBER_1,
+        contributions: [
+          {
+            agentId: AGENT_ID_1,
+            agentRole: AGENT_ROLE_ARCHITECT,
+            type: CONTRIBUTION_TYPES.PROPOSAL,
+            content: longContent,
+            metadata: {},
+          } as Contribution,
+        ],
+        timestamp: new Date(),
+      };
+      const ctx: DebateContext = { problem: PROBLEM_TEST, history: [round] };
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TRUNCATE }, ctx);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.matches).toHaveLength(1);
+      expect(parsed.result.matches[0].contentSnippet.endsWith('...')).toBe(true);
+      expect(parsed.result.matches[0].contentSnippet.length).toBe(MAX_CONTENT_SNIPPET_LENGTH + 3);
+    });
+
+    it('should not add ellipsis when content is exactly max length', () => {
+      const exactContent = 'x'.repeat(MAX_CONTENT_SNIPPET_LENGTH - SEARCH_TERM_CACHING.length) + SEARCH_TERM_CACHING;
+      const round: DebateRound = {
+        roundNumber: ROUND_NUMBER_1,
+        contributions: [
+          {
+            agentId: AGENT_ID_1,
+            agentRole: AGENT_ROLE_ARCHITECT,
+            type: CONTRIBUTION_TYPES.PROPOSAL,
+            content: exactContent,
+            metadata: {},
+          } as Contribution,
+        ],
+        timestamp: new Date(),
+      };
+      const ctx: DebateContext = { problem: PROBLEM_TEST, history: [round] };
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_CACHING }, ctx);
+      const parsed = JSON.parse(result);
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.matches[0].contentSnippet.endsWith('...')).toBe(false);
     });
   });
 
@@ -312,6 +405,23 @@ describe('ContextSearchTool', () => {
       const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, contextWithoutHistory);
       const parsed = JSON.parse(result);
       
+      expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
+      expect(parsed.result.matches).toEqual([]);
+    });
+
+    it('should return empty matches when state.rounds is empty array', () => {
+      const mockState: DebateState = {
+        id: DEBATE_ID_TEST,
+        problem: PROBLEM_DESIGN_SYSTEM,
+        status: DEBATE_STATUS.RUNNING,
+        currentRound: 0,
+        rounds: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const contextWithoutHistory: DebateContext = { problem: PROBLEM_TEST };
+      const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, contextWithoutHistory, mockState);
+      const parsed = JSON.parse(result);
       expect(parsed.status).toBe(RESULT_STATUS_SUCCESS);
       expect(parsed.result.matches).toEqual([]);
     });
