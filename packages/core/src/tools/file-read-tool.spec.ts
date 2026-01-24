@@ -325,6 +325,72 @@ describe('FileReadTool', () => {
       existsSyncSpy.mockRestore();
       statSyncSpy.mockRestore();
     });
+
+    it('should return File not found when read throws ENOENT', () => {
+      const enoentError = new Error('ENOENT: no such file or directory');
+      (enoentError as NodeJS.ErrnoException).code = 'ENOENT';
+
+      const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        throw enoentError;
+      });
+
+      const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
+
+      const result = tool.execute({ [PARAM_NAME_PATH]: testFilePath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(`File not found: ${testFilePath}`);
+
+      readFileSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+    });
+
+    it('should return Permission denied when read throws EACCES', () => {
+      const eaccesError = new Error('EACCES: permission denied');
+      (eaccesError as NodeJS.ErrnoException).code = 'EACCES';
+
+      const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        throw eaccesError;
+      });
+
+      const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
+
+      const result = tool.execute({ [PARAM_NAME_PATH]: testFilePath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(`Permission denied: ${testFilePath}`);
+
+      readFileSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+    });
+
+    it('should return Permission denied when read throws EPERM', () => {
+      const epermError = new Error('EPERM: operation not permitted');
+      (epermError as NodeJS.ErrnoException).code = 'EPERM';
+
+      const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        throw epermError;
+      });
+
+      const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
+
+      const result = tool.execute({ [PARAM_NAME_PATH]: testFilePath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(`Permission denied: ${testFilePath}`);
+
+      readFileSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+    });
   });
 
   describe('Context Directory Security', () => {

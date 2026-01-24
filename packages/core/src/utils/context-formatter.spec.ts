@@ -546,6 +546,44 @@ describe('context-formatter', () => {
       const result = formatContextSection(context, 'agent-1');
       expect(result).toContain('Summary from round 3');
     });
+
+    it('should execute continue when round is null and summary exists in earlier index', () => {
+      // Summary in round 1 (index 0); null at index 1; no summary in round 3 (index 2).
+      // Backwards: i=2 no summary; i=1 null -> continue; i=0 has summary -> return.
+      const history: (DebateRound | null | undefined)[] = [
+        {
+          roundNumber: 1,
+          contributions: [],
+          timestamp: new Date(),
+          summaries: {
+            'agent-1': {
+              agentId: 'agent-1',
+              agentRole: 'architect',
+              summary: 'Summary from round 1',
+              metadata: {
+                beforeChars: 100,
+                afterChars: 50,
+                method: 'length-based',
+                timestamp: new Date(),
+              },
+            },
+          },
+        },
+        null,
+        {
+          roundNumber: 3,
+          contributions: [],
+          timestamp: new Date(),
+        },
+      ];
+      const context: DebateContext = {
+        problem: 'Test problem',
+        history: history as DebateRound[],
+      };
+      const result = formatContextSection(context, 'agent-1');
+      expect(result).toContain('Summary from round 1');
+      expect(result).toContain('[SUMMARY from Round 1]');
+    });
   });
 
   describe('prependContext', () => {

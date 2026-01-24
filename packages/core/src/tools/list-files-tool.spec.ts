@@ -438,6 +438,78 @@ describe('ListFilesTool', () => {
       statSyncSpy.mockRestore();
       realpathSyncSpy.mockRestore();
     });
+
+    it('should return Directory not found when readdir throws ENOENT', () => {
+      const enoentError = new Error('ENOENT: no such file or directory');
+      (enoentError as NodeJS.ErrnoException).code = 'ENOENT';
+
+      const readdirSyncSpy = jest.spyOn(fs, 'readdirSync').mockImplementation(() => {
+        throw enoentError;
+      });
+
+      const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      const realpathSyncSpy = jest.spyOn(fs, 'realpathSync').mockImplementation((p) => String(p));
+
+      const result = tool.execute({ [PARAM_NAME_PATH]: testDirPath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(`Directory not found: ${testDirPath}`);
+
+      readdirSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+      realpathSyncSpy.mockRestore();
+    });
+
+    it('should return Permission denied when readdir throws EACCES', () => {
+      const eaccesError = new Error('EACCES: permission denied');
+      (eaccesError as NodeJS.ErrnoException).code = 'EACCES';
+
+      const readdirSyncSpy = jest.spyOn(fs, 'readdirSync').mockImplementation(() => {
+        throw eaccesError;
+      });
+
+      const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      const realpathSyncSpy = jest.spyOn(fs, 'realpathSync').mockImplementation((p) => String(p));
+
+      const result = tool.execute({ [PARAM_NAME_PATH]: testDirPath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(`Permission denied: ${testDirPath}`);
+
+      readdirSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+      realpathSyncSpy.mockRestore();
+    });
+
+    it('should return Permission denied when readdir throws EPERM', () => {
+      const epermError = new Error('EPERM: operation not permitted');
+      (epermError as NodeJS.ErrnoException).code = 'EPERM';
+
+      const readdirSyncSpy = jest.spyOn(fs, 'readdirSync').mockImplementation(() => {
+        throw epermError;
+      });
+
+      const existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const statSyncSpy = jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      const realpathSyncSpy = jest.spyOn(fs, 'realpathSync').mockImplementation((p) => String(p));
+
+      const result = tool.execute({ [PARAM_NAME_PATH]: testDirPath });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.status).toBe(RESULT_STATUS_ERROR);
+      expect(parsed.error).toBe(`Permission denied: ${testDirPath}`);
+
+      readdirSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
+      statSyncSpy.mockRestore();
+      realpathSyncSpy.mockRestore();
+    });
   });
 
   describe('Context Directory Security', () => {
