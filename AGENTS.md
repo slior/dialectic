@@ -1,1010 +1,138 @@
-# AGENTS.md
+---
+name: dialectic
+description: Expert engineer for the Dialectic multi-agent debate system—orchestration, CLI, web API/UI, tests, and tooling.
+---
+
+You are an expert engineer for this project.
+
+## Persona
+
+- You specialize in **debate orchestration, agents, LLM providers, CLI commands, and web services**—and in **tests, linting, and docs** that keep the system reliable.
+- You understand **the monorepo layout, Nx targets, and co-located `*.spec.ts`** and turn that into **clear changes, solid tests, and commands that work**.
+- Your output: **working code, passing tests, and clean lint** that **fit existing patterns and make the CLI, API, and UI predictable for users**.
+
+## Project knowledge
+
+**What Dialectic is:** A CLI and web app that runs multi-agent debates to solve software design problems. Multiple AI agents (architect, performance, security, testing, kiss, generalist, datamodeling) propose, critique, and refine; a judge synthesizes a final solution. Supports OpenAI and OpenRouter, tool calling (e.g. context search, file read, list files), state persistence, reports, and an evaluator.
+
+**Tech stack:**
+- TypeScript (ES2022), Node.js ≥ 18
+- **Build:** tsc (packages → `dist/` or `.next/` for web-ui)
+- **Tests:** Jest with ts-jest
+- **Lint:** ESLint (root `eslint.config.js`); web-ui uses Next.js `next lint`
+- **Orchestration:** Nx + npm workspaces
+
+**Nx project structure:**
+
+| Nx project | Package | Path | Notes |
+|------------|---------|------|-------|
+| `core` | `dialectic-core` | `packages/core/` | Orchestrator, agents, judge, providers, tools, state, eval |
+| `cli` | `dialectic` | `packages/cli/` | Commands: `debate`, `eval`, `report` |
+| `web-api` | `@dialectic/web-api` | `packages/web-api/` | NestJS REST + WebSocket, port 3001 |
+| `web-ui` | `@dialectic/web-ui` | `packages/web-ui/` | Next.js, port 3000 |
+
+**Dependency flow:** `core` → `cli`, `web-api` (each uses `dialectic-core`). `web-ui` talks to `web-api` over HTTP/WebSocket only.
+
+**File layout:**
+- `packages/*/src/` — source and **co-located tests** (`*.spec.ts` next to the unit under test)
+- `packages/*/dist/` (or `web-ui/.next/`) — build output
+- `examples/` — `problem.md`, `debate-config.json`, `eval_config.json`; katas (e.g. `kata1/`, `kata2/`, `kata3/`) are full example sets
+- `e2e-tests/` — E2E suites (`run_test.sh`, `eval_run.sh` per suite); `run-tests.ts` runs them
+- `docs/` — commands, configuration, operation, tools, repo layout
+
+**Test structure:**
+- Tests live **next to the source** in `packages/*/src/`, not in a separate `tests/` tree.
+- Naming: `*.spec.ts` (e.g. `orchestrator.spec.ts` beside `orchestrator.ts`).
+- Jest is configured per package; `npm test` / `nx run-many -t test` run all. web-ui has no Jest suite.
+
+## Tools you can use
+
+**Build (all or by package):**
+- `npm run build` — build all (Nx `run-many -t build`)
+- `npm run build:core` / `build:cli` / `build:api` / `build:ui` — single package
+- `npx nx run core:build` — same via Nx
+
+**Test (per package):**
+- All: `npm test` (equiv. `npx nx run-many -t test`)
+- Core: `npx nx run core:test` or `npm run test -w dialectic-core`
+- CLI: `npx nx run cli:test` or `npm run test -w dialectic`
+- Web-api: `npx nx run web-api:test` or `npm run test -w @dialectic/web-api`
+- Watch: `npm run test:watch -w dialectic-core` (from core’s `package.json`)
+
+**Test coverage:**
+- All (core, cli, web-api): `npm run test:coverage`
+- Per package: `npm run test:coverage -w dialectic-core`, `npm run test:coverage -w dialectic`, `npm run test:coverage -w @dialectic/web-api`
+- Reports: `coverage/lcov-report/index.html`, `coverage/lcov.info`
+
+**Lint (per package):**
+- All: `npm run lint` (equiv. `npx nx run-many -t lint`)
+- Core: `npx nx run core:lint` — `npx nx run core:lint:fix`
+- CLI: `npx nx run cli:lint` — `npx nx run cli:lint:fix`
+- Web-api: `npx nx run web-api:lint` — `npx nx run web-api:lint:fix`
+- Web-ui: `npx nx run web-ui:lint` (Next.js lint; no `lint:fix` target in Nx)
+- Root auto-fix (TS only): `npm run lint:fix` (runs over `packages/*/src/**/*.ts`)
+
+**Run tests and lint on dev (source):**  
+Tests and lint already run against source (ts-jest, ESLint on `src/`). For app dev: `npm run dev:cli`, `npm run dev:api`, `npm run dev:ui`, or `npm run dev:web` (api + ui).
+
+**Examples and E2E:**
+- **Run an example:**
+  - Dev (no build): `npm run dev:cli -- debate -c examples/kata1/debate-config.json -p examples/kata1/problem.md`
+  - From build: `npm run build:cli` then `dialectic debate -c examples/kata1/debate-config.json -p examples/kata1/problem.md` (requires `dialectic` on PATH, e.g. `npm link` in `packages/cli`, or `node packages/cli/dist/index.js debate ...`)
+- **E2E:** `npx ts-node e2e-tests/run-tests.ts <base_output_dir>`  
+  - Optional: `--tests clarify_test,rounds_test` and/or `--problems kata1,kata3`.  
+  - Each test dir has `run_test.sh` (debate) and `eval_run.sh` (evaluation).  
+  - See `e2e-tests/e2e-tests.md` for structure, new tests, and new problems.
+
+## Standards
+
+Follow these rules for all code you write:
+
+**Naming:**
+- Functions, methods, variables: `camelCase` (`getUserData`, `runDebate`)
+- Classes, types, interfaces: `PascalCase` (`DebateOrchestrator`, `AgentConfig`)
+- Constants: `UPPER_SNAKE_CASE` (`EXIT_CONFIG_ERROR`, `MAX_RETRIES`)
+
+**Types and style:**
+- Explicit types for parameters and returns; avoid `any`; use `unknown` and type guards when needed.
+- Strict tsconfig: `noImplicitAny`, `strictNullChecks`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`.
+- JSDoc for public APIs; include `@param`, `@returns`, `@throws` where useful.
+- Errors: use `packages/core/src/utils/exit-codes.ts`; set `err.code = EXIT_*` for CLI/process errors.
+- Prefer `async/await`; handle errors with `try/catch`; use `Promise.all` for parallel work.
 
-## Project Overview
-
-Dialectic is a CLI tool that orchestrates multi-agent debates to solve software design problems. The system uses multiple AI agents with different perspectives (architecture, performance, security, testing, simplicity) to debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
-
-**Key Technologies:**
-- **Language**: TypeScript (ES2022)
-- **Runtime**: Node.js >= 18
-- **Testing Framework**: Jest with ts-jest
-- **Build Tool**: TypeScript Compiler (tsc)
-- **LLM Providers**: OpenAI API and OpenRouter API
-- **CLI Framework**: Commander.js
-
-**Main Components:**
-- **Core Orchestrator**: Manages debate rounds and phases (proposal, critique, refinement)
-- **Agents**: Role-based agents (architect, performance, security, testing, kiss, generalist)
-- **Judge Agent**: Synthesizes final solutions from debate history
-- **State Manager**: Persists debate state to JSON files
-- **LLM Providers**: Abstracted provider interface supporting OpenAI and OpenRouter
-- **CLI**: Command-line interface for running debates and evaluations
-
-**Key Features:**
-- Multi-round debate orchestration with configurable rounds
-- Role-based agent system with customizable prompts
-- Context summarization to manage debate history length
-- Interactive clarifications phase for problem refinement
-- Debate state persistence and report generation
-- Evaluator command for assessing debate outcomes
-- Tool calling support allowing agents to interact with external tools during debates
-
-## Command-Line Usage
-
-Dialectic is invoked from the command line using the `dialectic` command. This section provides comprehensive examples for running debates and evaluations in a bash shell environment.
-
-### Basic Command Structure
-
-**Debate Command:**
-```bash
-dialectic debate [problem] [options]
-```
-
-**Evaluator Command:**
-```bash
-dialectic eval [options]
-```
-
-### Problem Input
-
-You can provide the problem statement in two ways:
-
-**1. Inline string:**
-```bash
-dialectic debate "Design a rate limiting system"
-dialectic debate "Build a secure authentication API with JWT tokens"
-```
-
-**2. Problem description file:**
-```bash
-dialectic debate --problemDescription problem.txt
-dialectic debate --problemDescription ./problems/rate-limiting.md
-dialectic debate --problemDescription ../design-problems/cache-system.md
-```
-
-**Problem File Requirements:**
-- **Encoding**: UTF-8
-- **Format**: Any text format (plain text, markdown, etc.)
-- **Content**: Must be non-empty (whitespace-only files are rejected)
-- **Path**: Relative paths resolved from current working directory
-- **Mutual exclusivity**: Cannot provide both inline problem string and `--problemDescription` file
-
-### Configuration File
-
-**Default configuration:**
-```bash
-dialectic debate "Design a caching system"
-# Uses ./debate-config.json if it exists, otherwise uses built-in defaults
-```
-
-**Custom configuration file:**
-```bash
-dialectic debate "Design a caching system" --config ./configs/production.json
-dialectic debate "Design a caching system" --config /path/to/custom-config.json
-```
-
-**Configuration file location:**
-- Default: `./debate-config.json` (relative to current working directory)
-- Custom: Specify with `--config <path>`
-- If file doesn't exist: System uses built-in defaults with a warning to stderr
-
-### Agent Selection
-
-**Default agents (architect, performance, and kiss):**
-```bash
-dialectic debate "Design a database system"
-```
-
-**Select specific agent roles:**
-```bash
-dialectic debate "Design a secure API" --agents architect,security
-dialectic debate "Build a high-performance system" --agents architect,performance,security
-dialectic debate "Design a testable system" --agents architect,testing
-dialectic debate "Design a simple API" --agents architect,kiss
-```
-
-**Available agent roles:**
-- `architect` - System design and architecture perspective
-- `performance` - Performance optimization and efficiency
-- `security` - Security and threat modeling
-- `testing` - Testing strategy and quality assurance
-- `kiss` - Simplicity-focused perspective, challenges complexity
-- `generalist` - General-purpose role (typically used for judge)
-- `datamodeling` - Data and domain modeling perspective
-
-**Note:** The `--agents` option filters agents from your configuration file by role. If no agents match, the system falls back to default agents (architect, performance, and kiss).
-
-### Debate Rounds
-
-**Default rounds (3):**
-```bash
-dialectic debate "Design a messaging system"
-```
-
-**Custom number of rounds:**
-```bash
-dialectic debate "Design a messaging system" --rounds 1
-dialectic debate "Design a messaging system" --rounds 5
-dialectic debate "Design a messaging system" --rounds 10
-```
-
-**Constraints:**
-- Minimum: 1 round
-- Default: 3 rounds
-- Invalid values (e.g., 0, negative) result in exit code 2
-
-### Output Options
-
-**Default output (stdout):**
-```bash
-dialectic debate "Design a rate limiting system"
-# Final solution text written to stdout
-# Full debate state saved to ./debates/deb-YYYYMMDD-HHMMSS-RAND.json
-```
-
-**Save solution text to file:**
-```bash
-dialectic debate "Design a rate limiting system" --output solution.txt
-dialectic debate "Design a rate limiting system" --output ./results/solution.txt
-```
-
-**Save full debate state (JSON):**
-```bash
-dialectic debate "Design a rate limiting system" --output debate-result.json
-dialectic debate "Design a rate limiting system" --output ./results/debate-result.json
-```
-
-**Output behavior:**
-- If path ends with `.json`: Full debate state (JSON) written to file
-- Otherwise: Only final solution text written to file
-- If omitted: Solution written to stdout, state saved to `./debates/` directory
-
-**Redirecting output:**
-```bash
-# Save solution to file
-dialectic debate "Design a system" --output solution.txt
-
-# Pipe solution to another command
-dialectic debate "Design a system" | grep "recommendation"
-
-# Suppress solution output (save to file instead)
-dialectic debate "Design a system" --output solution.txt > /dev/null
-```
-
-### Verbose Mode
-
-**Enable detailed logging:**
-```bash
-dialectic debate "Design a system" --verbose
-```
-
-**Verbose output includes:**
-- Round-by-round breakdown
-- Individual contributions with metadata (tokens, latency)
-- Total statistics (rounds, duration, token counts)
-- System prompt sources (built-in vs file path)
-- Written to stderr (doesn't interfere with stdout piping)
-
-**Example with verbose:**
-```bash
-dialectic debate "Design a system" --verbose --output solution.txt
-# Solution goes to solution.txt
-# Verbose diagnostics go to stderr
-```
-
-### Markdown Report Generation
-
-**Generate debate report:**
-```bash
-dialectic debate "Design a system" --report debate-report.md
-dialectic debate "Design a system" --report ./reports/debate-report
-```
-
-**Report features:**
-- Extension auto-appended if missing (`.md` added automatically)
-- Parent directories created automatically
-- Non-fatal on failure (debate succeeds even if report generation fails)
-- Includes full debate transcript, metadata, clarifications, and synthesis
-
-**Report with verbose metadata:**
-```bash
-dialectic debate "Design a system" --verbose --report ./reports/debate-report.md
-# Report includes latency and token counts in contribution titles
-```
-
-**Report contents:**
-- Problem Description
-- Agents table and Judge table
-- Clarifications (if `--clarify` was used)
-- Rounds with proposals, critiques, and refinements
-- Final Synthesis
-
-### Interactive Clarifications
-
-**Enable clarifications phase:**
-```bash
-dialectic debate "Design a distributed cache system" --clarify
-```
-
-**Clarifications workflow:**
-1. Each agent generates up to 5 clarifying questions (configurable)
-2. CLI presents questions grouped by agent in interactive session
-3. Answer each question or press Enter to skip (recorded as "NA")
-4. Questions and answers included in debate context and final report
-
-**Example interaction:**
-```bash
-dialectic debate "Design a distributed cache system" --clarify
-# [Architect] Q1: What are the expected read/write ratios?
-# > 80% reads, 20% writes
-# [Performance] Q2: What's the target latency requirement?
-# > < 10ms for 95th percentile
-# [Security] Q3: What data sensitivity level?
-# > (press Enter to skip)
-# Q3: NA
-```
-
-**Clarifications with other options:**
-```bash
-dialectic debate --problemDescription problem.md --clarify --agents architect,security
-dialectic debate "Design a system" --clarify --rounds 5 --verbose
-```
-
-### Tool Calling
-
-Agents can call tools during proposal, critique, and refinement phases. Tools allow agents to interact with external functionality, such as searching debate history.
-
-**Base Tools Available to All Agents:**
-
-- **Context Search** (`context_search`): Search for terms in the debate history
-  - Parameters: `term` (string, required) - The search term to find
-  - Returns: Array of matching contributions with metadata (round number, agent ID, role, type, content snippet)
-
-**Tool Configuration:**
-
-Tools are configured per agent in the `AgentConfig` using the `tools` field. Each tool must follow the OpenAI function calling schema format:
-
-```json
-{
-  "id": "agent-architect",
-  "name": "System Architect",
-  "role": "architect",
-  "model": "gpt-4",
-  "provider": "openai",
-  "temperature": 0.5,
-  "tools": [
-    {
-      "name": "custom_tool",
-      "description": "A custom tool description",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "paramName": {
-            "type": "string",
-            "description": "Parameter description"
-          }
-        },
-        "required": ["paramName"]
-      }
-    }
-  ],
-  "toolCallLimit": 10
-}
-```
-
-**Tool Call Limits:**
-
-The `toolCallLimit` field controls the maximum number of tool call iterations per phase (proposal, critique, or refinement). Each iteration counts toward the limit, including failed tool invocations. The default limit is `10` iterations per phase per agent.
-
-**Tool Execution Behavior:**
-
-- Tools are executed synchronously
-- User feedback messages are displayed when tools are executed (e.g., `[Agent Name] Executing tool: context_search`)
-- Failed tool invocations are logged as warnings but do not stop the debate
-- Tool calls and results are stored in contribution metadata for persistence
-- Tool call metadata includes: `toolCalls`, `toolResults`, and `toolCallIterations`
-
-**Example with Tool Calling:**
-
-When an agent uses tools, you'll see messages like:
-```
-[System Architect] Executing tool: context_search
-```
-
-Tool calls and results are automatically included in the debate state and can be viewed in generated reports.
-
-**Note**: Currently, only base registry tools (like Context Search) are available. Agent-specific tools from configuration require tool implementation factories (future enhancement). See `docs/configuration.md` for more details on tool configuration.
-
-### Environment File
-
-**Default environment file (`.env`):**
-```bash
-dialectic debate "Design a system"
-# Automatically loads .env from current directory if it exists
-```
-
-**Custom environment file:**
-```bash
-dialectic debate "Design a system" --env-file ./config/.env.production
-dialectic debate "Design a system" --env-file /path/to/.env
-```
-
-**Environment variables required:**
-- `OPENAI_API_KEY` - Required for OpenAI provider
-- `OPENROUTER_API_KEY` - Required for OpenRouter provider
-
-### Complete Examples
-
-**Simple debate:**
-```bash
-dialectic debate "Design a rate limiting system"
-```
-
-**Complex debate with all options:**
-```bash
-dialectic debate \
-  --problemDescription ./problems/rate-limiting.md \
-  --config ./configs/production.json \
-  --agents architect,performance,security \
-  --rounds 5 \
-  --output ./results/rate-limiting-solution.json \
-  --report ./reports/rate-limiting-report.md \
-  --verbose \
-  --clarify \
-  --env-file .env.production
-```
-
-**Quick security-focused debate:**
-```bash
-dialectic debate "Design a secure authentication system" \
-  --agents architect,security \
-  --rounds 3 \
-  --output auth-solution.txt \
-  --verbose
-```
-
-**Save debate state for later evaluation:**
-```bash
-dialectic debate "Design a system" \
-  --output ./debates/my-debate.json \
-  --rounds 3
-```
-
-### Report Command
-
-**Generate report from saved debate state:**
-```bash
-dialectic report --debate ./debates/deb-20250101-010203-ABC.json
-```
-
-**Generate report without config file (creates minimal configs from debate state):**
-```bash
-dialectic report --debate ./debates/deb-20250101-010203-ABC.json
-# Creates minimal agent/judge configs from debate state, no validation
-```
-
-**Generate report with config file (matches agent/judge configs):**
-```bash
-dialectic report --debate ./debates/deb-20250101-010203-ABC.json --config ./debate-config.json
-```
-
-**Save report to file:**
-```bash
-dialectic report --debate ./debates/debate.json --output ./reports/report.md
-```
-
-**Report with verbose metadata:**
-```bash
-dialectic report --debate ./debates/debate.json --verbose --output report.md
-```
-
-**Report behavior:**
-- If `--config` is provided: loads configuration file and matches agent/judge configs with agent IDs found in debate state
-- If `--config` is not provided: creates minimal agent/judge configs from debate state (extracts agent IDs and roles from contributions), no validation of IDs
-- Generates markdown report identical to `--report` option in debate command
-- Writes to stdout by default, or to specified file if `--output` provided
-
-**Report options:**
-- `--debate <path>`: Path to debate JSON file (DebateState format) (required)
-- `--config <path>`: Optional path to configuration file. If not provided, creates minimal configs from debate state.
-- `-o, --output <path>`: Optional path to output markdown file (default: stdout)
-- `-v, --verbose`: Optional verbose mode for report generation
-
-### Evaluator Command
-
-**Basic evaluation:**
-```bash
-dialectic eval --config ./eval-config.json --debate ./debates/deb-20250101-010203-ABC.json
-```
-
-**Evaluator with JSON output:**
-```bash
-dialectic eval \
-  --config ./eval-config.json \
-  --debate ./debates/deb-20250101-010203-ABC.json \
-  --output ./results/evaluation.json
-```
-
-**Evaluator with verbose logs:**
-```bash
-dialectic eval \
-  --config ./eval-config.json \
-  --debate ./debates/deb-20250101-010203-ABC.json \
-  --verbose \
-  --env-file .env
-```
-
-**Evaluator options:**
-- `-c, --config <path>`: Evaluator configuration JSON (required)
-- `-d, --debate <path>`: Debate state JSON to evaluate (required)
-- `--env-file <path>`: Optional .env file path
-- `-v, --verbose`: Verbose diagnostic logs to stderr
-- `-o, --output <path>`: Output destination
-  - If ends with `.json`: writes aggregated JSON output
-  - Otherwise: writes Markdown table (or stdout by default)
-
-### Exit Codes
-
-| Code | Description |
-|------|-------------|
-| `0` | Success |
-| `1` | General error |
-| `2` | Invalid CLI arguments (e.g., missing problem, invalid rounds) |
-| `3` | Provider error (reserved for future use) |
-| `4` | Configuration error (e.g., missing `OPENAI_API_KEY`) |
-
-**Checking exit codes:**
-```bash
-dialectic debate "Design a system" && echo "Success!"
-dialectic debate "Design a system" || echo "Failed with code: $?"
-```
-
-### Command-Line Option Summary
-
-**Debate Command Options:**
-- `[problem]` - Problem statement as inline string (mutually exclusive with `--problemDescription`)
-- `--problemDescription <path>` - Path to problem description file
-- `--agents <list>` - Comma-separated agent roles (default: `architect,performance,kiss`)
-- `--rounds <n>` - Number of debate rounds (default: `3`, minimum: `1`)
-- `--config <path>` - Path to configuration file (default: `./debate-config.json`)
-- `--context <path>` - Path to context directory for file access tools (default: current working directory)
-- `--env-file <path>` - Path to environment file (default: `.env`)
-- `--output <path>` - Output file path (JSON or text based on extension)
-- `--verbose` - Enable detailed logging to stderr
-- `--report <path>` - Generate Markdown report (extension auto-appended)
-- `--clarify` - Enable interactive clarifications phase
-
-**Evaluator Command Options:**
-- `-c, --config <path>` - Evaluator configuration JSON (required)
-- `-d, --debate <path>` - Debate state JSON to evaluate (required)
-- `--env-file <path>` - Optional .env file path
-- `-v, --verbose` - Verbose diagnostic logs to stderr
-- `-o, --output <path>` - Output destination (JSON or Markdown based on extension)
-
-**Report Command Options:**
-- `--debate <path>` - Path to debate JSON file (DebateState format) (required)
-- `--config <path>` - Optional path to configuration file. If not provided, creates minimal configs from debate state.
-- `-o, --output <path>` - Optional path to output markdown file (default: stdout)
-- `-v, --verbose` - Optional verbose mode for report generation
-
-## Build and Test Commands
-
-### Setup Commands
-
-**Install dependencies:**
-```bash
-npm install
-```
-
-**Build the project:**
-```bash
-npm run build
-```
-
-This compiles TypeScript source files from `packages/*/src/` to `packages/*/dist/` with source maps and type declarations.
-
-**Development mode:**
-```bash
-npm run dev
-```
-
-Runs the CLI using `ts-node` for development without building.
-
-### Test Commands
-
-**Run all tests:**
-```bash
-npm test
-```
-
-Runs all test files in the `packages/*/src/` directories (co-located with source files) using Jest.
-
-**Run tests in watch mode:**
-```bash
-npm run test:watch
-```
-
-Runs tests in watch mode, re-running tests when files change.
-
-**Run tests with coverage measurement:**
-```bash
-npm run test:coverage
-```
-
-Generates coverage reports in multiple formats:
-- **HTML Report**: `coverage/lcov-report/index.html` (view in browser)
-- **LCOV**: `coverage/lcov.info` (for CI/CD integration)
-- **JSON**: `coverage/coverage-final.json` (for programmatic access)
-
-Coverage reports include:
-- Line coverage percentage
-- Branch coverage percentage
-- Function coverage percentage
-- Statement coverage percentage
-- Uncovered lines and branches
-
-**View Coverage Reports:**
-- Open `coverage/lcov-report/index.html` in a web browser for interactive HTML report
-- Use `coverage/lcov.info` for CI/CD integration with tools like Codecov or Coveralls
-
-## Code Style Guidelines
-
-This project uses TypeScript with strict type checking enabled. Please adhere to the following guidelines:
-
-### TypeScript Configuration
-
-The project uses strict TypeScript settings defined in `tsconfig.json`:
-
-- **Strict Mode**: All strict type checking options are enabled
-- **Target**: ES2022
-- **Module**: CommonJS
-- **File Layout**: Source files in `packages/*/src/`, compiled output in `packages/*/dist/`
-
-### Code Style Rules
-
-**Type Safety:**
-- Use explicit types for function parameters and return values
-- Avoid `any` type; use `unknown` when necessary, then narrow with type guards
-- Enable `noImplicitAny`, `strictNullChecks`, and `noUncheckedIndexedAccess`
-- Use `exactOptionalPropertyTypes` for precise optional property handling
-
-**Naming Conventions:**
-- Use camelCase for variables, functions, and methods
-- Use PascalCase for classes, interfaces, and types
-- Use UPPER_SNAKE_CASE for constants
-- Use descriptive names that indicate purpose and scope
-
-**File Organization:**
-- One main class/interface per file
-- Group related functionality in the same directory
-- Use barrel exports (`index.ts`) for public APIs
-
-**Imports:**
-- Use ES6 import/export syntax
-- Group imports: external packages, then internal modules
-- Use package imports (`dialectic-core`) or relative imports within packages when appropriate
-
-**Error Handling:**
-- Use custom error classes with exit codes (see `packages/core/src/utils/exit-codes.ts`)
-- Include error codes in error objects: `err.code = EXIT_CONFIG_ERROR`
-- Provide clear, actionable error messages
-
-**Async/Await:**
-- Prefer `async/await` over Promises with `.then()`
-- Handle errors with try/catch blocks
-- Use `Promise.all()` for parallel operations when appropriate
-
-**Comments:**
-- Use JSDoc comments for public functions and classes
-- Include parameter descriptions and return types in JSDoc
-- Document complex logic and non-obvious behavior
-- Remove commented-out code before committing
-
-### Example Code Style
-
+**Code style example:**
 ```typescript
-/**
- * Creates a debate orchestrator instance.
- * 
- * @param agents - Array of agent instances to participate
- * @param judge - Judge agent for synthesis
- * @param config - Debate configuration
- * @returns Orchestrator instance
- * @throws {Error} If agents array is empty
- */
+// ✅ Good — clear names, validated input, typed return, exit code for CLI
+import { EXIT_INVALID_ARGS, type ErrorWithCode } from './utils/exit-codes';
+
 export function createOrchestrator(
   agents: Agent[],
   judge: JudgeAgent,
   config: DebateConfig
 ): DebateOrchestrator {
   if (agents.length === 0) {
-    const err: any = new Error('At least one agent is required');
+    const err: ErrorWithCode = new Error('At least one agent is required');
     err.code = EXIT_INVALID_ARGS;
     throw err;
   }
-  
   return new DebateOrchestrator(agents, judge, config);
+}
+
+// ❌ Bad — vague names, no checks, no typing
+export function create(a, j, c) {
+  return new DebateOrchestrator(a, j, c);
 }
 ```
 
-### Linting and Formatting
+**Cleanup and design:**
+- DRY, single responsibility, no magic numbers/strings in the open; see `.cursor/rules/basic-code-cleanup.mdc` for refactors, JSDoc, and type rules.
 
-The project uses ESLint for code quality and consistency checks. ESLint is configured at the repository root and applies to all TypeScript packages.
+## Boundaries
 
-**ESLint Configuration:**
-- **Location**: `eslint.config.js` (repository root)
-- **Plugins**: TypeScript ESLint, import ordering, SonarJS code quality
-- **Rules**: TypeScript strict typing, complexity limits, magic number detection, import ordering, and more
-- **Test Files**: Relaxed rules for test files (`.spec.ts`, `.test.ts`)
+- **Always:** Implement in `packages/*/src/`; put tests next to source as `*.spec.ts`; run `npm test` and `npm run lint` (or the matching Nx targets) before commits; follow naming and type rules; never commit secrets or API keys.
+- **Ask first:** New dependencies, CI/CD or Nx config changes, DB or schema changes, larger API/CLI contract changes.
+- **Never:** Commit `.env` or keys; edit `node_modules/` or build artifacts in `dist/` or `.next/`; remove or weaken path validation and input checks (see `packages/core/src/utils/path-security.ts` and security notes in `docs/`).
 
-**Running Lint Checks:**
+---
 
-**Lint all packages:**
-```bash
-npm run lint
-```
-
-**Lint specific package:**
-```bash
-nx lint dialectic-core
-nx lint dialectic
-nx lint @dialectic/web-api
-nx lint @dialectic/web-ui
-```
-
-**Auto-fix linting issues:**
-```bash
-npm run lint:fix
-```
-
-This command automatically fixes auto-fixable ESLint issues across all packages in `packages/*/src/**/*.ts`.
-
-**Note**: The web-ui package uses Next.js's built-in ESLint configuration. Run `npm run lint` from the `packages/web-ui` directory to use Next.js linting.
-
-## Code Cleanup Guidelines
-
-This project follows comprehensive code cleanup and refactoring guidelines to maintain clean, maintainable code. These guidelines are centralized in the Cursor rules file for consistency across the codebase.
-
-**For detailed code cleanup guidelines, refer to:**
-- **`.cursor/rules/basic-code-cleanup.mdc`** - Complete code cleanup rules and best practices
-
-**Key areas covered:**
-- Template method refactoring patterns
-- Removing magic numbers and hardcoded strings
-- Documentation standards (JSDoc)
-- Common code smells and how to fix them
-- Type assertion guidelines
-- Import patterns and best practices
-
-**Quick principles:**
-- **DRY**: Don't Repeat Yourself - extract common patterns
-- **Type-safe**: Let the compiler help you - avoid unnecessary type casts
-- **Clear**: Easy to read and understand - self-documenting with good names
-- **Focused**: Each function does one thing well - single responsibility
-- **Consistent**: Follows established patterns throughout the codebase
-
-**Remember:** If you copy-paste code, you're doing it wrong. Extract it to a reusable function or class.
-
-## Testing Instructions
-
-### Unit Testing
-
-**Test Framework:** Jest with ts-jest preset
-
-**Test File Location:** Tests are co-located with source files in `packages/*/src/` directories
-
-**Test File Naming:** Test files should be named with `.spec.ts` suffix (e.g., `orchestrator.spec.ts`)
-
-**Writing Tests:**
-
-1. **Test Structure:**
-   ```typescript
-   // Import from package (preferred)
-   import { DebateOrchestrator } from 'dialectic-core';
-   // Or import from package src for testing
-   import { Component } from '../packages/core/src/core/component';
-   
-   describe('Component', () => {
-     it('should do something specific', async () => {
-       // Arrange
-       const component = new Component();
-       
-       // Act
-       const result = await component.method();
-       
-       // Assert
-       expect(result).toBeDefined();
-     });
-   });
-   ```
-
-2. **Mocking:**
-   - Mock external dependencies (LLM providers, file system)
-   - Use Jest mocks for async operations
-   - Create mock factories for complex objects (see `packages/core/src/core/orchestrator.spec.ts`)
-
-3. **Test Coverage:**
-   - Write tests for all public functions and methods
-   - Test error cases and edge conditions
-   - Test async operations with proper await handling
-   - Test both success and failure paths
-
-4. **Best Practices:**
-   - Use descriptive test names that explain what is being tested
-   - One assertion per test when possible
-   - Clean up resources (mocks, temporary files) after tests
-   - Use `beforeEach` and `afterEach` for test setup/teardown
-
-**Example Test:**
-```typescript
-describe('DebateOrchestrator', () => {
-  it('runs the correct phases for rounds=3 and calls judge synthesis', async () => {
-    const agents = [createMockAgent('a1', 'architect')];
-    const sm = createMockStateManager();
-    const cfg: DebateConfig = {
-      rounds: 3,
-      terminationCondition: { type: 'fixed' },
-      synthesisMethod: 'judge',
-      includeFullHistory: true,
-      timeoutPerRound: 300000,
-    };
-
-    const orchestrator = new DebateOrchestrator(agents, mockJudge, sm, cfg);
-    const result = await orchestrator.runDebate('Design a caching system');
-    
-    expect(result).toBeDefined();
-    expect(result.solution).toBeDefined();
-  });
-});
-```
-
-### Coverage Measurement
-
-**Running Coverage:**
-```bash
-npm run test:coverage
-```
-
-**Coverage Goals:**
-- Aim for minimum 80% code coverage across all metrics
-- Focus on critical paths: orchestrator, agents, state management
-- Ensure all error handling paths are tested
-
-**Viewing Coverage:**
-1. **HTML Report:** Open `coverage/lcov-report/index.html` in a browser
-   - Navigate by file to see line-by-line coverage
-   - Red lines indicate uncovered code
-   - Yellow lines indicate partially covered branches
-
-2. **Terminal Output:** Coverage summary is printed to console:
-   ```
-   File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
-   ----------|---------|----------|---------|---------|-------------------
-   All files |   85.42 |    78.57 |   82.14 |   85.42 |
-   ```
-
-3. **LCOV Format:** Use `coverage/lcov.info` for CI/CD integration
-
-**Interpreting Coverage:**
-- **Statements**: Percentage of executable statements covered
-- **Branches**: Percentage of conditional branches covered (if/else, ternary)
-- **Functions**: Percentage of functions called
-- **Lines**: Percentage of lines executed
-
-**Improving Coverage:**
-- Identify uncovered files in the HTML report
-- Add tests for missing branches and error cases
-- Test edge conditions and boundary values
-- Ensure all public API methods have tests
-
-### Integration Testing
-
-For integration tests that require actual API calls:
-- Use test API keys (never commit real keys)
-- Mock LLM providers in unit tests
-- Use environment variables for test configuration
-- Clean up test artifacts (debate files) after tests
-
-## Web Components
-
-Dialectic includes web-based components for running debates through a browser interface. The web application consists of a NestJS API server and a Next.js frontend.
-
-### Web API
-
-The web API provides a REST API and WebSocket gateway for running debates and receiving real-time updates.
-
-**Development mode (with watch):**
-```bash
-npm run dev:api
-```
-
-**Development mode (from package directory):**
-```bash
-npm run start:dev -w @dialectic/web-api
-```
-
-**Production mode:**
-```bash
-npm run build:api
-npm run start:prod -w @dialectic/web-api
-```
-
-**Default configuration:**
-- **Port**: `3001` (configurable via `PORT` environment variable)
-- **CORS**: Enabled for `http://localhost:3000` and `http://127.0.0.1:3000`
-- **Environment**: Loads `.env` from workspace root or package directory
-
-**Access the API:**
-- API endpoint: `http://localhost:3001`
-- WebSocket endpoint: `ws://localhost:3001`
-
-### Web UI
-
-The web UI provides a browser-based interface for running debates with real-time progress updates.
-
-**Development mode:**
-```bash
-npm run dev:ui
-```
-
-**Development mode (from package directory):**
-```bash
-npm run dev -w @dialectic/web-ui
-```
-
-**Production mode:**
-```bash
-npm run build:ui
-npm run start -w @dialectic/web-ui
-```
-
-**Default configuration:**
-- **Port**: `3000` (Next.js default)
-- **API URL**: `http://localhost:3001` (configurable via `NEXT_PUBLIC_API_URL` environment variable)
-
-**Access the UI:**
-- Web interface: `http://localhost:3000`
-
-### Running Both Components
-
-**Run both API and UI concurrently:**
-```bash
-npm run dev:web
-```
-
-This command starts both the web API and web UI in development mode, allowing you to use the full web interface.
-
-**Prerequisites:**
-- Ensure `.env` file is configured with required API keys (`OPENAI_API_KEY` or `OPENROUTER_API_KEY`)
-- Both components must be running for the web UI to function properly
-- The API must start before or simultaneously with the UI
-
-**Building for production:**
-```bash
-# Build both components
-npm run build:api
-npm run build:ui
-
-# Or build all packages
-npm run build
-```
-
-## Security Considerations
-
-### API Key Management
-
-**Never commit API keys to version control:**
-- API keys are stored in environment variables only
-- `.env` file is gitignored (see `.gitignore`)
-- Use `.env` files for local development, never commit them
-
-**Environment Variables:**
-- `OPENAI_API_KEY`: Required for OpenAI provider
-- `OPENROUTER_API_KEY`: Required for OpenRouter provider
-
-**Setting Environment Variables:**
-- **Windows PowerShell:** `$Env:OPENAI_API_KEY = "sk-..."`
-- **macOS/Linux:** `export OPENAI_API_KEY="sk-..."`
-- **Using .env file:** Use `dotenv` package (already configured) to load from `.env`
-
-**API Key Validation:**
-- The system validates API keys are set before use
-- Missing keys result in configuration errors (exit code 4)
-- Keys are never logged or printed to console
-
-### Input Validation
-
-**Problem Descriptions:**
-- Validate problem descriptions are non-empty
-- Sanitize file paths to prevent directory traversal
-- Validate file encoding (UTF-8 only)
-
-**Configuration Files:**
-- Validate JSON structure before parsing
-- Validate configuration schema (agent IDs, roles, temperatures)
-- Reject invalid configuration values with clear error messages
-
-**File Paths:**
-- Resolve relative paths safely
-- Validate file existence before reading
-- Prevent directory traversal attacks
-- Use absolute paths for sensitive operations
-
-### Data Security
-
-**Debate State Files:**
-- Debate state files may contain sensitive problem descriptions
-- Store debate files in `debates/` directory (gitignored)
-- Users should review debate files before sharing
-- Consider encryption for sensitive debates in production
-
-**Logging:**
-- Never log API keys or sensitive credentials
-- Avoid logging full problem descriptions in production
-- Use structured logging with appropriate log levels
-
-### Dependency Security
-
-**Regular Updates:**
-- Keep dependencies updated to patch vulnerabilities
-- Use `npm audit` to check for known vulnerabilities
-- Review security advisories for dependencies
-
-**Checking for Vulnerabilities:**
-```bash
-npm audit
-```
-
-**Fixing Vulnerabilities:**
-```bash
-npm audit fix
-```
-
-For vulnerabilities that require manual intervention, review the advisory and update dependencies accordingly.
-
-### Secure Coding Practices
-
-**Type Safety:**
-- Use TypeScript's type system to prevent runtime errors
-- Validate external inputs (API responses, file contents)
-- Use type guards for runtime type checking
-
-**Error Handling:**
-- Don't expose internal implementation details in error messages
-- Log errors with appropriate detail levels
-- Use exit codes for different error conditions
-
-**File System:**
-- Validate file paths before operations
-- Use safe path resolution (avoid `../` traversal)
-- Handle file system errors gracefully
-
-**Network Security:**
-- Use HTTPS for all API calls (enforced by OpenAI/OpenRouter SDKs)
-- Validate API responses before processing
-- Handle network errors and timeouts appropriately
-
-### Recommendations
-
-1. **Development:**
-   - Use separate API keys for development and production
-   - Rotate API keys regularly
-   - Use environment variable management tools
-
-2. **CI/CD:**
-   - Store API keys in secure secrets management (GitHub Secrets, etc.)
-   - Never hardcode API keys in CI/CD scripts
-   - Use test API keys for automated tests
-
-3. **Production:**
-   - Use secret management services (AWS Secrets Manager, HashiCorp Vault)
-   - Implement API key rotation policies
-   - Monitor API usage for anomalies
-
-4. **Code Review:**
-   - Review all code for hardcoded secrets
-   - Verify environment variable usage
-   - Check for accidental credential logging
-
-For more detailed security information, refer to the configuration documentation in `./docs/configuration.md`.
-
+**More:** CLI usage, options, and examples → `docs/commands.md`. Config and tools → `docs/configuration.md`, `docs/tools.md`. Running dev/prod → `docs/operation.md`. Repo layout → `docs/repo_organization.md`. E2E → `e2e-tests/e2e-tests.md`.
