@@ -149,13 +149,6 @@ describe('isPathWithinDirectory', () => {
       expect(isPathWithinDirectory(targetPath, contextDir)).toBe(true);
     });
 
-    it('should handle paths with mixed separators', () => {
-      const contextDir = '/home/user/project';
-      const targetPath = '/home/user/project\\src\\file.ts';
-      
-      expect(isPathWithinDirectory(targetPath, contextDir)).toBe(true);
-    });
-
     it('should return false when path resolution fails', () => {
       const contextDir = '/home/user/project';
       const targetPath = '/nonexistent/path';

@@ -22,7 +22,7 @@ describe('FileReadTool', () => {
 
   beforeEach(() => {
     // Create temporary directory for tests
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-read-tool-test-'));
+    tempDir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'file-read-tool-test-'));
     testFilePath = path.join(tempDir, 'test-file.txt');
     testDirPath = path.join(tempDir, 'test-dir');
     

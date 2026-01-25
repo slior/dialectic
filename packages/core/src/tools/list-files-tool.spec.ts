@@ -27,7 +27,7 @@ describe('ListFilesTool', () => {
 
   beforeEach(() => {
     // Create temporary directory for tests
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'list-files-tool-test-'));
+    tempDir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'list-files-tool-test-'));
     
     // Create tool with tempDir as context directory
     tool = new ListFilesTool(tempDir);
