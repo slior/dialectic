@@ -10,8 +10,7 @@ import { ContextSummarizer, LengthBasedSummarizer } from '../utils/context-summa
 /**
  * Default system instructions for the judge when synthesizing a final solution.
  */
-const DEFAULT_JUDGE_SYSTEM_PROMPT = `You are an expert technical judge responsible for synthesizing the best solution from multiple agent proposals and debates.
-Be objective and evidence-based; combine complementary ideas; address concerns; provide recommendations and a confidence score.`;
+const DEFAULT_JUDGE_SYSTEM_PROMPT = `You are an expert technical judge. Synthesize the best solution from the debate for this problem. Be objective and evidence-based. Combine ideas that directly address the problem. Address only concerns that affect the stated requirements or constraints. Give concrete recommendations that apply to this problem and a confidence score. Avoid generic architecture advice.`;
 
 /**
  * Default temperature used by the judge when no temperature is provided on the config.
@@ -627,9 +626,9 @@ export class JudgeAgent {
 You MUST respond with **ONLY valid JSON** (no markdown code blocks, no prose). Use this exact schema:
 
 {
-  "solutionMarkdown": "Full finalized solution in Markdown format. This should be a complete, well-structured solution description.",
+  "solutionMarkdown": "Full solution in Markdown. Be concrete and specific to this problem. Tie each part to the problem, its constraints, and the debate. Avoid generic best-practices that the problem does not require.",
   "tradeoffs": ["List of trade-offs considered", "Each as a separate string"],
-  "recommendations": ["List of concrete recommendations", "Each as a separate string"],
+  "recommendations": ["Recommendations that apply to this problem and its constraints. Omit generic advice.", "Each as a separate string"],
   "unfulfilledMajorRequirements": ["List any major requirements that are not fulfilled", "Empty array if all are met"],
   "openQuestions": ["List any open questions or ambiguities", "Empty array if none"],
   "confidence": 75
@@ -644,13 +643,15 @@ You MUST respond with **ONLY valid JSON** (no markdown code blocks, no prose). U
 
 2. **Assess fulfillment**: For each major requirement, determine if the synthesized solution addresses it adequately.
 
-3. **Set confidence**:
+3. **Ground the solution**: In solutionMarkdown and recommendations, every element should relate to the problem, its constraints, or the debate. Do not add generic architecture or process advice that the problem does not call for.
+
+4. **Set confidence**:
    - If ANY unfulfilled major requirements exist, set confidence ≤ 40 (the code will enforce this cap)
    - Otherwise, set confidence based on solution quality, completeness, and coherence (0-100)
 
-4. **Always produce solutionMarkdown**: Even if confidence is low or requirements are unmet, provide a complete solution description in Markdown format.
+5. **Always produce solutionMarkdown**: Even if confidence is low or requirements are unmet, provide a complete solution description in Markdown format.
 
-5. **Populate arrays**: Include all relevant trade-offs, recommendations, unfulfilled requirements, and open questions. Use empty arrays if none apply.
+6. **Populate arrays**: Include all relevant trade-offs, recommendations, unfulfilled requirements, and open questions. Use empty arrays if none apply.
 
 Respond with ONLY the JSON object, no other text.`;
     return text;

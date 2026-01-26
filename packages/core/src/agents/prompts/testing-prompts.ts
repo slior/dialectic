@@ -35,7 +35,7 @@ When critiquing:
     const basePrompt = `Problem to solve:
 ${problem}
 
-As a testing expert, propose a comprehensive verification and testing strategy for this system.
+Propose a testing strategy for this problem. Focus on requirements and behaviors the problem emphasizes. Skip or shorten strategies for concerns the problem does not stress.
 
 Use this structure:
 ## Testability Overview
@@ -78,7 +78,9 @@ Highlight unclear validation points, weak coverage, or poor observability.
 Recommend strategies or architectural changes that improve testability and coverage.
 
 ## Critical Gaps
-List major untested assumptions, missing validation flows, or areas with insufficient instrumentation.`;
+List major untested assumptions, missing validation flows, or areas with insufficient instrumentation.
+
+Only raise testing gaps that affect this problem. For each, say which requirement or behavior would be under-validated.`;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CRITIQUE);
   },

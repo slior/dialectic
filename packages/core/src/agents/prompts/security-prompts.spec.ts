@@ -242,8 +242,8 @@ describe('Security Prompts', () => {
     it('should include security specialist perspective in instructions', () => {
       const prompt = securityPrompts.proposePrompt(TEST_PROBLEM);
 
-      expect(prompt).toContain('security specialist');
-      expect(prompt).toContain('secure by architecture and by operation');
+      expect(prompt).toContain('Propose security design');
+      expect(prompt).toContain('trust boundaries');
     });
   });
 

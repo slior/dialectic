@@ -35,7 +35,7 @@ When critiquing:
     const basePrompt = `Problem to solve:
 ${problem}
 
-As a generalist, propose a cohesive solution that balances architecture, performance, security, and testability concerns.
+Propose a cohesive solution for this problem. Balance only the concerns that the problem or its constraints emphasize. Omit or briefly note domains the problem does not stress.
 
 Use this structure:
 ## Overall Approach
@@ -74,7 +74,7 @@ Structure your response as follows:
 Identify coherence, balanced trade-offs, and effective integration across domains.
 
 ## Weaknesses
-Highlight inconsistencies, missing dependencies, or unresolved trade-offs.
+Identify inconsistencies or trade-offs that affect this problem. For each, say how it impacts the stated requirements or constraints.
 
 ## Suggested Improvements
 Propose ways to better align performance, security, scalability, and maintainability goals.

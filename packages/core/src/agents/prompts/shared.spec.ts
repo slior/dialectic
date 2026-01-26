@@ -1,6 +1,6 @@
-import { 
-  appendSharedInstructions, 
-  INSTRUCTION_TYPES, 
+import {
+  appendSharedInstructions,
+  INSTRUCTION_TYPES,
   REQUIREMENTS_COVERAGE_SECTION_TITLE,
   getSharedSystemInstructions,
   getSharedProposalInstructions,
@@ -8,8 +8,10 @@ import {
   getSharedRefinementInstructions,
   getSharedSummarizationInstructions,
   getSharedClarificationInstructions,
+  getSharedGroundingInstruction,
+  getSharedGroundingInstructionShort,
   type InstructionType
-} from 'dialectic-core';
+} from './shared';
 
 // Test constants
 const PROMPT_TEST = 'test prompt';
@@ -71,6 +73,51 @@ describe('Shared Prompts', () => {
     it('should be used in proposal instructions', () => {
       const proposalInstructions = getSharedProposalInstructions();
       expect(proposalInstructions).toContain(REQUIREMENTS_COVERAGE_SECTION_TITLE);
+    });
+  });
+
+  describe('getSharedGroundingInstruction and getSharedGroundingInstructionShort', () => {
+    it('getSharedGroundingInstruction returns a non-empty string', () => {
+      const text = getSharedGroundingInstruction();
+      expect(text).toBeDefined();
+      expect(typeof text).toBe('string');
+      expect(text.length).toBeGreaterThan(0);
+    });
+
+    it('getSharedGroundingInstruction returns text containing "stated problem" and "Omit generic best-practices"', () => {
+      const text = getSharedGroundingInstruction();
+      expect(text).toContain('stated problem');
+      expect(text).toContain('Omit generic best-practices');
+    });
+
+    it('getSharedGroundingInstructionShort(INSTRUCTION_TYPES.PROPOSAL) returns a non-empty string containing "problem or its constraints" and "Avoid generic architecture"', () => {
+      const text = getSharedGroundingInstructionShort(INSTRUCTION_TYPES.PROPOSAL);
+      expect(text).toBeDefined();
+      expect(typeof text).toBe('string');
+      expect(text.length).toBeGreaterThan(0);
+      expect(text).toContain('problem or its constraints');
+      expect(text).toContain('Avoid generic architecture');
+    });
+
+    it('getSharedGroundingInstructionShort(INSTRUCTION_TYPES.CRITIQUE) returns a non-empty string containing "Do not suggest generic improvements" and "problem does not require"', () => {
+      const text = getSharedGroundingInstructionShort(INSTRUCTION_TYPES.CRITIQUE);
+      expect(text).toBeDefined();
+      expect(typeof text).toBe('string');
+      expect(text.length).toBeGreaterThan(0);
+      expect(text).toContain('Do not suggest generic improvements');
+      expect(text).toContain('problem does not require');
+    });
+
+    it('getSharedSystemInstructions includes the full grounding text', () => {
+      expect(getSharedSystemInstructions()).toContain(getSharedGroundingInstruction());
+    });
+
+    it('getSharedProposalInstructions includes the proposal short grounding text', () => {
+      expect(getSharedProposalInstructions()).toContain(getSharedGroundingInstructionShort(INSTRUCTION_TYPES.PROPOSAL));
+    });
+
+    it('getSharedCritiqueInstructions includes the critique short grounding text', () => {
+      expect(getSharedCritiqueInstructions()).toContain(getSharedGroundingInstructionShort(INSTRUCTION_TYPES.CRITIQUE));
     });
   });
 
@@ -157,6 +204,8 @@ describe('Shared Prompts', () => {
       expect(instructions).toContain('Requirements-First Approach');
       expect(instructions).toContain('major requirements');
       expect(instructions).toContain('minor requirements');
+      expect(instructions).toContain('Ground in the problem');
+      expect(instructions).toContain('Omit generic best-practices');
     });
 
     it('should include expected content in proposal instructions', () => {
@@ -197,7 +246,7 @@ describe('Shared Prompts', () => {
       expect(instructions).toContain('Clarification Guidelines');
       expect(instructions).toContain('ONLY JSON');
       expect(instructions).toContain('{"questions":');
-      expect(instructions).toContain('improve the overall solution quality');
+      expect(instructions).toContain('would change the design or scope for this problem');
     });
   });
 

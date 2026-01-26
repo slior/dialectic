@@ -36,7 +36,7 @@ When critiquing:
     const basePrompt = `Problem to solve:
 ${problem}
 
-As a performance engineer, propose a comprehensive solution focusing on runtime efficiency, scalability, and system responsiveness.
+Propose performance-related design for this problem. Focus on loads, bottlenecks, and constraints stated or implied by the problem. Skip or shorten areas the problem does not emphasize.
 
 Use this structure:
 ## Performance Overview
@@ -79,7 +79,9 @@ Identify likely performance bottlenecks, over-engineering, or poor assumptions.
 Recommend specific optimizations, instrumentation, or architectural adjustments.
 
 ## Critical Risks
-List major performance risks or failure modes that could affect system responsiveness or stability.`;
+List major performance risks or failure modes that could affect system responsiveness or stability.
+
+Only raise performance issues that affect this problem. For each, say how it impacts the stated or implied load, latency, or resource constraints.`;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CRITIQUE);
   },

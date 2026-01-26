@@ -55,7 +55,7 @@ export const kissPrompts: RolePrompts = {
     Problem to solve:
 ${problem}
 
-As a simplicity-focused architect, propose the **simplest viable solution** that solves this problem.
+Propose the simplest solution that meets the requirements of this problem. Do not add components or patterns the problem does not need.
 
 Structure your response as follows:
 
@@ -67,6 +67,7 @@ Outline only the essential components and their interactions.
 Avoid unnecessary components, layers or frameworks.
 
 ### Non-Functional Considerations (Simplified)
+Address only if the problem or constraints require it. Prefer one short sentence over a checklist.
 #### Scalability
 (Only address if truly needed. Prefer simple scaling strategies over complex ones.)
 #### Security
@@ -95,7 +96,7 @@ Summarize why this design is the simplest practical path forward.
 
 ---
 Respond **only** in this structured format.
-Challenge complexity — make the case for simplicity.
+Tie every simplification to the problem. Do not suggest removing or avoiding things that the problem or constraints require.
 
 **Important**: While advocating for simplicity, you MUST ensure all major requirements are fulfilled. The simplest solution that still satisfies all major requirements is preferred. You may add a final \`## Requirements Coverage\` section to explicitly map requirements to your design (this section is also required by shared instructions).
 `;
@@ -132,8 +133,7 @@ Identify which complexities are unavoidable and which are self-inflicted.
 ## Recommended Simplified Direction
 Propose the simplest coherent path to achieve the same goal, even if less "complete" initially.
 ---
-Your tone should be direct and challenging.  
-Question complexity — advocate for simplicity.
+Be direct. For each concern, say how it affects this problem. Question only complexity that is not needed for the stated requirements or constraints.
 `;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CRITIQUE);
@@ -146,7 +146,7 @@ ${originalContent}
 Critiques:
 ${critiquesText}
 
-Refine the proposal to make it simpler, more direct, and easier to implement.
+Refine the proposal to make it simpler, more direct, and easier to implement. Only simplify in ways that still satisfy the stated problem and constraints.
 
 Use this structure:
 
@@ -174,7 +174,7 @@ Question complexity and advocate for simplicity.
   },
 
   summarizePrompt: (content: string, maxLength: number) => {
-    const basePrompt = `You are summarizing the debate history from a **simplicity perspective**. Focus on simplicity decisions, complexity challenges, and what was kept minimal.
+    const basePrompt = `You are summarizing the debate history from a **simplicity perspective**. Focus on simplifications and YAGNI choices that are specific to this problem. Focus on simplicity decisions, complexity challenges, and what was kept minimal.
 
 Debate history to summarize:
 ${content}
@@ -205,7 +205,7 @@ Keep it concise, factual, and focused on simplicity reasoning.
     const basePrompt = `Problem to clarify:
 ${problem}
 
-Your goal is to identify information that would help you propose the **simplest possible solution**. Focus on questions that reveal what's truly necessary vs. what might be over-engineering.
+Your goal is to identify information that would help you propose the **simplest possible solution**. Ask only what would change the minimal viable solution for this problem. Focus on questions that reveal what's truly necessary vs. what might be over-engineering.
 Ask clarifying questions that aim to strip away unnecessary complexity and reveal the simplest viable solution.
 
 

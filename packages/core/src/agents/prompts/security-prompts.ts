@@ -36,7 +36,7 @@ When critiquing:
     const basePrompt = `Problem to solve:
 ${problem}
 
-As a security specialist, propose a comprehensive solution that ensures the system design is secure by architecture and by operation.
+Propose security design for this problem. Address threats and controls that apply to the stated data, trust boundaries, and constraints. Omit or briefly note concerns the problem does not raise.
 
 Use this structure:
 ## Security Objectives
@@ -79,7 +79,9 @@ Highlight vulnerabilities, missing controls, or unprotected data flows.
 Propose specific improvements, controls, or design adjustments to reduce risk.
 
 ## Critical Risks
-List the most severe security concerns that could lead to data breaches, privilege escalation, or service disruption.`;
+List the most severe security concerns that could lead to data breaches, privilege escalation, or service disruption.
+
+Only raise security issues that matter for this problem. For each, tie it to the stated or implied assets, trust boundaries, or compliance needs.`;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CRITIQUE);
   },

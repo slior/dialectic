@@ -949,7 +949,7 @@ describe('RoleBasedAgent (Security Role)', () => {
       expect(proposeImplSpy).toHaveBeenCalledWith(
         mockContext,
         'Test security prompt',
-        expect.stringContaining('security specialist'),
+        expect.stringContaining('Propose security design'),
         undefined // state parameter
       );
       expect(proposeImplSpy).toHaveBeenCalledWith(

@@ -36,7 +36,7 @@ export const architectPrompts: RolePrompts = {
     const basePrompt = `Problem to solve:
 ${problem}
 
-As an architect, propose a comprehensive solution including approach, key components, challenges, and justification.
+As an architect, propose a solution for this problem. Include only components, flows, and patterns that the problem or its constraints require. Justify each by referring to the problem.
 
 Use the following Markdown structure in your response:
 ### Architecture Overview
@@ -72,7 +72,7 @@ Use the following Markdown structure in your response:
 ---
 
 Respond **only** in this structured format.
-Avoid generalities — make concrete architectural claims and reasoning.
+Avoid generic architecture advice. Every component, pattern, and trade-off must relate to this problem or its constraints.
 
 You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).
 `;
@@ -105,8 +105,7 @@ Use the following Markdown structure for your critique:
 
 ---
 
-Your tone should be professional and evidence-based.  
-Avoid vague comments — reason from architectural principles.
+Be evidence-based. For each point, refer to the problem, the proposal, or the constraints. Do not raise generic architectural issues that do not affect this problem.
 `;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CRITIQUE);

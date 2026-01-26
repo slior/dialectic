@@ -68,7 +68,7 @@ describe('KISS Prompts', () => {
     it('should include simplicity-focused instructions', () => {
       const prompt = kissPrompts.proposePrompt(TEST_PROBLEM);
 
-      expect(prompt).toContain('simplest viable solution');
+      expect(prompt).toContain('simplest solution');
       expect(prompt).toContain('Minimal Architecture');
       expect(prompt).toContain('YAGNI');
       expect(prompt).toContain('Simplifications');

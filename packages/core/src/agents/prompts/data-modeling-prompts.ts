@@ -37,7 +37,7 @@ export const dataModelingPrompts: RolePrompts = {
     const basePrompt = `Problem to solve:
 ${problem}
 
-As a data modeling specialist, propose a comprehensive solution focusing on domain models, data structures, and persistence patterns.
+Propose a data model for this problem. Include only entities, relationships, and persistence choices that the problem or its constraints require. Justify each by referring to the problem.
 
 Use the following Markdown structure in your response:
 ### Domain Model Overview
@@ -63,7 +63,7 @@ Use the following Markdown structure in your response:
 
 ---
 Respond **only** in this structured format.
-Focus on clear, well-defined data models that support the problem requirements.
+Tie each entity, relationship, and pattern to the problem. Avoid generic data-modeling advice that the problem does not need.
 
 You may add a final \`## Requirements Coverage\` section if needed to explicitly map requirements to your design (this section is also required by shared instructions).
 `;
@@ -95,8 +95,7 @@ Use the following Markdown structure for your critique:
 (Brief summary judgment: Is the data model sound overall? Why or why not?)
 
 ---
-Your tone should be professional and evidence-based.
-Avoid vague comments — reason from data modeling principles.
+Be evidence-based. For each point, refer to the problem or the proposal. Do not raise data-modeling issues that do not affect this problem.
 `;
     const promptWithContext = prependContext(basePrompt, context, agentId, includeFullHistory);
     return appendSharedInstructions(promptWithContext, INSTRUCTION_TYPES.CRITIQUE);
