@@ -1,4 +1,4 @@
-import { Agent } from './agent';
+import { Agent, AgentLogger } from './agent';
 import { JudgeAgent } from './judge';
 import { StateManager } from './state-manager';
 import { DebateConfig, ORCHESTRATOR_TYPES, TERMINATION_TYPES, SYNTHESIS_METHODS } from '../types/debate.types';
@@ -7,7 +7,11 @@ import { TracingContext } from '../types/tracing.types';
 import { OrchestratorHooks } from './orchestrator';
 import { DebateOrchestrator } from './orchestrator';
 import { StateMachineOrchestrator } from '../state-machine/state-machine-orchestrator';
-import { createOrchestrator, OrchestratorFactoryParams } from './orchestrator-factory';
+import {
+  createOrchestrator,
+  isStateMachineOrchestrator,
+  OrchestratorFactoryParams,
+} from './orchestrator-factory';
 
 // Mock the orchestrator classes
 jest.mock('./orchestrator');
@@ -129,6 +133,18 @@ describe('createOrchestrator', () => {
       createOrchestrator(params);
 
       expect(writeStderr).toHaveBeenCalledWith('Orchestrator type: state-machine\n');
+    });
+
+    it('should emit classic orchestrator type to stderr when orchestratorType is classic', () => {
+      const { writeStderr } = require('../utils/console');
+      (writeStderr as jest.Mock).mockClear();
+      const params = createFactoryParams({
+        config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.CLASSIC }),
+      });
+
+      createOrchestrator(params);
+
+      expect(writeStderr).toHaveBeenCalledWith('Orchestrator type: classic\n');
     });
   });
 
@@ -376,6 +392,27 @@ describe('createOrchestrator', () => {
         undefined
       );
     });
+
+    it('should pass optional logger parameter correctly to StateMachineOrchestrator', () => {
+      const logger: AgentLogger = jest.fn();
+      const params = createFactoryParams({
+        config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.STATE_MACHINE }),
+        logger,
+      });
+
+      createOrchestrator(params);
+
+      expect(MockStateMachineOrchestrator).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.any(Object),
+        expect.any(Object),
+        expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
+        logger
+      );
+    });
   });
 
   describe('Edge Cases', () => {
@@ -454,6 +491,31 @@ describe('createOrchestrator', () => {
         undefined,
         undefined
       );
+    });
+  });
+
+  describe('isStateMachineOrchestrator type guard', () => {
+    it('returns false for DebateOrchestrator instance', () => {
+      const params = createFactoryParams({
+        config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.CLASSIC }),
+      });
+      const result = createOrchestrator(params);
+      expect(isStateMachineOrchestrator(result)).toBe(false);
+    });
+
+    it('returns true for StateMachineOrchestrator instance', () => {
+      // Use mock implementation that returns an object with the mock's prototype
+      // so that instanceof StateMachineOrchestrator (the mock) is true.
+      MockStateMachineOrchestrator.mockImplementation(function (
+        this: StateMachineOrchestrator,
+      ): StateMachineOrchestrator {
+        return this;
+      });
+      const params = createFactoryParams({
+        config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.STATE_MACHINE }),
+      });
+      const result = createOrchestrator(params);
+      expect(isStateMachineOrchestrator(result)).toBe(true);
     });
   });
 });

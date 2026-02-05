@@ -1,6 +1,6 @@
 import { DEBATE_EVENTS, createEvent } from './events';
 import { NODE_TYPES } from './types';
-import { TransitionGraph, TransitionRule } from './graph';
+import { DEFAULT_TRANSITIONS, TransitionGraph, TransitionRule } from './graph';
 import { NodeContext } from './node';
 import { DebateState, DebateConfig, DEBATE_STATUS } from '../types/debate.types';
 import { JudgeAgent } from '../core/judge';
@@ -114,6 +114,12 @@ describe('TransitionGraph', () => {
       expect(next).toBe(NODE_TYPES.SYNTHESIS);
     });
 
+    it('should transition from EVALUATION to SYNTHESIS on MAX_ROUNDS_REACHED', () => {
+      const event = createEvent(DEBATE_EVENTS.MAX_ROUNDS_REACHED);
+      const next = graph.getNextNode(NODE_TYPES.EVALUATION, event, mockContext);
+      expect(next).toBe(NODE_TYPES.SYNTHESIS);
+    });
+
     it('should return null (terminal) from SYNTHESIS on COMPLETE', () => {
       const event = createEvent(DEBATE_EVENTS.COMPLETE);
       const next = graph.getNextNode(NODE_TYPES.SYNTHESIS, event, mockContext);
@@ -171,6 +177,32 @@ describe('TransitionGraph', () => {
       };
       const next2 = conditionalGraph.getNextNode(NODE_TYPES.EVALUATION, event, maxRoundContext);
       expect(next2).toBe(NODE_TYPES.SYNTHESIS);
+    });
+  });
+
+  describe('logger', () => {
+    it('should call logger with transition message when next node is non-null', () => {
+      const logger = jest.fn<void, [string, boolean?]>();
+      const graphWithLogger = new TransitionGraph(DEFAULT_TRANSITIONS, logger);
+      const event = createEvent(DEBATE_EVENTS.START);
+      graphWithLogger.getNextNode(NODE_TYPES.INITIALIZATION, event, mockContext);
+      expect(logger).toHaveBeenCalledTimes(1);
+      expect(logger).toHaveBeenCalledWith(
+        'Transition: initialization --[START]--> clarification',
+        true
+      );
+    });
+
+    it('should call logger with "terminal" when next node is null', () => {
+      const logger = jest.fn<void, [string, boolean?]>();
+      const graphWithLogger = new TransitionGraph(DEFAULT_TRANSITIONS, logger);
+      const event = createEvent(DEBATE_EVENTS.COMPLETE);
+      graphWithLogger.getNextNode(NODE_TYPES.SYNTHESIS, event, mockContext);
+      expect(logger).toHaveBeenCalledTimes(1);
+      expect(logger).toHaveBeenCalledWith(
+        'Transition: synthesis --[COMPLETE]--> terminal',
+        true
+      );
     });
   });
 });

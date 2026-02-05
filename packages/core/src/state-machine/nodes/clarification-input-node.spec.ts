@@ -56,7 +56,7 @@ describe('ClarificationInputNode', () => {
       });
     });
 
-    it('should emit WAITING_FOR_INPUT when some answers are NA', async () => {
+    it('should emit ANSWERS_SUBMITTED when answer is NA (NA is valid)', async () => {
       state.clarifications = [{
         agentId: 'agent1',
         agentName: 'Test Agent',
@@ -66,7 +66,7 @@ describe('ClarificationInputNode', () => {
 
       const result = await node.execute(mockContext);
 
-      expect(result.event.type).toBe(DEBATE_EVENTS.WAITING_FOR_INPUT);
+      expect(result.event.type).toBe(DEBATE_EVENTS.ANSWERS_SUBMITTED);
     });
 
     it('should emit ANSWERS_SUBMITTED when all questions are answered', async () => {

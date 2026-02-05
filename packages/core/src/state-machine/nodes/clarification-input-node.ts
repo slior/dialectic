@@ -34,8 +34,8 @@ export class ClarificationInputNode implements DebateNode {
   private hasUnansweredQuestions(state: DebateState): boolean {
     if (!state.hasClarifications()) return false;
     return state.clarifications!.some(group =>
-      group.items.some(item => 
-        !item.answer || item.answer.trim() === '' //|| item.answer === 'NA' //NA is a valid answer
+      group.items.some(item =>
+        !item.answer || item.answer.trim() === '' // NA is a valid answer
       )
     );
   }
