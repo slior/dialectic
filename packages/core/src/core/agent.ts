@@ -58,6 +58,15 @@ export abstract class Agent {
   }
 
   /**
+   * Gets the agent's unique identifier.
+   * 
+   * @returns The agent's ID from its configuration.
+   */
+  getID(): string {
+    return this.config.id;
+  }
+
+  /**
    * Generates a proposal for the given problem.
    * @param problem - The software design problem to solve.
    * @param context - The current debate context, including history and state.

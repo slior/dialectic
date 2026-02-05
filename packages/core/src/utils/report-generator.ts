@@ -284,9 +284,11 @@ export function generateDebateReport(
   report += `\n\n`;
 
   // Clarifications section (if any)
-  if (debateState.clarifications && debateState.clarifications.length > 0) {
+  if (debateState.hasClarifications()) {
     report += `## Clarifications\n\n`;
-    for (const group of debateState.clarifications) {
+    // At this point, we know clarifications exist (checked above)
+    const clarifications = debateState.clarifications!;
+    for (const group of clarifications) {
       report += `### ${group.agentName} (${group.role})\n`;
       for (const item of group.items) {
         report += `Question (${item.id}):\n\n\`\`\`${CODE_FENCE_LANG}\n${item.question}\n\`\`\`\n\n`;

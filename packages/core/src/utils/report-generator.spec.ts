@@ -6,6 +6,7 @@ import {
   DebateRound,
   Solution,
   AgentClarifications,
+  DEBATE_STATUS,
 } from '../types/debate.types';
 
 import { generateDebateReport } from './report-generator';
@@ -84,16 +85,18 @@ function createDebateRound(roundNumber: number, contributions: Contribution[] = 
  * Creates a minimal debate state for testing.
  */
 function createDebateState(overrides?: Partial<DebateState>): DebateState {
-  return {
-    id: TEST_DEBATE_ID,
-    problem: TEST_PROBLEM_DESCRIPTION,
-    status: 'completed',
-    currentRound: 1,
-    rounds: [],
-    createdAt: new Date('2024-01-01T12:00:00Z'),
-    updatedAt: new Date('2024-01-01T12:00:00Z'),
-    ...overrides,
-  };
+  const state = new DebateState();
+  state.id = TEST_DEBATE_ID;
+  state.problem = TEST_PROBLEM_DESCRIPTION;
+  state.status = DEBATE_STATUS.COMPLETED;
+  state.currentRound = 1;
+  state.rounds = [];
+  state.createdAt = new Date('2024-01-01T12:00:00Z');
+  state.updatedAt = new Date('2024-01-01T12:00:00Z');
+  if (overrides) {
+    Object.assign(state, overrides);
+  }
+  return state;
 }
 
 describe('report-generator', () => {

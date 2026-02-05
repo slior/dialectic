@@ -171,7 +171,8 @@ The `--clarify` option enables a pre-debate interactive clarification phase wher
 5. The judge does not participate in the clarification phase
 
 **Configuration options:**
-- `debate.interactiveClarifications`: Enable clarifications by default (boolean, default: false)
+- `debate.orchestratorType`: Set to `"state-machine"` when using `interactiveClarifications` (the CLI sets this automatically when clarifications are requested).
+- `debate.interactiveClarifications`: Enable clarifications by default (boolean, default: false). When true, the CLI sets `orchestratorType` to `"state-machine"` so the clarification flow uses suspend/resume.
 - `debate.clarificationsMaxPerAgent`: Maximum questions per agent (number, default: 5)
 - `AgentConfig.clarificationPromptPath`: Custom clarification prompt for specific agents
 

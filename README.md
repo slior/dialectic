@@ -19,7 +19,7 @@
 
 ## Overview
 
-Dialectic is a multi-agent debate system that helps solve software design problems. Multiple AI agents with different perspectives (architecture, performance, security, data modeling, simplicity) debate a problem through structured rounds of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
+Dialectic is a multi-agent debate system that helps solve software design problems. Multiple AI agents with different perspectives (architecture, performance, security, data modeling, simplicity) debate a problem through an event-driven state machine that orchestrates structured rounds of proposals, critiques, and refinements. The system can dynamically terminate when consensus is reached or run for a fixed number of rounds, culminating in a synthesized solution from a judge agent.
 
 Dialectic can be used via:
 - **CLI**: Traditional command-line interface for scripting and automation
@@ -226,7 +226,18 @@ For detailed command documentation, including all options and examples, see [doc
 
 ### Debate Command
 
-The `debate` command orchestrates a multi-agent debate to solve a software design problem. You provide a problem statement (either inline or from a file), and multiple AI agents with different perspectives debate the problem through structured rounds. Each round consists of proposals, critiques, and refinements, culminating in a synthesized solution from a judge agent.
+The `debate` command orchestrates a multi-agent debate to solve a software design problem. You provide a problem statement (either inline or from a file), and multiple AI agents with different perspectives debate the problem through an event-driven state machine. The debate flow includes:
+
+- **Clarifications** (optional): Iterative Q&A rounds where agents can ask clarifying questions before the debate begins
+- **Debate Rounds**: Each round consists of:
+  - **Summarization**: Agents prepare and potentially summarize their context
+  - **Proposals**: Agents propose solutions
+  - **Critiques**: Agents critique each other's proposals
+  - **Refinements**: Agents refine their proposals based on critiques
+  - **Evaluation**: System evaluates consensus and determines if debate should continue
+- **Synthesis**: Judge agent synthesizes the final solution from all rounds
+
+The debate can terminate dynamically when consensus is reached (based on confidence thresholds) or after a fixed number of rounds, depending on your configuration.
 
 ```bash
 dialectic debate "Design a rate limiting system" --rounds 3 --verbose
@@ -255,11 +266,15 @@ Debate behavior is configured via a JSON file (default: `./debate-config.json`).
 **Features:**
 - Agent and judge configuration (models, temperatures, custom prompts)
 - Debate settings (rounds, timeouts, synthesis methods)
+- **Dynamic termination**: Configure consensus-based or quality-based early termination
+- **Iterative clarifications**: Support multiple clarification rounds with configurable limits
 - Context summarization to manage debate history length
 - Tool configuration for agents to interact with external functionality
 - Observability tracing via Langfuse (optional)
 
 For detailed configuration documentation, see [docs/configuration.md](docs/configuration.md).
+
+For information about the state machine architecture and debate flow, see [docs/debate_sm_flow.md](docs/debate_sm_flow.md).
 
 For information about available tools, see [docs/tools.md](docs/tools.md).
 

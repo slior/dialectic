@@ -6,6 +6,8 @@ jest.mock('dialectic-core', () => {
     logInfo: jest.fn(),
     logSuccess: jest.fn(),
     logWarning: jest.fn(),
+    // Gateway uses this to decide whether to call resume(); mock returns true so tests can assert resume().
+    isStateMachineOrchestrator: jest.fn().mockReturnValue(true),
   };
 });
 
@@ -18,6 +20,10 @@ import {
   logInfo,
   logSuccess,
   logWarning,
+  StateMachineOrchestrator,
+  ExecutionResult,
+  EXECUTION_STATUS,
+  SUSPEND_REASON,
 } from 'dialectic-core';
 import { Socket } from 'socket.io';
 
@@ -128,12 +134,22 @@ function createMockDebateService(): jest.Mocked<DebateService> {
     role: 'generalist',
   };
 
-  return {
+  // Create a mock orchestrator that can be configured per test
+  const mockOrchestrator = {
+    runDebate: jest.fn(),
+    resume: jest.fn(),
+  } as unknown as jest.Mocked<StateMachineOrchestrator>;
+
+  const mockDebateService = {
     getAgentConfigs: jest.fn().mockReturnValue(mockAgentConfigs),
     getJudgeConfig: jest.fn().mockReturnValue(mockJudgeConfig),
     collectClarifications: jest.fn(),
-    runDebate: jest.fn(),
-  } as unknown as jest.Mocked<DebateService>;
+    createOrchestrator: jest.fn().mockReturnValue(mockOrchestrator),
+    runDebate: jest.fn(), // Keep for backward compatibility with some tests
+    mockOrchestrator, // Expose for test configuration
+  } as unknown as jest.Mocked<DebateService> & { mockOrchestrator: typeof mockOrchestrator };
+  
+  return mockDebateService;
 }
 
 /**
@@ -244,14 +260,56 @@ function createMockContribution(): Contribution {
   };
 }
 
+/**
+ * Creates a mock ExecutionResult from a DebateResult.
+ */
+function createMockExecutionResult(debateResult: DebateResult): ExecutionResult {
+  return {
+    status: EXECUTION_STATUS.COMPLETED,
+    result: debateResult,
+  };
+}
+
+/**
+ * Sets up the mock orchestrator to return a completed execution result.
+ */
+function setupMockOrchestratorForSuccess(
+  mockDebateService: jest.Mocked<DebateService> & { mockOrchestrator: jest.Mocked<StateMachineOrchestrator> },
+  debateResult: DebateResult
+): void {
+  const executionResult = createMockExecutionResult(debateResult);
+  mockDebateService.mockOrchestrator.runDebate.mockResolvedValue(executionResult);
+  mockDebateService.mockOrchestrator.resume.mockResolvedValue(executionResult);
+}
+
+/**
+ * Sets up the mock orchestrator to return a suspended execution result for clarifications.
+ */
+function setupMockOrchestratorForSuspended(
+  mockDebateService: jest.Mocked<DebateService> & { mockOrchestrator: jest.Mocked<StateMachineOrchestrator> },
+  debateId: string,
+  questions: AgentClarifications[]
+): void {
+  const executionResult: ExecutionResult = {
+    status: EXECUTION_STATUS.SUSPENDED,
+    suspendReason: SUSPEND_REASON.WAITING_FOR_INPUT,
+    suspendPayload: {
+      debateId,
+      questions,
+      iteration: 1,
+    },
+  };
+  mockDebateService.mockOrchestrator.runDebate.mockResolvedValue(executionResult);
+}
+
 describe('DebateGateway', () => {
   let gateway: DebateGateway;
-  let mockDebateService: jest.Mocked<DebateService>;
+  let mockDebateService: jest.Mocked<DebateService> & { mockOrchestrator: jest.Mocked<StateMachineOrchestrator> };
   let mockSocket: jest.Mocked<Socket>;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDebateService = createMockDebateService();
+    mockDebateService = createMockDebateService() as jest.Mocked<DebateService> & { mockOrchestrator: jest.Mocked<StateMachineOrchestrator> };
     mockSocket = createMockSocket();
 
     gateway = new DebateGateway(mockDebateService);
@@ -279,11 +337,11 @@ describe('DebateGateway', () => {
     it('should emit correct state when debate is in progress', async () => {
       const mockResult = createMockDebateResult();
       // Create a promise that we can control
-      let resolveDebate: (value: DebateResult) => void;
-      const debatePromise = new Promise<DebateResult>((resolve) => {
+      let resolveDebate: (value: ExecutionResult) => void;
+      const debatePromise = new Promise<ExecutionResult>((resolve) => {
         resolveDebate = resolve;
       });
-      mockDebateService.runDebate.mockReturnValue(debatePromise);
+      mockDebateService.mockOrchestrator.runDebate.mockReturnValue(debatePromise);
 
       // Start a debate (don't await it yet)
       const debatePromiseStarted = gateway.handleStartDebate(
@@ -305,7 +363,7 @@ describe('DebateGateway', () => {
       });
 
       // Resolve the debate and await completion
-      resolveDebate!(mockResult);
+      resolveDebate!(createMockExecutionResult(mockResult));
       await debatePromiseStarted;
     });
   });
@@ -329,11 +387,11 @@ describe('DebateGateway', () => {
     it('should reject when debate is already in progress', async () => {
       const mockResult = createMockDebateResult();
       // Create a promise that we can control
-      let resolveDebate: (value: DebateResult) => void;
-      const debatePromise = new Promise<DebateResult>((resolve) => {
+      let resolveDebate: (value: ExecutionResult) => void;
+      const debatePromise = new Promise<ExecutionResult>((resolve) => {
         resolveDebate = resolve;
       });
-      mockDebateService.runDebate.mockReturnValue(debatePromise);
+      mockDebateService.mockOrchestrator.runDebate.mockReturnValue(debatePromise);
 
       // Start first debate (don't await it yet)
       const debatePromiseStarted = gateway.handleStartDebate(
@@ -357,7 +415,7 @@ describe('DebateGateway', () => {
       });
 
       // Resolve the first debate and await completion
-      resolveDebate!(mockResult);
+      resolveDebate!(createMockExecutionResult(mockResult));
       await debatePromiseStarted;
     });
 
@@ -396,19 +454,21 @@ describe('DebateGateway', () => {
 
     it('should trim problem string', async () => {
       const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       await gateway.handleStartDebate(
         { problem: `  ${TEST_PROBLEM}  `, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      expect(mockDebateService.runDebate).toHaveBeenCalledWith(
-        TEST_PROBLEM_TRIMMED,
-        expect.any(Object),
-        undefined,
+      expect(mockDebateService.createOrchestrator).toHaveBeenCalledWith(
+        expect.any(Object), // hooks
         DEFAULT_ROUNDS,
-        expect.any(Array)
+        expect.any(Array),
+        false
+      );
+      expect(mockDebateService.mockOrchestrator.runDebate).toHaveBeenCalledWith(
+        TEST_PROBLEM_TRIMMED
       );
     });
 
@@ -426,25 +486,25 @@ describe('DebateGateway', () => {
 
     it('should accept valid rounds override', async () => {
       const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, rounds: TEST_ROUNDS_OVERRIDE, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      expect(mockDebateService.runDebate).toHaveBeenCalledWith(
-        TEST_PROBLEM_TRIMMED,
-        expect.any(Object),
-        undefined,
+      expect(mockDebateService.createOrchestrator).toHaveBeenCalledWith(
+        expect.any(Object), // hooks
         TEST_ROUNDS_OVERRIDE,
-        expect.any(Array)
+        expect.any(Array),
+        false
       );
+      expect(mockDebateService.mockOrchestrator.runDebate).toHaveBeenCalledWith(TEST_PROBLEM_TRIMMED);
     });
 
     it('should set debate state and emit debateStarted', async () => {
       const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -460,15 +520,22 @@ describe('DebateGateway', () => {
 
     it('should collect clarifications when enabled', async () => {
       const mockClarifications = createMockAgentClarifications();
-      mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
+      // Mock orchestrator to suspend with clarifications (orchestrator handles clarifications internally)
+      const testDebateId = 'test-debate-id';
+      setupMockOrchestratorForSuspended(mockDebateService, testDebateId, mockClarifications);
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      expect(mockSocket.emit).toHaveBeenCalledWith('collectingClarifications');
-      expect(mockDebateService.collectClarifications).toHaveBeenCalledWith(TEST_PROBLEM_TRIMMED, expect.any(Array));
+      expect(mockSocket.emit).toHaveBeenCalledWith('debateStarted', { problem: TEST_PROBLEM_TRIMMED });
+      expect(mockDebateService.createOrchestrator).toHaveBeenCalledWith(
+        expect.any(Object),
+        DEFAULT_ROUNDS,
+        expect.any(Array),
+        true
+      );
       expect(mockSocket.emit).toHaveBeenCalledWith('clarificationsRequired', {
         questions: mockClarifications,
       });
@@ -478,67 +545,63 @@ describe('DebateGateway', () => {
       const mockClarifications = createMockAgentClarificationsEmpty();
       const mockResult = createMockDebateResult();
       mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      expect(mockDebateService.runDebate).toHaveBeenCalled();
+      expect(mockDebateService.mockOrchestrator.runDebate).toHaveBeenCalled();
     });
 
     it('should handle clarification collection errors gracefully', async () => {
-      const errorMessage = 'Failed to collect clarifications';
-      mockDebateService.collectClarifications.mockRejectedValue(new Error(errorMessage));
-      const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      // Orchestrator handles clarifications internally, so errors come from orchestrator.runDebate
+      const errorMessage = 'Debate orchestration failed';
+      mockDebateService.mockOrchestrator.runDebate.mockRejectedValue(new Error(errorMessage));
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      expect(logWarning).toHaveBeenCalledWith(`Failed to collect clarifications: ${errorMessage}`);
-      expect(mockSocket.emit).toHaveBeenCalledWith('warning', {
-        message: `Failed to collect clarifications: ${errorMessage}`,
+      expect(logWarning).toHaveBeenCalledWith(`Debate failed: ${errorMessage}`);
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: `Debate failed: ${errorMessage}`,
       });
-      expect(mockDebateService.runDebate).toHaveBeenCalled(); // Should continue with debate
     });
 
     it('should handle clarification collection non-Error rejection (String error branch)', async () => {
-      mockDebateService.collectClarifications.mockRejectedValue('non-Error string');
-      const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      // Orchestrator handles clarifications internally, so errors would come from orchestrator.runDebate
+      mockDebateService.mockOrchestrator.runDebate.mockRejectedValue('non-Error string');
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      expect(logWarning).toHaveBeenCalledWith('Failed to collect clarifications: non-Error string');
-      expect(mockSocket.emit).toHaveBeenCalledWith('warning', {
-        message: 'Failed to collect clarifications: non-Error string',
+      expect(logWarning).toHaveBeenCalledWith('Debate failed: non-Error string');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'Debate failed: non-Error string',
       });
-      expect(mockDebateService.runDebate).toHaveBeenCalled();
     });
 
     it('should run debate without clarifications when disabled', async () => {
       const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      expect(mockDebateService.runDebate).toHaveBeenCalledWith(
-        TEST_PROBLEM_TRIMMED,
-        expect.any(Object),
-        undefined,
+      expect(mockDebateService.createOrchestrator).toHaveBeenCalledWith(
+        expect.any(Object), // hooks
         DEFAULT_ROUNDS,
-        expect.any(Array)
+        expect.any(Array),
+        false
       );
+      expect(mockDebateService.mockOrchestrator.runDebate).toHaveBeenCalledWith(TEST_PROBLEM_TRIMMED);
     });
 
     it('should reject when no agents provided', async () => {
@@ -746,14 +809,16 @@ describe('DebateGateway', () => {
     });
 
     it('should emit error when configuredAgents is null in clarifications block', async () => {
-      (gateway as unknown as { convertToAgentConfig: () => null }).convertToAgentConfig = (): null => null;
+      // Mock createOrchestrator to throw error for no agents
+      mockDebateService.createOrchestrator.mockImplementation(() => {
+        throw new Error('No agents configured');
+      });
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
-      expect(mockSocket.emit).toHaveBeenCalledWith('collectingClarifications');
-      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'No agents configured' });
-      expect(mockDebateService.collectClarifications).not.toHaveBeenCalled();
+      expect(mockSocket.emit).toHaveBeenCalledWith('debateStarted', { problem: TEST_PROBLEM_TRIMMED });
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'Debate failed: No agents configured' });
     });
   });
 
@@ -761,34 +826,35 @@ describe('DebateGateway', () => {
     it('should reject when no debate in progress', async () => {
       await gateway.handleSubmitClarifications({ answers: {} }, mockSocket);
 
-      expect(logWarning).toHaveBeenCalledWith('No debate in progress');
+      expect(logWarning).toHaveBeenCalledWith('No suspended debate');
       expect(mockSocket.emit).toHaveBeenCalledWith('error', {
-        message: 'No debate in progress',
+        message: 'No suspended debate',
       });
     });
 
     it('should map answers to clarifications and run debate', async () => {
       const mockClarifications = createMockAgentClarifications();
       const mockResult = createMockDebateResult();
+      const testDebateId = 'test-debate-id';
       
-      // Start debate with clarifications enabled
-      mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
+      // Start debate with clarifications enabled - orchestrator suspends
+      setupMockOrchestratorForSuspended(mockDebateService, testDebateId, mockClarifications);
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      // Submit clarifications
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      // Submit clarifications - orchestrator resumes and completes
+      // Set up resume to return completed result
+      mockDebateService.mockOrchestrator.resume.mockResolvedValue(createMockExecutionResult(mockResult));
       await gateway.handleSubmitClarifications(
         { answers: { [TEST_QUESTION_ID]: TEST_ANSWER } },
         mockSocket
       );
 
       expect(mockSocket.emit).toHaveBeenCalledWith('clarificationsSubmitted');
-      expect(mockDebateService.runDebate).toHaveBeenCalledWith(
-        TEST_PROBLEM_TRIMMED,
-        expect.any(Object),
+      expect(mockDebateService.mockOrchestrator.resume).toHaveBeenCalledWith(
+        testDebateId,
         expect.arrayContaining([
           expect.objectContaining({
             items: expect.arrayContaining([
@@ -798,28 +864,28 @@ describe('DebateGateway', () => {
               }),
             ]),
           }),
-        ]),
-        DEFAULT_ROUNDS,
-        expect.any(Array)
+        ])
       );
     });
 
     it('should use NA for missing answers', async () => {
       const mockClarifications = createMockAgentClarifications();
       const mockResult = createMockDebateResult();
+      const testDebateId = 'test-debate-id';
       
-      mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
+      // Start debate with clarifications enabled - orchestrator suspends
+      setupMockOrchestratorForSuspended(mockDebateService, testDebateId, mockClarifications);
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      // Set up resume to return completed result
+      mockDebateService.mockOrchestrator.resume.mockResolvedValue(createMockExecutionResult(mockResult));
       await gateway.handleSubmitClarifications({ answers: {} }, mockSocket);
 
-      expect(mockDebateService.runDebate).toHaveBeenCalledWith(
-        TEST_PROBLEM_TRIMMED,
-        expect.any(Object),
+      expect(mockDebateService.mockOrchestrator.resume).toHaveBeenCalledWith(
+        testDebateId,
         expect.arrayContaining([
           expect.objectContaining({
             items: expect.arrayContaining([
@@ -828,30 +894,36 @@ describe('DebateGateway', () => {
               }),
             ]),
           }),
-        ]),
-        DEFAULT_ROUNDS,
-        expect.any(Array)
+        ])
       );
     });
 
     it('should use configured rounds from startDebate', async () => {
       const mockClarifications = createMockAgentClarifications();
       const mockResult = createMockDebateResult();
+      const testDebateId = 'test-debate-id';
       
-      mockDebateService.collectClarifications.mockResolvedValue(mockClarifications);
+      // Start debate with clarifications enabled and custom rounds - orchestrator suspends
+      setupMockOrchestratorForSuspended(mockDebateService, testDebateId, mockClarifications);
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: true, rounds: TEST_ROUNDS_OVERRIDE, agents: createMockAgentConfigInputs() },
         mockSocket
       );
 
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      // Verify rounds were passed to createOrchestrator
+      expect(mockDebateService.createOrchestrator).toHaveBeenCalledWith(
+        expect.any(Object), // hooks
+        TEST_ROUNDS_OVERRIDE,
+        expect.any(Array),
+        true
+      );
+
+      // Set up resume to return completed result
+      mockDebateService.mockOrchestrator.resume.mockResolvedValue(createMockExecutionResult(mockResult));
       await gateway.handleSubmitClarifications({ answers: {} }, mockSocket);
 
-      expect(mockDebateService.runDebate).toHaveBeenCalledWith(
-        TEST_PROBLEM_TRIMMED,
-        expect.any(Object),
-        expect.any(Array),
-        TEST_ROUNDS_OVERRIDE,
+      expect(mockDebateService.mockOrchestrator.resume).toHaveBeenCalledWith(
+        testDebateId,
         expect.any(Array)
       );
     });
@@ -860,7 +932,7 @@ describe('DebateGateway', () => {
   describe('handleCancelDebate', () => {
     it('should reset state and emit cancellation when debate in progress', async () => {
       const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       // Start debate
       await gateway.handleStartDebate(
@@ -893,11 +965,20 @@ describe('DebateGateway', () => {
 
     beforeEach(async () => {
       const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockImplementation((_problem, hooksParam) => {
-        // Gateway always provides hooks with all methods, so we can safely assert
-        hooks = hooksParam as RequiredHooks;
-        return Promise.resolve(mockResult);
+      // Capture hooks from createOrchestrator call
+      mockDebateService.createOrchestrator.mockImplementation((hooksParam) => {
+        if (hooksParam) {
+          hooks = hooksParam as RequiredHooks;
+        }
+        return mockDebateService.mockOrchestrator;
       });
+      mockDebateService.mockOrchestrator.runDebate.mockResolvedValue(createMockExecutionResult(mockResult));
+      
+      // Start debate to trigger hook capture
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -1036,7 +1117,7 @@ describe('DebateGateway', () => {
   describe('formatDebateResult', () => {
     it('should format debate result correctly', async () => {
       const mockResult = createMockDebateResult();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -1066,7 +1147,7 @@ describe('DebateGateway', () => {
 
     it('should include targetAgentId in contributions when present', async () => {
       const mockResult = createMockDebateResultWithTargetAgent();
-      mockDebateService.runDebate.mockResolvedValue(mockResult);
+      setupMockOrchestratorForSuccess(mockDebateService, mockResult);
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -1098,7 +1179,7 @@ describe('DebateGateway', () => {
   describe('error handling', () => {
     it('should emit error event when debate fails', async () => {
       const errorMessage = 'Debate orchestration failed';
-      mockDebateService.runDebate.mockRejectedValue(new Error(errorMessage));
+      mockDebateService.mockOrchestrator.runDebate.mockRejectedValue(new Error(errorMessage));
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -1113,7 +1194,7 @@ describe('DebateGateway', () => {
 
     it('should reset state after debate failure', async () => {
       const errorMessage = 'Debate orchestration failed';
-      mockDebateService.runDebate.mockRejectedValue(new Error(errorMessage));
+      mockDebateService.mockOrchestrator.runDebate.mockRejectedValue(new Error(errorMessage));
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -1125,7 +1206,7 @@ describe('DebateGateway', () => {
     });
 
     it('should handle non-Error rejection in runDebate (String error branch)', async () => {
-      mockDebateService.runDebate.mockRejectedValue('crash string');
+      mockDebateService.mockOrchestrator.runDebate.mockRejectedValue('crash string');
 
       await gateway.handleStartDebate(
         { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
@@ -1137,14 +1218,14 @@ describe('DebateGateway', () => {
     });
 
     it('should emit error when runDebate is called with configuredAgents null', async () => {
-      await (gateway as unknown as { runDebate: (c: Socket, cl?: AgentClarifications[], r?: number) => Promise<void> }).runDebate(
-        mockSocket,
-        undefined,
-        3
+      // Empty agents array should fail validation before creating orchestrator
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: [] },
+        mockSocket
       );
-      expect(logWarning).toHaveBeenCalledWith('No agents configured');
       expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'No agents configured' });
-      expect(mockDebateService.runDebate).not.toHaveBeenCalled();
+      expect(mockDebateService.createOrchestrator).not.toHaveBeenCalled();
+      expect(mockDebateService.mockOrchestrator.runDebate).not.toHaveBeenCalled();
     });
   });
 

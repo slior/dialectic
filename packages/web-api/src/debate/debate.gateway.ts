@@ -5,6 +5,9 @@ import {
 import {
   AgentClarifications, DebateResult, ContributionType, Contribution,
   CONTRIBUTION_TYPES, AgentConfig, AgentRole, LLM_PROVIDERS,
+  ExecutionResult, EXECUTION_STATUS, SUSPEND_REASON, isExecutionResult, isStateMachineOrchestrator,
+  DebateOrchestrator,
+  StateMachineOrchestrator,
   logInfo, logSuccess, logWarning,
 } from 'dialectic-core';
 import { Socket } from 'socket.io';
@@ -159,6 +162,9 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private totalRounds = 0;
   private configuredRounds = DEFAULT_ROUNDS;
   private configuredAgents: AgentConfig[] | null = null;
+  private orchestrator?: DebateOrchestrator | StateMachineOrchestrator;
+  private suspendedDebateId?: string;
+  private suspendedQuestions?: AgentClarifications[];
 
   constructor(private readonly debateService: DebateService) {}
 
@@ -415,33 +421,47 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     logInfo(startMessage);
     client.emit(WS_EVENTS.DEBATE_STARTED, { problem: this.currentProblem });
 
-    // If clarifications enabled, collect questions first
-    if (dto.clarificationsEnabled) {
-      try {
-        client.emit(WS_EVENTS.COLLECTING_CLARIFICATIONS);
-        if (!this.configuredAgents) {
-          this.emitError(client, ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
-          return;
-        }
-        const questions = await this.debateService.collectClarifications(this.currentProblem, this.configuredAgents);
-        this.pendingClarifications = questions;
-        
-        if (questions.some(q => q.items.length > 0)) {
-          client.emit(WS_EVENTS.CLARIFICATIONS_REQUIRED, { questions });
-          return; // Wait for submitClarifications event
-        }
-        // No questions generated, proceed with debate
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const warningMessage = ERROR_MESSAGES.CLARIFICATIONS_COLLECTION_FAILED(errorMessage);
-        logWarning(warningMessage);
-        client.emit(WS_EVENTS.WARNING, { message: warningMessage });
-        // Continue with debate without clarifications
-      }
-    }
+    // Create orchestrator with hooks
+    const hooks = this.createHooks(client, this.configuredAgents);
+    try {
+      this.orchestrator = this.debateService.createOrchestrator(hooks, rounds, this.configuredAgents, dto.clarificationsEnabled);
 
-    // Run debate without clarifications
-    await this.runDebate(client, undefined, rounds);
+      // Run debate - will suspend for user input when dto.clarificationsEnabled is true and agents have questions
+      const result = await this.orchestrator.runDebate(this.currentProblem);
+      
+      if (isExecutionResult(result)) {
+        const executionResult = result;
+        
+        if (executionResult.status === EXECUTION_STATUS.SUSPENDED) {
+          if (executionResult.suspendReason === SUSPEND_REASON.WAITING_FOR_INPUT) {
+            this.suspendedDebateId = executionResult.suspendPayload!.debateId;
+            this.suspendedQuestions = executionResult.suspendPayload!.questions;
+            client.emit(WS_EVENTS.CLARIFICATIONS_REQUIRED, {
+              questions: this.suspendedQuestions,
+            });
+            return;
+          }
+        }
+        
+        // Completed
+        if (executionResult.result) {
+          this.emitDebateResult(client, executionResult.result);
+        }
+      } else {
+        // DebateOrchestrator returns DebateResult directly
+        const debateResult = result as DebateResult;
+        this.emitDebateResult(client, debateResult);
+      }
+    } catch (error) {
+      // Reset state on error
+      this.debateInProgress = false;
+      this.currentProblem = '';
+      this.orchestrator = undefined;
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logWarning(`Debate failed: ${errorMessage}`);
+      this.emitError(client, `Debate failed: ${errorMessage}`);
+    }
   }
 
   /**
@@ -453,18 +473,40 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   @SubscribeMessage('submitClarifications')
   async handleSubmitClarifications(@MessageBody() dto: SubmitClarificationsDto, @ConnectedSocket() client: Socket): Promise<void> {
-    if (!this.debateInProgress) {
-      this.emitError(client, ERROR_MESSAGES.NO_DEBATE_IN_PROGRESS);
+    if (!this.orchestrator || !this.suspendedDebateId) {
+      this.emitError(client, 'No suspended debate');
       return;
     }
 
-    // Map answers to clarifications structure
-    const clarificationsWithAnswers = this.mapAnswersToClarifications(dto.answers);
+    if (!this.suspendedQuestions) {
+      this.emitError(client, 'No suspended questions found');
+      return;
+    }
     
+    const answersWithMapped = this.mapAnswersToClarifications(dto.answers, this.suspendedQuestions);
     client.emit(WS_EVENTS.CLARIFICATIONS_SUBMITTED);
     
-    // Run debate with clarifications (use stored rounds and agents from handleStartDebate)
-    await this.runDebate(client, clarificationsWithAnswers, this.configuredRounds);
+    const orchestrator = this.orchestrator;
+    if (!isStateMachineOrchestrator(orchestrator)) { //TODO: once we abstract the orchestrator, we can remove this check
+      this.emitError(client, 'Orchestrator does not support resume');
+      return;
+    }
+    
+    const result = await orchestrator.resume(this.suspendedDebateId, answersWithMapped);
+    
+    if (result.status === EXECUTION_STATUS.SUSPENDED) {
+      // More questions
+      this.suspendedQuestions = result.suspendPayload!.questions;
+      client.emit(WS_EVENTS.CLARIFICATIONS_REQUIRED, {
+        questions: result.suspendPayload!.questions,
+      });
+      return;
+    }
+    
+    this.suspendedDebateId = undefined;
+    if (result.result) {
+      this.emitDebateResult(client, result.result);
+    }
   }
 
   /**
@@ -485,10 +527,12 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Maps user answers to the clarifications structure.
    *
    * @param answers - Record mapping clarification item IDs to user-provided answers.
+   * @param questions - Optional questions array (if not provided, uses pendingClarifications).
    * @returns Array of agent clarifications with answers populated.
    */
-  private mapAnswersToClarifications(answers: Record<string, string>): AgentClarifications[] {
-    return this.pendingClarifications.map(group => ({
+  private mapAnswersToClarifications(answers: Record<string, string>, questions?: AgentClarifications[]): AgentClarifications[] {
+    const sourceQuestions = questions || this.pendingClarifications;
+    return sourceQuestions.map(group => ({
       ...group,
       items: group.items.map(item => ({
         ...item,
@@ -498,40 +542,16 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
-   * Runs the debate and emits progress events via WebSocket.
+   * Emits the debate result to the client.
    *
    * @param client - The WebSocket client socket.
-   * @param clarifications - Optional clarifications with answers.
-   * @param rounds - Optional number of debate rounds (uses configured rounds if not provided).
+   * @param result - The debate result to emit.
    */
-  private async runDebate(client: Socket, clarifications?: AgentClarifications[], rounds?: number): Promise<void> {
-    if (!this.configuredAgents) {
-      this.emitError(client, ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
-      return;
-    }
-
-    const hooks = this.createHooks(client, this.configuredAgents);
-
-    try {
-      const result = await this.debateService.runDebate(
-        this.currentProblem,
-        hooks,
-        clarifications,
-        rounds,
-        this.configuredAgents
-      );
-
-      const completionMessage = LOG_MESSAGES.DEBATE_COMPLETED;
-      logSuccess(completionMessage);
-      client.emit(WS_EVENTS.DEBATE_COMPLETE, this.formatDebateResult(result));
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const fullErrorMessage = `${ERROR_MESSAGES.DEBATE_FAILED}: ${errorMessage}`;
-      logWarning(fullErrorMessage);
-      this.emitError(client, fullErrorMessage);
-    } finally {
-      this.resetDebateState();
-    }
+  private emitDebateResult(client: Socket, result: DebateResult): void {
+    const completionMessage = LOG_MESSAGES.DEBATE_COMPLETED;
+    logSuccess(completionMessage);
+    client.emit(WS_EVENTS.DEBATE_COMPLETE, this.formatDebateResult(result));
+    this.resetDebateState();
   }
 
   /**
@@ -661,6 +681,9 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.totalRounds = 0;
     this.configuredRounds = DEFAULT_ROUNDS;
     this.configuredAgents = null;
+    this.orchestrator = undefined;
+    this.suspendedDebateId = undefined;
+    this.suspendedQuestions = undefined;
   }
 
   /**

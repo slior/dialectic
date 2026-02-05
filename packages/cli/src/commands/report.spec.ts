@@ -105,7 +105,7 @@ describe('CLI report command', () => {
    * @returns A minimal DebateState with required fields populated.
    */
   function createMinimalDebateState(): DebateState {
-    return {
+    return Object.assign(new DebateState(), {
       id: TEST_DEBATE_ID,
       problem: TEST_PROBLEM_DESCRIPTION,
       status: DEBATE_STATUS.COMPLETED,
@@ -134,7 +134,7 @@ describe('CLI report command', () => {
         confidence: 80,
         synthesizedBy: TEST_JUDGE_ID
       }
-    };
+    });
   }
 
   /**

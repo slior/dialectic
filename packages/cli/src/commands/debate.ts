@@ -4,69 +4,22 @@ import readline from 'readline';
 
 import { Command } from 'commander';
 import {
-  // Exit codes
-  EXIT_INVALID_ARGS,
-  EXIT_GENERAL_ERROR,
-  ErrorWithCode,
-  // Console utilities
-  writeStderr,
-  logWarning,
-  MessageType,
-  // Types
-  SystemConfig,
-  AgentConfig,
-  AGENT_ROLES,
-  LLM_PROVIDERS,
-  PROMPT_SOURCES,
-  AgentPromptMetadata,
-  JudgePromptMetadata,
-  PromptSource,
-  AgentPromptMetadataCollection,
-  DebateConfig,
-  DebateResult,
-  DebateRound,
-  Contribution,
-  ContributionType,
-  TERMINATION_TYPES,
-  SYNTHESIS_METHODS,
-  CONTRIBUTION_TYPES,
-  SummarizationConfig,
-  AgentClarifications,
-  DEFAULT_SUMMARIZATION_ENABLED,
-  DEFAULT_SUMMARIZATION_THRESHOLD,
-  DEFAULT_SUMMARIZATION_MAX_LENGTH,
-  DEFAULT_SUMMARIZATION_METHOD,
-  TRACE_OPTIONS,
-  TracingContext,
-  TraceMetadata,
-  // Providers
-  LLMProvider,
-  createProvider,
-  // Agents
-  RoleBasedAgent,
-  JudgeAgent,
-  Agent,
-  AgentLogger,
-  // Core
-  StateManager,
-  DebateOrchestrator,
-  OrchestratorHooks,
-  collectClarifications,
-  // Utilities
-  resolvePrompt,
-  PromptResolveResult,
-  loadEnvironmentFile,
-  createValidationError,
-  writeFileWithDirectories,
-  generateDebateId,
-  generateDebateReport,
-  buildToolRegistry,
-  validateLangfuseConfig,
-  createTracingContext,
-  createTracingProvider,
-  createTracingAgent,
-  buildTraceTags,
-  formatTraceNameWithTimestamp,
+  EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR, ErrorWithCode, writeStderr,
+  logWarning, MessageType, SystemConfig, AgentConfig,
+  AGENT_ROLES, LLM_PROVIDERS, PROMPT_SOURCES, AgentPromptMetadata,
+  JudgePromptMetadata, PromptSource, AgentPromptMetadataCollection, DebateConfig,
+  DebateResult, DebateRound, Contribution, ContributionType,
+  TERMINATION_TYPES, SYNTHESIS_METHODS, CONTRIBUTION_TYPES, SummarizationConfig,
+  AgentClarifications, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, DEFAULT_SUMMARIZATION_MAX_LENGTH,
+  DEFAULT_SUMMARIZATION_METHOD, TRACE_OPTIONS, TracingContext, TraceMetadata,
+  LLMProvider, createProvider, RoleBasedAgent, JudgeAgent,
+  Agent, AgentLogger, StateManager, createOrchestrator,
+  ORCHESTRATOR_TYPES, ADebateOrchestrator, DebateOrchestrator, OrchestratorHooks, isStateMachineOrchestrator,
+  collectClarifications, ExecutionResult, EXECUTION_STATUS,
+  SUSPEND_REASON, resolvePrompt, PromptResolveResult, loadEnvironmentFile,
+  createValidationError, writeFileWithDirectories, generateDebateId, generateDebateReport,
+  buildToolRegistry, validateLangfuseConfig, createTracingContext, createTracingProvider,
+  createTracingAgent, buildTraceTags, formatTraceNameWithTimestamp,
 } from 'dialectic-core';
 
 import { warnUser, infoUser } from '../index';
@@ -84,8 +37,14 @@ const JSON_FILE_EXTENSION = '.json';
 const MARKDOWN_FILE_EXTENSION = '.md';
 const JSON_INDENT_SPACES = 2;
 
+/** Placeholder for clarification answers when the user leaves the input empty. */
+const CLARIFICATION_ANSWER_NA = 'NA';
+
 // Problem resolution error messages
 const ERROR_BOTH_PROBLEM_SOURCES = 'Invalid arguments: provide exactly one of <problem> or --problemDescription';
+
+/** Prompt source metadata for agents and judge (used for verbose output and resolution). */
+type PromptSources = { agents: AgentPromptMetadata[]; judge: JudgePromptMetadata };
 
 /**
  * Checks if an error has a specific error code and rethrows it if it matches.
@@ -127,6 +86,16 @@ const DEFAULT_JUDGE_TEMPERATURE = 0.3;
 // Default summary prompt fallback
 const DEFAULT_SUMMARY_PROMPT_FALLBACK = 'Summarize the following debate history from your perspective, preserving key points and decisions.';
 
+/**
+ * Context passed to runDebateWithClarifications so it can perform the clarification phase
+ * (collect for classic, suspend/resume for state machine) internally.
+ */
+interface RunDebateClarificationContext {
+  clarificationRequested: boolean;
+  resolvedProblem: string;
+  agents: Agent[];
+  sysConfig: SystemConfig;
+}
 
 /**
  * Collects clarifying questions from agents and prompts the user for answers.
@@ -155,7 +124,7 @@ async function collectAndAnswerClarifications( resolvedProblem: string, agents: 
       writeStderr(`\n[${group.agentName}] Clarifying Questions\n`);
       for (const item of group.items) {
         const ans = (await askUser(`Q (${item.id}): ${item.question}\n> `)).trim();
-        item.answer = ans.length === 0 ? 'NA' : ans;
+        item.answer = ans.length === 0 ? CLARIFICATION_ANSWER_NA : ans;
       }
     }
   } finally {
@@ -163,6 +132,94 @@ async function collectAndAnswerClarifications( resolvedProblem: string, agents: 
   }
   
   return collected;
+}
+
+/**
+ * Runs a debate with the clarification phase handled inside this function.
+ * For state-machine orchestrator: runs with no initial clarifications; on suspend, prompts user and resumes.
+ * For classic orchestrator: if clarification was requested, collects clarifications here then runs debate.
+ *
+ * @param orchestrator - The orchestrator instance (classic or state machine)
+ * @param problem - The problem statement
+ * @param context - Optional additional context
+ * @param debateId - Optional debate ID
+ * @param clarificationContext - Optional context for the clarification phase (resolvedProblem, agents, sysConfig, clarificationRequested)
+ * @returns The final debate result
+ */
+async function runDebateWithClarifications( orchestrator: ADebateOrchestrator,
+                                            problem: string, context?: string, debateId?: string,
+                                            clarificationContext?: RunDebateClarificationContext ): Promise<DebateResult> {
+  if (isStateMachineOrchestrator(orchestrator)) { // TODO: think about how to abstract the orchestrators
+    const stateMachineOrchestrator = orchestrator;
+    let result: ExecutionResult = await stateMachineOrchestrator.runDebate(problem, context, undefined, debateId);
+
+    while (result.status === EXECUTION_STATUS.SUSPENDED) {
+      if (result.suspendReason === SUSPEND_REASON.WAITING_FOR_INPUT) {
+        const answers = await promptUserForAnswers(result.suspendPayload!.questions);
+        result = await stateMachineOrchestrator.resume(result.suspendPayload!.debateId, answers);
+      } else {
+        throw new Error(`Unknown suspend reason: ${result.suspendReason}`);
+      }
+    }
+
+    if (!result.result) {
+      throw new Error('Debate completed without result');
+    }
+
+    return result.result;
+  }
+  else {
+    const debateOrchestrator = orchestrator as DebateOrchestrator;
+    let initialClarifications: AgentClarifications[] | undefined;
+    if (clarificationContext?.clarificationRequested) {
+      initialClarifications = await collectFinalClarifications(
+        true,
+        clarificationContext.resolvedProblem,
+        clarificationContext.agents,
+        clarificationContext.sysConfig
+      );
+    }
+    return await debateOrchestrator.runDebate(problem, context, initialClarifications, debateId);
+  }
+}
+
+/**
+ * Prompts the user for clarification answers.
+ * 
+ * @param questions - Array of agent clarifications with questions
+ * @returns Promise resolving to clarifications with answers filled in
+ */
+async function promptUserForAnswers( questions: AgentClarifications[] ): Promise<AgentClarifications[]> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+  
+  try {
+    for (const group of questions) {
+      if (group.items.length === 0) continue;
+      writeStderr(`\n[${group.agentName}] Clarifying Questions\n`);
+      for (const item of group.items) {
+        if (item.answer && item.answer !== CLARIFICATION_ANSWER_NA && item.answer.trim() !== '') {
+          continue; // Already answered
+        }
+        const ans = await askUser(rl, `Q (${item.id}): ${item.question}\n> `);
+        item.answer = ans.length === 0 ? CLARIFICATION_ANSWER_NA : ans;
+      }
+    }
+  } finally {
+    rl.close();
+  }
+  
+  return questions;
+}
+
+/**
+ * Helper function to convert readline callback to Promise.
+ * 
+ * @param rl - Readline interface instance
+ * @param promptText - Prompt text to display
+ * @returns Promise resolving to user input
+ */
+async function askUser(rl: readline.Interface, promptText: string): Promise<string> {
+  return await new Promise((resolve) => rl.question(promptText, resolve));
 }
 
 /**
@@ -944,22 +1001,16 @@ function initializeTracingContext(params: InitializeTracingContextParams): Traci
 /**
  * Outputs verbose debate configuration information to stderr.
  * 
- * @param verbose - Whether verbose mode is enabled
  * @param agentConfigs - Array of agent configurations
  * @param promptSources - Collection of prompt source metadata for agents and judge
  * @param sysConfig - System configuration containing judge settings
  * @param systemSummaryConfig - System-wide summarization configuration
+ * @param orchestrator - The created orchestrator (used to emit its type when verbose)
  */
-function outputVerboseDebateInfo(
-  verbose: boolean,
-  agentConfigs: AgentConfig[],
-  promptSources: { agents: AgentPromptMetadata[]; judge: JudgePromptMetadata },
-  sysConfig: SystemConfig,
-  systemSummaryConfig: SummarizationConfig
-): void {
-  if (!verbose) {
-    return;
-  }
+function outputVerboseDebateInfo( agentConfigs: AgentConfig[], promptSources: PromptSources,
+                                  sysConfig: SystemConfig, systemSummaryConfig: SummarizationConfig, orchestrator: ADebateOrchestrator ): void {
+
+ 
 
   writeStderr('Running debate (verbose)\n');
   writeStderr('Active Agents:\n');
@@ -975,6 +1026,7 @@ function outputVerboseDebateInfo(
   writeStderr(`  - Threshold: ${systemSummaryConfig.threshold} characters\n`);
   writeStderr(`  - Max summary length: ${systemSummaryConfig.maxLength} characters\n`);
   writeStderr(`  - Method: ${systemSummaryConfig.method}\n`);
+  writeStderr(`  - Orchestrator: ${isStateMachineOrchestrator(orchestrator) ? 'state-machine' : 'classic'}\n`);
   writeStderr('\n');
 }
 
@@ -1116,10 +1168,7 @@ export function debateCommand(program: Command): void {
         const debateCfg = debateConfigFromSysConfig(sysConfig, options);
         const agentConfigs = agentConfigsFromSysConfig(sysConfig, options);
 
-        const promptSources: { agents: AgentPromptMetadata[]; judge: JudgePromptMetadata } = {
-          agents: [],
-          judge: { id: sysConfig.judge!.id, source: PROMPT_SOURCES.BUILT_IN },
-        };
+        const promptSources: PromptSources = { agents: [], judge: { id: sysConfig.judge!.id, source: PROMPT_SOURCES.BUILT_IN }, };
 
         const systemSummaryConfig = getSystemSummaryConfig(debateCfg);
 
@@ -1159,19 +1208,30 @@ export function debateCommand(program: Command): void {
         // Create judge with prompt resolution
         const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources, tracingContext);
 
-        // Clarifications phase (optional)
-        const finalClarifications = await collectFinalClarifications(clarificationRequested, resolvedProblem, agents, sysConfig);
-
-        outputVerboseDebateInfo(options.verbose || false, agentConfigs, promptSources, sysConfig, systemSummaryConfig); // Verbose header before run
-
         // Create orchestrator hooks to drive progress UI
         const hooks = createOrchestratorHooks(progressUI, options);
 
-        const orchestrator = new DebateOrchestrator(agents, judge, stateManager, debateCfg, hooks, tracingContext, contextDirectory);
-        
-        // Start progress UI and run debate
+        // When interactive clarifications are requested, use state-machine orchestrator (suspend/resume)
+        if (debateCfg.interactiveClarifications) {
+          debateCfg.orchestratorType = ORCHESTRATOR_TYPES.STATE_MACHINE;
+          writeStderr(`Interactive clarifications requested. Running debate with state machine orchestrator\n`);
+        }
+
+        // Create orchestrator using factory (type from config.orchestratorType)
+        const orchestrator = createOrchestrator({ agents, judge, stateManager, config: debateCfg, hooks, 
+                                                  ...(tracingContext !== undefined && { tracingContext }), contextDirectory, logger: agentLogger });
+
+        if (options.verbose) 
+            outputVerboseDebateInfo( agentConfigs, promptSources, sysConfig, systemSummaryConfig, orchestrator);
+
+        const clarificationContext: RunDebateClarificationContext = { clarificationRequested, resolvedProblem, agents, sysConfig };
+
+        // Inform user that debate is running
+        infoUser('Running debate');
+
+        // Start progress UI and run debate; clarification phase (collect for classic, suspend/resume for state machine) is inside runDebateWithClarifications
         await progressUI.start();
-        const result: DebateResult = await orchestrator.runDebate(resolvedProblem, undefined, finalClarifications, debateId);
+        const result: DebateResult = await runDebateWithClarifications(orchestrator, resolvedProblem, undefined, debateId, clarificationContext);
         await progressUI.complete();
 
         // Flush trace if tracing was enabled

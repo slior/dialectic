@@ -767,7 +767,8 @@ When the `--clarify` option is provided or `debate.interactiveClarifications` is
 3. **Context Integration**: Clarifications are included in agent contexts for round 1
 
 **Configuration Options**:
-- `debate.interactiveClarifications`: Enable by default (boolean, default: false)
+- `debate.orchestratorType`: The orchestrator type is chosen from this property only (default: `"classic"`).
+- `debate.interactiveClarifications`: Enable by default (boolean, default: false).
 - `debate.clarificationsMaxPerAgent`: Maximum questions per agent (number, default: 5)
 - `AgentConfig.clarificationPromptPath`: Custom clarification prompt for specific agents
 

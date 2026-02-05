@@ -299,29 +299,28 @@ describe('ContextSearchTool', () => {
 
   describe('DebateState Support', () => {
     it('should search state.rounds when DebateState is provided', () => {
-      const mockState: DebateState = {
-        id: DEBATE_ID_TEST,
-        problem: PROBLEM_DESIGN_SYSTEM,
-        status: DEBATE_STATUS.RUNNING,
-        currentRound: ROUND_NUMBER_2,
-        rounds: [
-          {
-            roundNumber: ROUND_NUMBER_1,
-            contributions: [
-              {
-                agentId: AGENT_ID_1,
-                agentRole: AGENT_ROLE_ARCHITECT,
-                type: CONTRIBUTION_TYPES.PROPOSAL,
-                content: CONTENT_PROPOSAL_AUTH,
-                metadata: {},
-              } as Contribution,
-            ],
-            timestamp: new Date(),
-          },
-        ],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const mockState = new DebateState();
+      mockState.id = DEBATE_ID_TEST;
+      mockState.problem = PROBLEM_DESIGN_SYSTEM;
+      mockState.status = DEBATE_STATUS.RUNNING;
+      mockState.currentRound = ROUND_NUMBER_2;
+      mockState.rounds = [
+        {
+          roundNumber: ROUND_NUMBER_1,
+          contributions: [
+            {
+              agentId: AGENT_ID_1,
+              agentRole: AGENT_ROLE_ARCHITECT,
+              type: CONTRIBUTION_TYPES.PROPOSAL,
+              content: CONTENT_PROPOSAL_AUTH,
+              metadata: {},
+            } as Contribution,
+          ],
+          timestamp: new Date(),
+        },
+      ];
+      mockState.createdAt = new Date();
+      mockState.updatedAt = new Date();
 
       const contextWithoutHistory: DebateContext = {
         problem: PROBLEM_DESIGN_SYSTEM,
@@ -336,29 +335,28 @@ describe('ContextSearchTool', () => {
     });
 
     it('should prefer state.rounds over context.history when both provided', () => {
-      const mockState: DebateState = {
-        id: DEBATE_ID_TEST_DEBATE,
-        problem: PROBLEM_DESIGN_SYSTEM,
-        status: DEBATE_STATUS.RUNNING,
-        currentRound: ROUND_NUMBER_1,
-        rounds: [
-          {
-            roundNumber: ROUND_NUMBER_1,
-            contributions: [
-              {
-                agentId: AGENT_ID_1,
-                agentRole: AGENT_ROLE_ARCHITECT,
-                type: CONTRIBUTION_TYPES.PROPOSAL,
-                content: CONTENT_STATE_ROUNDS_DATABASE,
-                metadata: {},
-              } as Contribution,
-            ],
-            timestamp: new Date(),
-          },
-        ],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const mockState = new DebateState();
+      mockState.id = DEBATE_ID_TEST_DEBATE;
+      mockState.problem = PROBLEM_DESIGN_SYSTEM;
+      mockState.status = DEBATE_STATUS.RUNNING;
+      mockState.currentRound = ROUND_NUMBER_1;
+      mockState.rounds = [
+        {
+          roundNumber: ROUND_NUMBER_1,
+          contributions: [
+            {
+              agentId: AGENT_ID_1,
+              agentRole: AGENT_ROLE_ARCHITECT,
+              type: CONTRIBUTION_TYPES.PROPOSAL,
+              content: CONTENT_STATE_ROUNDS_DATABASE,
+              metadata: {},
+            } as Contribution,
+          ],
+          timestamp: new Date(),
+        },
+      ];
+      mockState.createdAt = new Date();
+      mockState.updatedAt = new Date();
 
       const contextWithDifferentHistory: DebateContext = {
         problem: PROBLEM_DESIGN_SYSTEM,
@@ -410,15 +408,14 @@ describe('ContextSearchTool', () => {
     });
 
     it('should return empty matches when state.rounds is empty array', () => {
-      const mockState: DebateState = {
-        id: DEBATE_ID_TEST,
-        problem: PROBLEM_DESIGN_SYSTEM,
-        status: DEBATE_STATUS.RUNNING,
-        currentRound: 0,
-        rounds: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const mockState = new DebateState();
+      mockState.id = DEBATE_ID_TEST;
+      mockState.problem = PROBLEM_DESIGN_SYSTEM;
+      mockState.status = DEBATE_STATUS.RUNNING;
+      mockState.currentRound = 0;
+      mockState.rounds = [];
+      mockState.createdAt = new Date();
+      mockState.updatedAt = new Date();
       const contextWithoutHistory: DebateContext = { problem: PROBLEM_TEST };
       const result = tool.execute({ [PARAM_NAME_TERM]: SEARCH_TERM_TEST }, contextWithoutHistory, mockState);
       const parsed = JSON.parse(result);

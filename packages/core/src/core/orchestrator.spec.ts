@@ -91,15 +91,14 @@ const mockJudge = {
 } as unknown as JudgeAgent;
 
 function createMockStateManager(): StateManager {
-  const state: DebateState = {
-    id: 'deb-test',
-    problem: '',
-    status: 'running',
-    currentRound: 0,
-    rounds: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  } as DebateState;
+  const state = new DebateState();
+  state.id = 'deb-test';
+  state.problem = '';
+  state.status = 'running';
+  state.currentRound = 0;
+  state.rounds = [];
+  state.createdAt = new Date();
+  state.updatedAt = new Date();
 
   return {
     createDebate: async (problem: string, context?: string, id?: string) => {
@@ -144,18 +143,22 @@ function createMockStateManager(): StateManager {
 }
 
 function createMockStateManagerWithToolSupport(): StateManager {
-  const state: DebateState = {
-    id: 'deb-test',
-    problem: 'Test problem',
-    status: 'running',
-    currentRound: 0,
-    rounds: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  } as DebateState;
+  const state = new DebateState();
+  state.id = 'deb-test';
+  state.problem = 'Test problem';
+  state.status = 'running';
+  state.currentRound = 0;
+  state.rounds = [];
+  state.createdAt = new Date();
+  state.updatedAt = new Date();
 
   return {
-    createDebate: async (problem: string) => ({ ...state, problem }),
+    createDebate: async (problem: string) => {
+      const newState = new DebateState();
+      Object.assign(newState, state);
+      newState.problem = problem;
+      return newState;
+    },
     beginRound: async (_id: string) => {
       const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
       state.rounds.push(round);
@@ -375,11 +378,21 @@ describe('DebateOrchestrator (Flow 1)', () => {
     const agents = [createMockAgent('a1', 'architect'), createMockAgent('a2', 'performance')];
 
     // Custom SM that drops refinement for agent a2 in round 1
-    const state: DebateState = {
-      id: 'deb-test', problem: '', status: 'running', currentRound: 0, rounds: [], createdAt: new Date(), updatedAt: new Date(),
-    };
+    const state = new DebateState();
+    state.id = 'deb-test';
+    state.problem = '';
+    state.status = 'running';
+    state.currentRound = 0;
+    state.rounds = [];
+    state.createdAt = new Date();
+    state.updatedAt = new Date();
     const sm = {
-      createDebate: async (problem: string) => ({ ...state, problem }),
+      createDebate: async (problem: string) => {
+        const newState = new DebateState();
+        Object.assign(newState, state);
+        newState.problem = problem;
+        return newState;
+      },
     beginRound: async (_id: string) => {
         const round = { roundNumber: state.rounds.length + 1, contributions: [], timestamp: new Date() } as DebateRound;
         state.rounds.push(round);

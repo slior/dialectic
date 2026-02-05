@@ -219,7 +219,7 @@ export class DebateOrchestrator {
       ...(this.contextDirectory && { contextDirectory: this.contextDirectory }),
       ...(this.config.includeFullHistory && { history: state.rounds }),
       includeFullHistory: this.config.includeFullHistory,
-      ...(state.clarifications && { clarifications: state.clarifications }),
+      ...(state.hasClarifications() && { clarifications: state.clarifications }),
       ...(this.tracingContext && { tracingContext: this.tracingContext }),
     };
     return base;
@@ -401,7 +401,7 @@ export class DebateOrchestrator {
    */
   private async critiquePhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>): Promise<void> {
     // Get proposals from last round
-    const lastRound: DebateRound | undefined = state.rounds[state.rounds.length - 1];
+    const lastRound = state.getLatestRound();
     const proposals = (lastRound?.contributions || []).filter((c) => c.type === CONTRIBUTION_TYPES.PROPOSAL);
 
     // Calculate total critique tasks
@@ -440,7 +440,7 @@ export class DebateOrchestrator {
    * @param preparedContexts - Map of agent ID to prepared (potentially summarized) context.
    */
   private async refinementPhase(state: DebateState, roundNumber: number, preparedContexts: Map<string, DebateContext>): Promise<void> {
-    const prevRound: DebateRound | undefined = state.rounds[state.rounds.length - 1];
+    const prevRound = state.getLatestRound();
 
     this.hooks?.onPhaseStart?.(roundNumber, CONTRIBUTION_TYPES.REFINEMENT, this.agents.length);
 
