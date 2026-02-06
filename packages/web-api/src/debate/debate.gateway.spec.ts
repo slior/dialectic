@@ -24,6 +24,7 @@ import {
   ExecutionResult,
   EXECUTION_STATUS,
   SUSPEND_REASON,
+  isStateMachineOrchestrator,
 } from 'dialectic-core';
 import { Socket } from 'socket.io';
 
@@ -567,7 +568,7 @@ describe('DebateGateway', () => {
 
       expect(logWarning).toHaveBeenCalledWith(`Debate failed: ${errorMessage}`);
       expect(mockSocket.emit).toHaveBeenCalledWith('error', {
-        message: `Debate failed: ${errorMessage}`,
+        message: `Failed to collect clarifications: ${errorMessage}`,
       });
     });
 
@@ -582,7 +583,7 @@ describe('DebateGateway', () => {
 
       expect(logWarning).toHaveBeenCalledWith('Debate failed: non-Error string');
       expect(mockSocket.emit).toHaveBeenCalledWith('error', {
-        message: 'Debate failed: non-Error string',
+        message: 'Failed to collect clarifications: non-Error string',
       });
     });
 
@@ -818,7 +819,40 @@ describe('DebateGateway', () => {
         mockSocket
       );
       expect(mockSocket.emit).toHaveBeenCalledWith('debateStarted', { problem: TEST_PROBLEM_TRIMMED });
-      expect(mockSocket.emit).toHaveBeenCalledWith('error', { message: 'Debate failed: No agents configured' });
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'Failed to collect clarifications: No agents configured',
+      });
+    });
+
+    it('should not emit debateComplete when runDebate returns COMPLETED with undefined result', async () => {
+      mockDebateService.mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: undefined,
+      });
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+
+      expect(mockSocket.emit).not.toHaveBeenCalledWith('debateComplete', expect.anything());
+    });
+
+    it('should emit debateComplete when orchestrator returns raw DebateResult (not ExecutionResult)', async () => {
+      const mockResult = createMockDebateResult();
+      mockDebateService.mockOrchestrator.runDebate.mockResolvedValue(mockResult as unknown as ExecutionResult);
+
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: false, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('debateComplete', {
+        debateId: TEST_DEBATE_ID,
+        solution: mockResult.solution,
+        rounds: expect.any(Array),
+        metadata: mockResult.metadata,
+      });
     });
   });
 
@@ -830,6 +864,93 @@ describe('DebateGateway', () => {
       expect(mockSocket.emit).toHaveBeenCalledWith('error', {
         message: 'No suspended debate',
       });
+    });
+
+    it('should reject when suspendedQuestions is undefined', async () => {
+      const mockOrch = { runDebate: jest.fn(), resume: jest.fn() };
+      const gw = gateway as unknown as Record<string, unknown>;
+      gw.orchestrator = mockOrch;
+      gw.suspendedDebateId = 'suspended-id';
+      gw.suspendedQuestions = undefined;
+
+      await gateway.handleSubmitClarifications({ answers: {} }, mockSocket);
+
+      expect(logWarning).toHaveBeenCalledWith('No suspended questions found');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'No suspended questions found',
+      });
+    });
+
+    it('should emit error when orchestrator does not support resume', async () => {
+      const mockClarifications = createMockAgentClarifications();
+      const testDebateId = 'test-debate-id';
+      setupMockOrchestratorForSuspended(mockDebateService, testDebateId, mockClarifications);
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+      (isStateMachineOrchestrator as unknown as jest.Mock).mockReturnValue(false);
+
+      await gateway.handleSubmitClarifications(
+        { answers: { [TEST_QUESTION_ID]: TEST_ANSWER } },
+        mockSocket
+      );
+
+      expect(logWarning).toHaveBeenCalledWith('Orchestrator does not support resume');
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'Orchestrator does not support resume',
+      });
+      (isStateMachineOrchestrator as unknown as jest.Mock).mockReturnValue(true);
+    });
+
+    it('should request more clarifications when resume returns SUSPENDED again', async () => {
+      const mockClarifications = createMockAgentClarifications();
+      const moreQuestions: AgentClarifications[] = [
+        {
+          agentId: TEST_AGENT_ID_ARCHITECT,
+          agentName: TEST_AGENT_NAME_ARCHITECT,
+          role: AGENT_ROLES.ARCHITECT,
+          items: [{ id: 'q2', question: 'Follow-up?', answer: '' }],
+        },
+      ];
+      const testDebateId = 'test-debate-id';
+      setupMockOrchestratorForSuspended(mockDebateService, testDebateId, mockClarifications);
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+      mockDebateService.mockOrchestrator.resume.mockResolvedValue({
+        status: EXECUTION_STATUS.SUSPENDED,
+        suspendReason: SUSPEND_REASON.WAITING_FOR_INPUT,
+        suspendPayload: { debateId: testDebateId, questions: moreQuestions, iteration: 2 },
+      });
+
+      await gateway.handleSubmitClarifications(
+        { answers: { [TEST_QUESTION_ID]: TEST_ANSWER } },
+        mockSocket
+      );
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('clarificationsRequired', {
+        questions: moreQuestions,
+      });
+    });
+
+    it('should clear suspended state and not emit when resume returns COMPLETED with no result', async () => {
+      const mockClarifications = createMockAgentClarifications();
+      const testDebateId = 'test-debate-id';
+      setupMockOrchestratorForSuspended(mockDebateService, testDebateId, mockClarifications);
+      await gateway.handleStartDebate(
+        { problem: TEST_PROBLEM, clarificationsEnabled: true, agents: createMockAgentConfigInputs() },
+        mockSocket
+      );
+      mockDebateService.mockOrchestrator.resume.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: undefined,
+      });
+
+      await gateway.handleSubmitClarifications({ answers: {} }, mockSocket);
+
+      expect(mockSocket.emit).not.toHaveBeenCalledWith('debateComplete', expect.anything());
     });
 
     it('should map answers to clarifications and run debate', async () => {
@@ -1267,6 +1388,22 @@ describe('DebateGateway', () => {
         { length: 0.5 } as unknown as AgentConfigInput[]
       );
       expect(result).toBe('At least 1 agent is required');
+    });
+  });
+
+  describe('mapAnswersToClarifications (private helper)', () => {
+    it('should use pendingClarifications when questions parameter is omitted', () => {
+      const answers = { [TEST_QUESTION_ID]: TEST_ANSWER };
+      const gw = gateway as unknown as Record<string, unknown>;
+      gw.pendingClarifications = createMockAgentClarifications();
+
+      const result = (gateway as unknown as {
+        mapAnswersToClarifications: (a: Record<string, string>, q?: AgentClarifications[]) => AgentClarifications[];
+      }).mapAnswersToClarifications(answers);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.items[0]!.id).toBe(TEST_QUESTION_ID);
+      expect(result[0]!.items[0]!.answer).toBe(TEST_ANSWER);
     });
   });
 

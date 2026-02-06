@@ -460,7 +460,10 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
       
       const errorMessage = error instanceof Error ? error.message : String(error);
       logWarning(`Debate failed: ${errorMessage}`);
-      this.emitError(client, `Debate failed: ${errorMessage}`);
+      const userMessage = dto.clarificationsEnabled
+        ? ERROR_MESSAGES.CLARIFICATIONS_COLLECTION_FAILED(errorMessage)
+        : `Debate failed: ${errorMessage}`;
+      this.emitError(client, userMessage);
     }
   }
 

@@ -544,6 +544,10 @@ describe('DebateService', () => {
       ).rejects.toThrow('No agents configured');
     });
 
+    it('should throw when createOrchestrator is called without agents argument (defaults to empty)', () => {
+      expect(() => service.createOrchestrator(undefined, undefined)).toThrow('No agents configured');
+    });
+
     it('should pass interactiveClarifications true when createOrchestrator called with clarificationsEnabled true', () => {
       const mockAgents = createMockAgentConfigs();
       (createOrchestrator as jest.Mock).mockClear();
@@ -557,6 +561,41 @@ describe('DebateService', () => {
           }),
         })
       );
+    });
+
+    it('should throw when execution result is not completed', async () => {
+      const mockAgents = createMockAgentConfigs();
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.SUSPENDED,
+        suspendReason: 'WAITING_FOR_INPUT',
+      } as ExecutionResult);
+
+      await expect(
+        service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents)
+      ).rejects.toThrow('Debate did not complete successfully');
+    });
+
+    it('should throw when execution result is completed but result is undefined', async () => {
+      const mockAgents = createMockAgentConfigs();
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: undefined,
+      } as ExecutionResult);
+
+      await expect(
+        service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents)
+      ).rejects.toThrow('Debate did not complete successfully');
+    });
+
+    it('should return debate result directly when orchestrator returns DebateResult (not ExecutionResult)', async () => {
+      const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
+      // Orchestrator may return raw DebateResult (e.g. DebateOrchestrator); cast for mock typing
+      mockOrchestrator.runDebate.mockResolvedValue(mockResult as unknown as ExecutionResult);
+
+      const result = await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
+
+      expect(result).toEqual(mockResult);
     });
   });
 

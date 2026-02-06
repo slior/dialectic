@@ -1,6 +1,14 @@
 import { LLMProvider, CompletionRequest, CompletionResponse } from '../providers/llm-provider';
 import { AgentConfig, LLM_PROVIDERS, AGENT_ROLES, PromptSource } from '../types/agent.types';
-import { DebateRound, DebateContext, CONTRIBUTION_TYPES, SummarizationConfig } from '../types/debate.types';
+import {
+  DebateRound,
+  DebateContext,
+  CONTRIBUTION_TYPES,
+  SummarizationConfig,
+  DebateState,
+  Contribution,
+  DEBATE_STATUS,
+} from '../types/debate.types';
 import { TracingContext, SPAN_LEVEL } from '../types/tracing.types';
 import { LengthBasedSummarizer } from '../utils/context-summarizer';
 
@@ -146,6 +154,18 @@ function createJSONWithUnfulfilledRequirements(): string {
     openQuestions: ['Question 1'],
     confidence: 60, // Should be capped at 40
   });
+}
+
+function createDebateState(rounds: DebateRound[]): DebateState {
+  const state = new DebateState();
+  state.id = 'debate-1';
+  state.problem = 'Test problem';
+  state.status = DEBATE_STATUS.RUNNING;
+  state.currentRound = rounds.length;
+  state.rounds = rounds;
+  state.createdAt = new Date();
+  state.updatedAt = new Date();
+  return state;
 }
 
 describe('JudgeAgent', () => {
@@ -949,6 +969,418 @@ describe('JudgeAgent', () => {
       expect(typeof prompt).toBe('string');
       expect(prompt).toContain(content);
       expect(prompt).toContain(maxLength.toString());
+    });
+  });
+
+  describe('Confidence evaluation', () => {
+    it('should return 0 when there is no latest round', async () => {
+      const mockProvider = new MockLLMProvider(createValidJSONResponse());
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const state = createDebateState([]);
+
+      const confidence = await judge.evaluateConfidence(state);
+
+      expect(confidence).toBe(0);
+    });
+
+    it('should return 0 when latest round has no refinements', async () => {
+      class ThrowingProvider implements LLMProvider {
+        async complete(): Promise<CompletionResponse> {
+          throw new Error('LLM should not be called when no refinements exist');
+        }
+      }
+
+      const mockProvider = new ThrowingProvider();
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const contributions: Contribution[] = [
+        {
+          agentId: 'agent-1',
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.PROPOSAL,
+          content: 'Proposal only, no refinements',
+          metadata: {},
+        },
+      ];
+      const rounds: DebateRound[] = [
+        {
+          roundNumber: 1,
+          timestamp: new Date(),
+          contributions,
+        },
+      ];
+      const state = createDebateState(rounds);
+
+      const confidence = await judge.evaluateConfidence(state);
+
+      expect(confidence).toBe(0);
+    });
+
+    it('should evaluate confidence without tracing using provider response', async () => {
+      const confidenceJson = JSON.stringify({ confidence: 72 });
+      const mockProvider = new MockLLMProvider(confidenceJson);
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const refinements: Contribution[] = [
+        {
+          agentId: 'agent-1',
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.REFINEMENT,
+          content: 'Refinement content',
+          metadata: {},
+        },
+      ];
+      const rounds: DebateRound[] = [
+        {
+          roundNumber: 1,
+          timestamp: new Date(),
+          contributions: refinements,
+        },
+      ];
+      const state = createDebateState(rounds);
+
+      const confidence = await judge.evaluateConfidence(state);
+
+      expect(confidence).toBe(72);
+    });
+
+    it('should evaluate confidence with tracing and include usage', async () => {
+      const confidenceJson = JSON.stringify({ confidence: 65 });
+      const mockProvider = new MockLLMProvider(confidenceJson);
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+      const tracingContext = createMockTracingContext();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const refinements: Contribution[] = [
+        {
+          agentId: 'agent-1',
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.REFINEMENT,
+          content: 'Refinement content',
+          metadata: {},
+        },
+      ];
+      const rounds: DebateRound[] = [
+        {
+          roundNumber: 1,
+          timestamp: new Date(),
+          contributions: refinements,
+        },
+      ];
+      const state = createDebateState(rounds);
+
+      const confidence = await judge.evaluateConfidence(state, tracingContext);
+
+      expect(confidence).toBe(65);
+
+      const mockSpan = (tracingContext.trace.span as jest.Mock).mock.results[0]
+        ?.value as unknown as MockLangfuseSpan;
+      const mockGeneration = mockSpan
+        ? ((mockSpan.generation as jest.Mock).mock.results[0]
+            ?.value as unknown as MockLangfuseGeneration)
+        : undefined;
+      expect(mockGeneration).toBeDefined();
+      const callArgs = mockGeneration!.end.mock.calls[0][0];
+      expect(callArgs.output).toEqual(
+        expect.objectContaining({
+          confidence: 65,
+        })
+      );
+      expect(callArgs.usage).toEqual(
+        expect.objectContaining({
+          input: MOCK_INPUT_TOKENS,
+          output: MOCK_OUTPUT_TOKENS,
+          total: MOCK_TOTAL_TOKENS,
+        })
+      );
+    });
+
+    it('should fallback to non-tracing confidence evaluation when span creation fails', async () => {
+      const confidenceJson = JSON.stringify({ confidence: 55 });
+      const mockProvider = new MockLLMProvider(confidenceJson);
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+      const tracingContext = createMockTracingContext();
+
+      (tracingContext.trace.span as jest.Mock).mockImplementation(() => {
+        throw new Error('Span creation failed');
+      });
+
+      const consoleErrorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const refinements: Contribution[] = [
+        {
+          agentId: 'agent-1',
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.REFINEMENT,
+          content: 'Refinement content',
+          metadata: {},
+        },
+      ];
+      const rounds: DebateRound[] = [
+        {
+          roundNumber: 1,
+          timestamp: new Date(),
+          contributions: refinements,
+        },
+      ];
+      const state = createDebateState(rounds);
+
+      const confidence = await judge.evaluateConfidence(state, tracingContext);
+
+      expect(confidence).toBe(55);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Langfuse tracing failed for judge evaluateConfidence (span creation)'
+        )
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should fallback to non-tracing confidence evaluation when generation creation fails', async () => {
+      const confidenceJson = JSON.stringify({ confidence: 60 });
+      const mockProvider = new MockLLMProvider(confidenceJson);
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+      const tracingContext = createMockTracingContext();
+
+      const mockSpan =
+        ((tracingContext.trace.span as jest.Mock).mock.results[0]
+          ?.value as unknown as MockLangfuseSpan) ||
+        ((tracingContext.trace.span as jest.Mock)() as unknown as MockLangfuseSpan);
+
+      mockSpan.generation.mockImplementation(() => {
+        throw new Error('Generation creation failed');
+      });
+
+      const consoleErrorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const refinements: Contribution[] = [
+        {
+          agentId: 'agent-1',
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.REFINEMENT,
+          content: 'Refinement content',
+          metadata: {},
+        },
+      ];
+      const rounds: DebateRound[] = [
+        {
+          roundNumber: 1,
+          timestamp: new Date(),
+          contributions: refinements,
+        },
+      ];
+      const state = createDebateState(rounds);
+
+      const confidence = await judge.evaluateConfidence(state, tracingContext);
+
+      expect(confidence).toBe(60);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Langfuse tracing failed for judge evaluateConfidence (generation creation)'
+        )
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should handle LLM errors during confidence evaluation tracing and end spans with error', async () => {
+      const mockProvider = new MockLLMProvider('', true);
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+      const tracingContext = createMockTracingContext();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const refinements: Contribution[] = [
+        {
+          agentId: 'agent-1',
+          agentRole: AGENT_ROLES.ARCHITECT,
+          type: CONTRIBUTION_TYPES.REFINEMENT,
+          content: 'Refinement content',
+          metadata: {},
+        },
+      ];
+      const rounds: DebateRound[] = [
+        {
+          roundNumber: 1,
+          timestamp: new Date(),
+          contributions: refinements,
+        },
+      ];
+      const state = createDebateState(rounds);
+
+      await expect(
+        judge.evaluateConfidence(state, tracingContext)
+      ).rejects.toThrow('Mock LLM failure');
+
+      const mockSpan = (tracingContext.trace.span as jest.Mock).mock.results[0]
+        ?.value as unknown as MockLangfuseSpan;
+      const mockGeneration = mockSpan
+        ? ((mockSpan.generation as jest.Mock).mock.results[0]
+            ?.value as unknown as MockLangfuseGeneration)
+        : undefined;
+
+      expect(mockGeneration?.end).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: SPAN_LEVEL.ERROR,
+          statusMessage: 'Mock LLM failure',
+        })
+      );
+      expect(mockSpan?.end).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: SPAN_LEVEL.ERROR,
+          statusMessage: 'Mock LLM failure',
+        })
+      );
+    });
+
+    it('should use fallback score when confidence JSON is missing', () => {
+      const mockProvider = new MockLLMProvider(createValidJSONResponse());
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const parsed = (judge as unknown as { parseConfidenceFromResponse(text: string): number }).parseConfidenceFromResponse(
+        'No JSON here'
+      );
+
+      expect(parsed).toBe(FALLBACK_CONFIDENCE_SCORE);
+    });
+
+    it('should use fallback score when confidence JSON is invalid', () => {
+      const mockProvider = new MockLLMProvider(createValidJSONResponse());
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const parsed = (judge as unknown as { parseConfidenceFromResponse(text: string): number }).parseConfidenceFromResponse(
+        '{ "confidence": invalid json }'
+      );
+
+      expect(parsed).toBe(FALLBACK_CONFIDENCE_SCORE);
+    });
+
+    it('should use fallback score when confidence is not a number', () => {
+      const mockProvider = new MockLLMProvider(createValidJSONResponse());
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const parsed = (judge as unknown as { parseConfidenceFromResponse(text: string): number }).parseConfidenceFromResponse(
+        JSON.stringify({ confidence: 'not-a-number' })
+      );
+
+      expect(parsed).toBe(FALLBACK_CONFIDENCE_SCORE);
+    });
+
+    it('should clamp confidence from JSON to 0-100 range', () => {
+      const mockProvider = new MockLLMProvider(createValidJSONResponse());
+      const config = createMockJudgeConfig();
+      const summaryConfig = createMockSummarizationConfig();
+
+      const judge = new JudgeAgent(
+        config,
+        mockProvider,
+        'System prompt',
+        undefined,
+        summaryConfig
+      );
+
+      const high = (judge as unknown as { parseConfidenceFromResponse(text: string): number }).parseConfidenceFromResponse(
+        JSON.stringify({ confidence: 150 })
+      );
+      const low = (judge as unknown as { parseConfidenceFromResponse(text: string): number }).parseConfidenceFromResponse(
+        JSON.stringify({ confidence: -10 })
+      );
+
+      expect(high).toBe(100);
+      expect(low).toBe(0);
     });
   });
 

@@ -608,5 +608,22 @@ describe('DebateProgressUI', () => {
       expect(output).toContain(TEST_MESSAGE);
     });
   });
+
+  describe('appendMessage default parameter', () => {
+    it('should use default MessageType.INFO when type parameter is not provided', () => {
+      const ui = createUI();
+      // Access private appendMessage method through type assertion to test default parameter branch
+      const uiWithPrivateAccess = ui as unknown as {
+        appendMessage: (message: string, type?: MessageType) => void;
+      };
+      
+      // Call appendMessage without the type parameter to test default parameter branch
+      uiWithPrivateAccess.appendMessage('Test message with default type');
+      
+      const output = getOutput();
+      expect(output).toContain(MESSAGE_ICONS.INFO);
+      expect(output).toContain('Test message with default type');
+    });
+  });
 });
 
