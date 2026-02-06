@@ -1,17 +1,18 @@
-import { EvaluationNode } from './evaluation-node';
+import type { JudgeAgent } from '../../core/judge';
+import type { StateManager } from '../../core/state-manager';
+import { DEFAULT_TERMINATION_THRESHOLD } from '../../types/config.types';
 import {
   DebateState,
   DebateConfig,
   DEBATE_STATUS,
   TERMINATION_TYPES,
 } from '../../types/debate.types';
-import { DEFAULT_TERMINATION_THRESHOLD } from '../../types/config.types';
-import { NodeContext } from '../node';
-import { DEBATE_EVENTS } from '../events';
-import { NODE_TYPES } from '../types';
-import type { JudgeAgent } from '../../core/judge';
-import type { StateManager } from '../../core/state-manager';
 import type { TracingContext } from '../../types/tracing.types';
+import { DEBATE_EVENTS } from '../events';
+import { NodeContext } from '../node';
+import { NODE_TYPES } from '../types';
+
+import { EvaluationNode } from './evaluation-node';
 
 describe('EvaluationNode', () => {
   let node: EvaluationNode;

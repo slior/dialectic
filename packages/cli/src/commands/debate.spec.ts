@@ -3,14 +3,20 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR, ErrorWithCode, loadEnvironmentFile, RoleBasedAgent, Agent, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD, 
-  DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, collectClarifications, generateDebateReport, StateManager } from 'dialectic-core';
+import * as dialecticCore from 'dialectic-core';
+import { EXIT_CONFIG_ERROR, EXIT_INVALID_ARGS, EXIT_GENERAL_ERROR, ErrorWithCode, loadEnvironmentFile, RoleBasedAgent, Agent, DEFAULT_SUMMARIZATION_ENABLED, DEFAULT_SUMMARIZATION_THRESHOLD,
+  DEFAULT_SUMMARIZATION_MAX_LENGTH, DEFAULT_SUMMARIZATION_METHOD, collectClarifications, generateDebateReport, StateManager, DebateState } from 'dialectic-core';
 
+import * as indexModule from '../index';
 import { runCli } from '../index';
 
 
 import { loadConfig } from './debate';
 
+/**
+ * Test-only type exposing RoleBasedAgent.prototype.askClarifyingQuestions for spying.
+ */
+type RoleBasedAgentPrototypeTestAccess = { askClarifyingQuestions: (...args: unknown[]) => Promise<{ questions: unknown[] }> };
 
 // Mock response constants
 const MOCK_SOLUTION_TEXT = 'Solution text';
@@ -42,8 +48,10 @@ jest.mock('dialectic-core', () => {
       return undefined;
     }),
     collectClarifications: jest.fn().mockResolvedValue([]),
-    generateDebateReport: jest.fn().mockImplementation(actual.generateDebateReport)
-    // generateDebateReport is mocked but defaults to real implementation
+    generateDebateReport: jest.fn().mockImplementation(actual.generateDebateReport),
+    validateLangfuseConfig: jest.fn().mockImplementation(actual.validateLangfuseConfig),
+    createTracingContext: jest.fn().mockImplementation(actual.createTracingContext),
+    logWarning: jest.fn().mockImplementation(actual.logWarning),
   };
 });
 
@@ -1786,9 +1794,7 @@ describe('CLI clarifications phase', () => {
   });
 
   it('does not run clarifications without --clarify (default off)', async () => {
-    // Using 'as any' is necessary here to access protected methods for testing
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const spy = jest.spyOn(RoleBasedAgent.prototype as any, 'askClarifyingQuestions')
+    const spy = jest.spyOn(RoleBasedAgent.prototype as RoleBasedAgentPrototypeTestAccess, 'askClarifyingQuestions')
       .mockResolvedValue({ questions: [] });
 
     await runCli(['debate', 'Design Z']);
@@ -2977,36 +2983,29 @@ describe('CLI clarifications phase', () => {
         fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
         
         // Mock createTracingContext to return a context with a langfuse that throws on flush
-        // Using require() here is intentional: jest.spyOn() needs the module object, not the imported function
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { createTracingContext } = require('dialectic-core');
-        const originalCreateTracingContext = createTracingContext;
-        
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        jest.spyOn(require('dialectic-core'), 'createTracingContext').mockImplementation((...args) => {
-          const context = originalCreateTracingContext(...args);
+        const actualCreateTracingContext = jest.requireActual('dialectic-core').createTracingContext;
+        (dialecticCore.createTracingContext as jest.Mock).mockImplementation((...args: unknown[]) => {
+          const context = actualCreateTracingContext(...args);
           if (context) {
-            // Mock flushAsync to throw an error
             context.langfuse.flushAsync = jest.fn().mockRejectedValue(new Error('Flush failed'));
           }
           return context;
         });
-        
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const logWarningSpy = jest.spyOn(require('dialectic-core'), 'logWarning');
-        
+
         await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
-        
+
         // Should log warning about flush failure
-        expect(logWarningSpy).toHaveBeenCalledWith(
+        expect(dialecticCore.logWarning).toHaveBeenCalledWith(
           expect.stringContaining('Failed to flush Langfuse trace')
         );
-        
+
         // Should complete successfully even if flush fails
         expect(stdoutSpy).toHaveBeenCalled();
-        
-        logWarningSpy.mockRestore();
-        jest.restoreAllMocks();
+
+        (dialecticCore.createTracingContext as jest.Mock).mockReset();
+        (dialecticCore.createTracingContext as jest.Mock).mockImplementation(
+          jest.requireActual('dialectic-core').createTracingContext
+        );
       });
     });
 
@@ -3317,9 +3316,9 @@ describe('CLI clarifications phase', () => {
         const reportPath = path.join(tmpDir, 'report.md');
         
         // Mock StateManager.getDebate to return null (missing state)
-        const getDebateSpy = jest.spyOn(StateManager.prototype, 'getDebate').mockResolvedValueOnce(null as any);
+        const getDebateSpy = jest.spyOn(StateManager.prototype, 'getDebate').mockResolvedValueOnce(null as DebateState | null);
         
-        const warnUserSpy = jest.spyOn(require('../index'), 'warnUser').mockImplementation(() => {});
+        const warnUserSpy = jest.spyOn(indexModule, 'warnUser').mockImplementation(() => {});
         
         await runCli(['debate', 'Design a system', '--config', configPath, '--report', reportPath, '--rounds', '1']);
         
@@ -3344,7 +3343,7 @@ describe('CLI clarifications phase', () => {
           throw new Error('Report generation failed');
         });
         
-        const warnUserSpy = jest.spyOn(require('../index'), 'warnUser').mockImplementation(() => {});
+        const warnUserSpy = jest.spyOn(indexModule, 'warnUser').mockImplementation(() => {});
         
         await runCli(['debate', 'Design a system', '--config', configPath, '--report', reportPath, '--rounds', '1']);
         
@@ -3489,8 +3488,8 @@ describe('CLI clarifications phase', () => {
         
         // Mock StateManager.getDebate to return null for verbose summary
         const getDebateSpy = jest.spyOn(StateManager.prototype, 'getDebate')
-          .mockResolvedValueOnce(null as any) // First call for JSON output (if any)
-          .mockResolvedValueOnce(null as any); // Second call for verbose summary
+          .mockResolvedValueOnce(null as DebateState | null) // First call for JSON output (if any)
+          .mockResolvedValueOnce(null as DebateState | null); // Second call for verbose summary
         
         const stderrWriteSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
         
@@ -3511,7 +3510,7 @@ describe('CLI clarifications phase', () => {
         fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
         
         const reportPath = path.join(tmpDir, 'report.md');
-        const warnUserSpy = jest.spyOn(require('../index'), 'warnUser').mockImplementation(() => {});
+        const warnUserSpy = jest.spyOn(indexModule, 'warnUser').mockImplementation(() => {});
         
         await runCli(['debate', 'Design a system', '--config', configPath, '--report', reportPath, '--rounds', '1']);
         
@@ -3758,24 +3757,26 @@ describe('CLI clarifications phase', () => {
         fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
         
         // Mock validateLangfuseConfig to throw an error
-        const validateSpy = jest.spyOn(require('dialectic-core'), 'validateLangfuseConfig')
-          .mockImplementationOnce(() => {
-            throw new Error('Langfuse config invalid');
-          });
-        
-        const warnUserSpy = jest.spyOn(require('../index'), 'warnUser').mockImplementation(() => {});
-        
+        (dialecticCore.validateLangfuseConfig as jest.Mock).mockImplementationOnce(() => {
+          throw new Error('Langfuse config invalid');
+        });
+
+        const warnUserSpy = jest.spyOn(indexModule, 'warnUser').mockImplementation(() => {});
+
         await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
-        
+
         // Should log warning and continue without tracing
         expect(warnUserSpy).toHaveBeenCalledWith(
           expect.stringContaining('Langfuse tracing initialization failed')
         );
-        
+
         // Should complete successfully
         expect(stdoutSpy).toHaveBeenCalled();
-        
-        validateSpy.mockRestore();
+
+        (dialecticCore.validateLangfuseConfig as jest.Mock).mockReset();
+        (dialecticCore.validateLangfuseConfig as jest.Mock).mockImplementation(
+          jest.requireActual('dialectic-core').validateLangfuseConfig
+        );
         warnUserSpy.mockRestore();
       });
     });
@@ -4079,19 +4080,21 @@ describe('CLI clarifications phase', () => {
         fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
         
         // Mock createTracingContext to return undefined
-        const createTracingContextSpy = jest.spyOn(require('dialectic-core'), 'createTracingContext')
-          .mockReturnValueOnce(undefined);
-        
+        (dialecticCore.createTracingContext as jest.Mock).mockReturnValueOnce(undefined);
+
         process.env.LANGFUSE_PUBLIC_KEY = 'test-key';
         process.env.LANGFUSE_SECRET_KEY = 'test-secret';
         process.env.LANGFUSE_HOST = 'https://cloud.langfuse.com';
-        
+
         await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
-        
+
         // Should complete successfully even if tracing context is undefined
         expect(stdoutSpy).toHaveBeenCalled();
-        
-        createTracingContextSpy.mockRestore();
+
+        (dialecticCore.createTracingContext as jest.Mock).mockReset();
+        (dialecticCore.createTracingContext as jest.Mock).mockImplementation(
+          jest.requireActual('dialectic-core').createTracingContext
+        );
         delete process.env.LANGFUSE_PUBLIC_KEY;
         delete process.env.LANGFUSE_SECRET_KEY;
         delete process.env.LANGFUSE_HOST;

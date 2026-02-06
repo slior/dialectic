@@ -1,7 +1,8 @@
 import { AgentLogger } from '../core/agent';
+
 import { DebateEvent } from './events';
-import { NodeType, NODE_TYPES } from './types';
 import { NodeContext } from './node';
+import { NodeType, NODE_TYPES } from './types';
 
 /**
  * Transition rule defining how the state machine moves between nodes.

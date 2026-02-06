@@ -387,6 +387,33 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   /**
+   * Checks that the gateway is in a valid state to start a debate (no debate in progress, valid parameters, valid agents).
+   * Emits errors to the client when a check fails.
+   *
+   * @param problem - Problem statement from the request.
+   * @param rounds - Optional rounds override.
+   * @param agents - Agent configurations from the request.
+   * @param client - The WebSocket client socket to emit errors to.
+   * @returns True if all checks pass, false otherwise.
+   */
+  private isValidStateForDebate(problem: string | undefined, rounds: number | undefined, agents: AgentConfigInput[] | undefined, client: Socket): boolean {
+    if (this.debateInProgress) {
+      this.emitError(client, ERROR_MESSAGES.DEBATE_IN_PROGRESS);
+      return false;
+    }
+
+    if (!this.validateDebateParameters(problem, rounds, client)) {
+      return false;
+    }
+
+    if (!this.validateAgentsForDebateStart(agents, client)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Handles the startDebate WebSocket message.
    * Validates input, collects clarifications if enabled, and starts the debate.
    *
@@ -395,18 +422,9 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   @SubscribeMessage('startDebate')
   async handleStartDebate(@MessageBody() dto: StartDebateDto, @ConnectedSocket() client: Socket): Promise<void> {
-    if (this.debateInProgress) {
-      this.emitError(client, ERROR_MESSAGES.DEBATE_IN_PROGRESS);
-      return;
-    }
-
-    if (!this.validateDebateParameters(dto.problem, dto.rounds, client)) {
-      return;
-    }
-
+    
     const rounds = dto.rounds ?? DEFAULT_ROUNDS;
-
-    if (!this.validateAgentsForDebateStart(dto.agents, client)) {
+    if (!this.isValidStateForDebate(dto.problem, dto.rounds, dto.agents, client)) {
       return;
     }
 
@@ -430,22 +448,8 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const result = await this.orchestrator.runDebate(this.currentProblem);
       
       if (isExecutionResult(result)) {
-        const executionResult = result;
-        
-        if (executionResult.status === EXECUTION_STATUS.SUSPENDED) {
-          if (executionResult.suspendReason === SUSPEND_REASON.WAITING_FOR_INPUT) {
-            this.suspendedDebateId = executionResult.suspendPayload!.debateId;
-            this.suspendedQuestions = executionResult.suspendPayload!.questions;
-            client.emit(WS_EVENTS.CLARIFICATIONS_REQUIRED, {
-              questions: this.suspendedQuestions,
-            });
-            return;
-          }
-        }
-        
-        // Completed
-        if (executionResult.result) {
-          this.emitDebateResult(client, executionResult.result);
+        if (this.handleExecutionResult(result, client)) {
+          return;
         }
       } else {
         // DebateOrchestrator returns DebateResult directly
@@ -465,6 +469,32 @@ export class DebateGateway implements OnGatewayConnection, OnGatewayDisconnect {
         : `Debate failed: ${errorMessage}`;
       this.emitError(client, userMessage);
     }
+  }
+
+  /**
+   * Handles an execution result from the state-machine orchestrator: suspended (clarifications required) or completed.
+   * Emits to the client and updates gateway state when suspended.
+   *
+   * @param executionResult - The execution result from runDebate.
+   * @param client - The WebSocket client socket.
+   * @returns True if the result was a suspend (caller should return), false otherwise.
+   */
+  private handleExecutionResult(executionResult: ExecutionResult, client: Socket): boolean {
+    if (executionResult.status === EXECUTION_STATUS.SUSPENDED) {
+      if (executionResult.suspendReason === SUSPEND_REASON.WAITING_FOR_INPUT) {
+        this.suspendedDebateId = executionResult.suspendPayload!.debateId;
+        this.suspendedQuestions = executionResult.suspendPayload!.questions;
+        client.emit(WS_EVENTS.CLARIFICATIONS_REQUIRED, {
+          questions: this.suspendedQuestions,
+        });
+        return true;
+      }
+    }
+
+    if (executionResult.result) {
+      this.emitDebateResult(client, executionResult.result);
+    }
+    return false;
   }
 
   /**

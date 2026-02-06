@@ -1,4 +1,3 @@
-import { StateMachineOrchestrator } from './state-machine-orchestrator';
 import { Agent } from '../core/agent';
 import { JudgeAgent } from '../core/judge';
 import { StateManager } from '../core/state-manager';
@@ -10,11 +9,13 @@ import {
   SUSPEND_REASON,
   type AgentClarifications,
 } from '../types/debate.types';
-import { NodeResultImpl } from './node';
-import { DEBATE_EVENTS, createEvent } from './events';
-import { NODE_TYPES, type NodeType } from './types';
-import type { DebateNode, NodeContext } from './node';
 import type { TracingContext } from '../types/tracing.types';
+
+import { DEBATE_EVENTS, createEvent } from './events';
+import { NodeResultImpl } from './node';
+import type { DebateNode, NodeContext, NodeResult } from './node';
+import { StateMachineOrchestrator } from './state-machine-orchestrator';
+import { NODE_TYPES, type NodeType } from './types';
 
 function createMockState(overrides: Partial<DebateState> = {}): DebateState {
   const state = new DebateState();
@@ -28,7 +29,10 @@ function createMockState(overrides: Partial<DebateState> = {}): DebateState {
   return Object.assign(state, overrides);
 }
 
-function createNodeResult(eventType: keyof typeof DEBATE_EVENTS, updatedContext?: Partial<NodeContext>) {
+function createNodeResult(
+  eventType: keyof typeof DEBATE_EVENTS,
+  updatedContext?: Partial<NodeContext>
+): NodeResult {
   return NodeResultImpl.createResult(createEvent(eventType), updatedContext);
 }
 

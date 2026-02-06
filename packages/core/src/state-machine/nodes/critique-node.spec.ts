@@ -1,4 +1,7 @@
-import { CritiqueNode } from './critique-node';
+import type { Agent } from '../../core/agent';
+import type { OrchestratorHooks } from '../../core/orchestrator';
+import type { StateManager } from '../../core/state-manager';
+import { AGENT_ROLES } from '../../types/agent.types';
 import {
   DebateState,
   DebateConfig,
@@ -7,14 +10,12 @@ import {
   type Contribution,
   type DebateRound,
 } from '../../types/debate.types';
-import { AGENT_ROLES } from '../../types/agent.types';
-import { NodeContext } from '../node';
-import { DEBATE_EVENTS } from '../events';
-import { NODE_TYPES } from '../types';
-import type { Agent } from '../../core/agent';
-import type { StateManager } from '../../core/state-manager';
-import type { OrchestratorHooks } from '../../core/orchestrator';
 import type { TracingContext } from '../../types/tracing.types';
+import { DEBATE_EVENTS } from '../events';
+import { NodeContext } from '../node';
+import { NODE_TYPES } from '../types';
+
+import { CritiqueNode } from './critique-node';
 
 describe('CritiqueNode', () => {
   let node: CritiqueNode;

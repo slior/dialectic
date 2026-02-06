@@ -1,14 +1,15 @@
-import { RoundManagerNode } from './round-manager-node';
+import type { OrchestratorHooks } from '../../core/orchestrator';
+import type { StateManager } from '../../core/state-manager';
 import {
   DebateState,
   DebateConfig,
   DEBATE_STATUS,
 } from '../../types/debate.types';
-import { NodeContext } from '../node';
 import { DEBATE_EVENTS } from '../events';
+import { NodeContext } from '../node';
 import { NODE_TYPES } from '../types';
-import type { StateManager } from '../../core/state-manager';
-import type { OrchestratorHooks } from '../../core/orchestrator';
+
+import { RoundManagerNode } from './round-manager-node';
 
 describe('RoundManagerNode', () => {
   let node: RoundManagerNode;

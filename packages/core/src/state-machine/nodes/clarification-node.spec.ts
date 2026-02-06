@@ -1,18 +1,19 @@
-import { ClarificationNode } from './clarification-node';
+import type { Agent } from '../../core/agent';
+import { collectClarifications } from '../../core/clarifications';
+import type { StateManager } from '../../core/state-manager';
+import { AGENT_ROLES } from '../../types/agent.types';
 import {
   DebateState,
   DebateConfig,
   DEBATE_STATUS,
   type AgentClarifications,
 } from '../../types/debate.types';
-import { AGENT_ROLES } from '../../types/agent.types';
-import { NodeContext } from '../node';
-import { DEBATE_EVENTS } from '../events';
-import { NODE_TYPES } from '../types';
-import type { Agent } from '../../core/agent';
-import type { StateManager } from '../../core/state-manager';
-import { collectClarifications } from '../../core/clarifications';
 import { logWarning } from '../../utils/console';
+import { DEBATE_EVENTS } from '../events';
+import { NodeContext } from '../node';
+import { NODE_TYPES } from '../types';
+
+import { ClarificationNode } from './clarification-node';
 
 jest.mock('../../core/clarifications', () => ({
   collectClarifications: jest.fn(),

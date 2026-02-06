@@ -1,22 +1,28 @@
+import type { Langfuse } from 'langfuse';
+
+import { StateMachineOrchestrator } from '../state-machine/state-machine-orchestrator';
+import { AgentRole, AGENT_ROLES } from '../types/agent.types';
+import { DebateConfig, ORCHESTRATOR_TYPES, TERMINATION_TYPES, SYNTHESIS_METHODS } from '../types/debate.types';
+import { TracingContext } from '../types/tracing.types';
+import * as consoleUtils from '../utils/console';
+
 import { Agent, AgentLogger } from './agent';
 import { JudgeAgent } from './judge';
-import { StateManager } from './state-manager';
-import { DebateConfig, ORCHESTRATOR_TYPES, TERMINATION_TYPES, SYNTHESIS_METHODS } from '../types/debate.types';
-import { AgentRole, AGENT_ROLES } from '../types/agent.types';
-import { TracingContext } from '../types/tracing.types';
 import { OrchestratorHooks } from './orchestrator';
 import { DebateOrchestrator } from './orchestrator';
-import { StateMachineOrchestrator } from '../state-machine/state-machine-orchestrator';
 import {
   createOrchestrator,
   isStateMachineOrchestrator,
   OrchestratorFactoryParams,
 } from './orchestrator-factory';
+import { StateManager } from './state-manager';
 
 // Mock the orchestrator classes
 jest.mock('./orchestrator');
 jest.mock('../state-machine/state-machine-orchestrator');
 jest.mock('../utils/console', () => ({ writeStderr: jest.fn() }));
+
+const writeStderr = consoleUtils.writeStderr as jest.Mock;
 
 // Test constants
 const DEFAULT_TIMEOUT_MS = 300000;
@@ -124,8 +130,7 @@ describe('createOrchestrator', () => {
     });
 
     it('should emit orchestrator type to stderr when creating orchestrator', () => {
-      const { writeStderr } = require('../utils/console');
-      (writeStderr as jest.Mock).mockClear();
+      writeStderr.mockClear();
       const params = createFactoryParams({
         config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.STATE_MACHINE }),
       });
@@ -136,8 +141,7 @@ describe('createOrchestrator', () => {
     });
 
     it('should emit classic orchestrator type to stderr when orchestratorType is classic', () => {
-      const { writeStderr } = require('../utils/console');
-      (writeStderr as jest.Mock).mockClear();
+      writeStderr.mockClear();
       const params = createFactoryParams({
         config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.CLASSIC }),
       });
@@ -237,8 +241,8 @@ describe('createOrchestrator', () => {
 
     it('should pass optional tracingContext parameter correctly to DebateOrchestrator', () => {
       const tracingContext: TracingContext = {
-        langfuse: {} as any,
-        trace: {} as any,
+        langfuse: {} as Langfuse,
+        trace: {} as ReturnType<Langfuse['trace']>,
         currentSpans: new Map(),
       };
       const params = createFactoryParams({
@@ -261,8 +265,8 @@ describe('createOrchestrator', () => {
 
     it('should pass optional tracingContext parameter correctly to StateMachineOrchestrator', () => {
       const tracingContext: TracingContext = {
-        langfuse: {} as any,
-        trace: {} as any,
+        langfuse: {} as Langfuse,
+        trace: {} as ReturnType<Langfuse['trace']>,
         currentSpans: new Map(),
       };
       const params = createFactoryParams({
@@ -346,7 +350,11 @@ describe('createOrchestrator', () => {
 
     it('should pass all optional parameters correctly to DebateOrchestrator', () => {
       const hooks: OrchestratorHooks = { onRoundStart: jest.fn() };
-      const tracingContext: TracingContext = { langfuse: {} as any, trace: {} as any, currentSpans: new Map() };
+      const tracingContext: TracingContext = {
+        langfuse: {} as Langfuse,
+        trace: {} as ReturnType<Langfuse['trace']>,
+        currentSpans: new Map(),
+      };
       const contextDirectory = '/path/to/context';
       const params = createFactoryParams({
         config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.CLASSIC }),
@@ -370,7 +378,11 @@ describe('createOrchestrator', () => {
 
     it('should pass all optional parameters correctly to StateMachineOrchestrator', () => {
       const hooks: OrchestratorHooks = { onRoundStart: jest.fn() };
-      const tracingContext: TracingContext = { langfuse: {} as any, trace: {} as any, currentSpans: new Map() };
+      const tracingContext: TracingContext = {
+        langfuse: {} as Langfuse,
+        trace: {} as ReturnType<Langfuse['trace']>,
+        currentSpans: new Map(),
+      };
       const contextDirectory = '/path/to/context';
       const params = createFactoryParams({
         config: createDefaultConfig({ orchestratorType: ORCHESTRATOR_TYPES.STATE_MACHINE }),

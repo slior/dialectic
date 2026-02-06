@@ -1,6 +1,7 @@
-import { NodeResultImpl, type NodeContext } from './node';
-import { DEBATE_EVENTS, type DebateEvent } from './events';
 import { DebateState, DEBATE_STATUS, type DebateConfig } from '../types/debate.types';
+
+import { DEBATE_EVENTS, type DebateEvent } from './events';
+import { NodeResultImpl, type NodeContext } from './node';
 
 function createMockContext(overrides: Partial<NodeContext> = {}): NodeContext {
   const state = new DebateState();

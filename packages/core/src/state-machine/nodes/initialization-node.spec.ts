@@ -1,8 +1,9 @@
-import { InitializationNode } from './initialization-node';
-import { NODE_TYPES } from '../types';
+import { DebateState, DEBATE_STATUS, DebateConfig } from '../../types/debate.types';
 import { DEBATE_EVENTS } from '../events';
 import { NodeContext } from '../node';
-import { DebateState, DEBATE_STATUS, DebateConfig } from '../../types/debate.types';
+import { NODE_TYPES } from '../types';
+
+import { InitializationNode } from './initialization-node';
 
 function createMockContext(): NodeContext {
   const state = new DebateState();

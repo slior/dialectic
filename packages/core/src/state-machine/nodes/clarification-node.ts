@@ -1,11 +1,11 @@
 import { Agent } from '../../core/agent';
-import { AgentClarifications, DebateState } from '../../types/debate.types';
 import { collectClarifications } from '../../core/clarifications';
+import { DEFAULT_CLARIFICATIONS_MAX_ITERATIONS, DEFAULT_CLARIFICATIONS_MAX_PER_AGENT } from '../../types/config.types';
+import { AgentClarifications, DebateState } from '../../types/debate.types';
 import { logWarning } from '../../utils/console';
+import { DEBATE_EVENTS, createEvent } from '../events';
 import { DebateNode, NodeContext, NodeResult, NodeResultImpl } from '../node';
 import { NODE_TYPES } from '../types';
-import { DEBATE_EVENTS, createEvent } from '../events';
-import { DEFAULT_CLARIFICATIONS_MAX_ITERATIONS, DEFAULT_CLARIFICATIONS_MAX_PER_AGENT } from '../../types/config.types';
 
 /**
  * Clarification node that handles iterative agent clarifying questions.
@@ -16,26 +16,11 @@ export class ClarificationNode implements DebateNode {
   readonly nodeType = NODE_TYPES.CLARIFICATION;
 
   async execute(context: NodeContext): Promise<NodeResult> {
-    const { state, agents, config, stateManager } = context;
-
-    // Skip if clarifications disabled
-    if (!config.interactiveClarifications) {
-      return NodeResultImpl.createResult(createEvent(DEBATE_EVENTS.ALL_CLEAR));
-    }
-
-    // Check max iterations
+    const { state, agents, stateManager } = context;
     const iterations = state.clarificationIterations ?? 0;
-    const maxIterations = config.clarificationsMaxIterations ?? DEFAULT_CLARIFICATIONS_MAX_ITERATIONS;
-
-    if (iterations >= maxIterations) {
-      return NodeResultImpl.createResult(createEvent(DEBATE_EVENTS.ALL_CLEAR));
-    }
-
-    // Check if all agents are done (no more questions)
     const pendingAgents = this.getAgentsWithPendingQuestions(state, agents);
 
-    if (pendingAgents.length === 0 && state.hasClarifications()) {
-      // All done - proceed to debate
+    if (this.areClarificationsDoneOrClear(context, pendingAgents)) {
       return NodeResultImpl.createResult(createEvent(DEBATE_EVENTS.ALL_CLEAR));
     }
 
@@ -66,6 +51,25 @@ export class ClarificationNode implements DebateNode {
       createEvent(DEBATE_EVENTS.QUESTIONS_PENDING),
       { state: updatedState }
     );
+  }
+
+  /**
+   * Returns true if clarifications are disabled, max iterations reached, or all agents are done (no more questions).
+   */
+  private areClarificationsDoneOrClear(context: NodeContext, pendingAgents: Agent[]): boolean {
+    const { state, config } = context;
+    if (!config.interactiveClarifications) {
+      return true;
+    }
+    const iterations = state.clarificationIterations ?? 0;
+    const maxIterations = config.clarificationsMaxIterations ?? DEFAULT_CLARIFICATIONS_MAX_ITERATIONS;
+    if (iterations >= maxIterations) {
+      return true;
+    }
+    if (pendingAgents.length === 0 && state.hasClarifications()) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -120,10 +124,8 @@ export class ClarificationNode implements DebateNode {
    * @param newQuestions - New questions from agents
    * @returns Merged clarifications array
    */
-  private mergeClarifications(
-    existing: AgentClarifications[] | undefined,
-    newQuestions: AgentClarifications[]
-  ): AgentClarifications[] {
+  private mergeClarifications( existing: AgentClarifications[] | undefined, newQuestions: AgentClarifications[] ): AgentClarifications[]
+  {
     if (!existing || existing.length === 0) {
       return newQuestions;
     }
@@ -139,25 +141,7 @@ export class ClarificationNode implements DebateNode {
     for (const newGroup of newQuestions) {
       const existingGroup = existingMap.get(newGroup.agentId);
       if (existingGroup) {
-        // Merge items: keep existing answered items, add new unanswered ones
-        const existingItemMap = new Map<string, { answer: string }>();
-        for (const item of existingGroup.items) {
-          if (item.answer && item.answer.trim() !== '' && item.answer !== 'NA') {
-            existingItemMap.set(item.id, { answer: item.answer });
-          }
-        }
-        
-        const mergedItems = [...existingGroup.items];
-        for (const newItem of newGroup.items) {
-          if (!existingItemMap.has(newItem.id)) {
-            mergedItems.push(newItem);
-          }
-        }
-        
-        merged.push({
-          ...existingGroup,
-          items: mergedItems,
-        });
+        merged.push(this.mergeWithExistingGroup(existingGroup, newGroup));
       } else {
         // New agent - add all questions
         merged.push(newGroup);
@@ -178,5 +162,37 @@ export class ClarificationNode implements DebateNode {
     }
 
     return merged;
+  }
+
+  /**
+   * Merges a new clarifications group into an existing group for the same agent.
+   * 
+   * - Preserves all items from the existing group, including their answers.
+   * - Adds any new questions from the new group that are not already present in the existing group (by ID).
+   * - Does not overwrite existing answers.
+   *
+   * @param existingGroup - The current set of clarifications for an agent, possibly including answered items.
+   * @param newGroup - The newly proposed clarifications for the same agent (may introduce new questions).
+   * @returns An AgentClarifications object containing the union of items, with existing answers preserved.
+   */
+  private mergeWithExistingGroup( existingGroup: AgentClarifications, newGroup: AgentClarifications ): AgentClarifications {
+    const existingItemMap = new Map<string, { answer: string }>();
+    for (const item of existingGroup.items) {
+      if (item.answer && item.answer.trim() !== '') {
+        existingItemMap.set(item.id, { answer: item.answer });
+      }
+    }
+
+    const mergedItems = [...existingGroup.items];
+    for (const newItem of newGroup.items) {
+      if (!existingItemMap.has(newItem.id)) {
+        mergedItems.push(newItem);
+      }
+    }
+
+    return {
+      ...existingGroup,
+      items: mergedItems,
+    };
   }
 }

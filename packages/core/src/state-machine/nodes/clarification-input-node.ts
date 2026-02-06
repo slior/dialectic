@@ -1,7 +1,7 @@
 import { DebateState } from '../../types/debate.types';
+import { DEBATE_EVENTS, createEvent } from '../events';
 import { DebateNode, NodeContext, NodeResult, NodeResultImpl } from '../node';
 import { NODE_TYPES } from '../types';
-import { DEBATE_EVENTS, createEvent } from '../events';
 
 /**
  * Node representing "waiting for human input" state.

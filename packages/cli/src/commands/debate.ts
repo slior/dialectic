@@ -390,6 +390,55 @@ function createJudgeWithPromptResolution(sysConfig: SystemConfig, systemSummaryC
   return judge;
 }
 
+/** Parameters for createOrchestratorForDebate. */
+interface CreateOrchestratorForDebateParams {
+  agents: Agent[];
+  sysConfig: SystemConfig;
+  systemSummaryConfig: SummarizationConfig;
+  promptSources: PromptSources;
+  tracingContext: TracingContext | undefined;
+  progressUI: DebateProgressUI;
+  options: { verbose?: boolean };
+  stateManager: StateManager;
+  debateCfg: DebateConfig;
+  contextDirectory: string;
+  agentLogger: AgentLogger;
+}
+
+/**
+ * Creates judge, hooks, and orchestrator for the debate command.
+ *
+ * @param params - All inputs required to build the orchestrator.
+ * @returns The configured orchestrator (classic or state-machine per config).
+ */
+function createOrchestratorForDebate(params: CreateOrchestratorForDebateParams): ADebateOrchestrator {
+  const {
+    agents,
+    sysConfig,
+    systemSummaryConfig,
+    promptSources,
+    tracingContext,
+    progressUI,
+    options,
+    stateManager,
+    debateCfg,
+    contextDirectory,
+    agentLogger,
+  } = params;
+  const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources, tracingContext);
+  const hooks = createOrchestratorHooks(progressUI, options);
+  return createOrchestrator({
+    agents,
+    judge,
+    stateManager,
+    config: debateCfg,
+    hooks,
+    ...(tracingContext !== undefined && { tracingContext }),
+    contextDirectory,
+    logger: agentLogger,
+  });
+}
+
 /**
  * Returns the built-in default system configuration for the debate system.
  *
@@ -622,7 +671,12 @@ function debateConfigFromSysConfig(sysConfig: SystemConfig, options: { rounds?: 
   if (!debateCfg.rounds || debateCfg.rounds < 1) {
     throw createValidationError('Invalid arguments: --rounds must be >= 1', EXIT_INVALID_ARGS);
   }
-  
+
+  if (debateCfg.interactiveClarifications) {
+    debateCfg.orchestratorType = ORCHESTRATOR_TYPES.STATE_MACHINE;
+    writeStderr(`Interactive clarifications requested. Running debate with state machine orchestrator\n`);
+  }
+
   return debateCfg;
 }
 
@@ -728,6 +782,16 @@ function validateContextDirectory(contextPath: string): string {
   }
 
   return resolvedPath;
+}
+
+/**
+ * Resolves the context directory: validates and returns the given path, or the current working directory if not specified.
+ *
+ * @param context - Optional path to the context directory.
+ * @returns The absolute path to the context directory.
+ */
+function resolveContextDirectory(context: string | undefined): string {
+  return context ? validateContextDirectory(context) : process.cwd();
 }
 
 /**
@@ -1158,11 +1222,7 @@ export function debateCommand(program: Command): void {
         
         const resolvedProblem = await resolveProblemDescription(problem, options);
         
-        // Validate and resolve context directory if provided
-        // Default to current working directory if not specified
-        const contextDirectory: string = options.context 
-          ? validateContextDirectory(options.context)
-          : process.cwd();
+        const contextDirectory = resolveContextDirectory(options.context);
         
         const sysConfig = await loadConfig(options.config);
         const debateCfg = debateConfigFromSysConfig(sysConfig, options);
@@ -1205,21 +1265,10 @@ export function debateCommand(program: Command): void {
           contextDirectory
         });
 
-        // Create judge with prompt resolution
-        const judge = createJudgeWithPromptResolution(sysConfig, systemSummaryConfig, promptSources, tracingContext);
-
-        // Create orchestrator hooks to drive progress UI
-        const hooks = createOrchestratorHooks(progressUI, options);
-
-        // When interactive clarifications are requested, use state-machine orchestrator (suspend/resume)
-        if (debateCfg.interactiveClarifications) {
-          debateCfg.orchestratorType = ORCHESTRATOR_TYPES.STATE_MACHINE;
-          writeStderr(`Interactive clarifications requested. Running debate with state machine orchestrator\n`);
-        }
-
-        // Create orchestrator using factory (type from config.orchestratorType)
-        const orchestrator = createOrchestrator({ agents, judge, stateManager, config: debateCfg, hooks, 
-                                                  ...(tracingContext !== undefined && { tracingContext }), contextDirectory, logger: agentLogger });
+        const orchestrator = createOrchestratorForDebate({ agents, sysConfig, systemSummaryConfig,
+                                                            promptSources, tracingContext, progressUI,
+                                                            options, stateManager, debateCfg,
+                                                            contextDirectory, agentLogger });
 
         if (options.verbose) 
             outputVerboseDebateInfo( agentConfigs, promptSources, sysConfig, systemSummaryConfig, orchestrator);
@@ -1231,7 +1280,8 @@ export function debateCommand(program: Command): void {
 
         // Start progress UI and run debate; clarification phase (collect for classic, suspend/resume for state machine) is inside runDebateWithClarifications
         await progressUI.start();
-        const result: DebateResult = await runDebateWithClarifications(orchestrator, resolvedProblem, undefined, debateId, clarificationContext);
+        const result: DebateResult = await runDebateWithClarifications( orchestrator, resolvedProblem, 
+                                                                        undefined, debateId, clarificationContext);
         await progressUI.complete();
 
         // Flush trace if tracing was enabled

@@ -1,11 +1,11 @@
 import { Agent } from '../../core/agent';
+import { OrchestratorHooks } from '../../core/orchestrator';
 import { StateManager } from '../../core/state-manager';
 import { DebateContext, DebateState, DebateConfig } from '../../types/debate.types';
 import { TracingContext } from '../../types/tracing.types';
+import { DEBATE_EVENTS, createEvent } from '../events';
 import { DebateNode, NodeContext, NodeResult, NodeResultImpl } from '../node';
 import { NODE_TYPES } from '../types';
-import { DEBATE_EVENTS, createEvent } from '../events';
-import { OrchestratorHooks } from '../../core/orchestrator';
 
 /**
  * Summarization node that prepares contexts for all agents.

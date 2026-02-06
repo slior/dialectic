@@ -1,10 +1,11 @@
-import { DEBATE_EVENTS, createEvent } from './events';
-import { NODE_TYPES } from './types';
-import { DEFAULT_TRANSITIONS, TransitionGraph, TransitionRule } from './graph';
-import { NodeContext } from './node';
-import { DebateState, DebateConfig, DEBATE_STATUS } from '../types/debate.types';
 import { JudgeAgent } from '../core/judge';
 import { StateManager } from '../core/state-manager';
+import { DebateState, DebateConfig, DEBATE_STATUS } from '../types/debate.types';
+
+import { DEBATE_EVENTS, createEvent } from './events';
+import { DEFAULT_TRANSITIONS, TransitionGraph, TransitionRule } from './graph';
+import { NodeContext } from './node';
+import { NODE_TYPES } from './types';
 
 describe('TransitionGraph', () => {
   let graph: TransitionGraph;

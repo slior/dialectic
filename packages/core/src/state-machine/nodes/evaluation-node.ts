@@ -1,8 +1,8 @@
+import { DEFAULT_TERMINATION_THRESHOLD } from '../../types/config.types';
+import { TERMINATION_TYPES } from '../../types/debate.types';
+import { DEBATE_EVENTS, createEvent } from '../events';
 import { DebateNode, NodeContext, NodeResult, NodeResultImpl } from '../node';
 import { NODE_TYPES } from '../types';
-import { DEBATE_EVENTS, createEvent } from '../events';
-import { TERMINATION_TYPES } from '../../types/debate.types';
-import { DEFAULT_TERMINATION_THRESHOLD } from '../../types/config.types';
 
 /**
  * Evaluation node that checks for consensus and determines if debate should continue.

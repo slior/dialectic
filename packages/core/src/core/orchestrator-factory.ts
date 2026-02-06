@@ -1,12 +1,14 @@
-import { Agent, AgentLogger } from './agent';
-import { JudgeAgent } from './judge';
-import { StateManager } from './state-manager';
+import { StateMachineOrchestrator } from '../state-machine/state-machine-orchestrator';
 import { DebateConfig, OrchestratorType, ORCHESTRATOR_TYPES } from '../types/debate.types';
 import { TracingContext } from '../types/tracing.types';
+import { writeStderr } from '../utils/console';
+
+import { Agent, AgentLogger } from './agent';
+import { JudgeAgent } from './judge';
 import { OrchestratorHooks } from './orchestrator';
 import { DebateOrchestrator } from './orchestrator';
-import { StateMachineOrchestrator } from '../state-machine/state-machine-orchestrator';
-import { writeStderr } from '../utils/console';
+import { StateManager } from './state-manager';
+
 
 /**
  * Parameters for creating an orchestrator.

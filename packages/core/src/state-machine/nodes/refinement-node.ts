@@ -1,12 +1,12 @@
 import { Agent } from '../../core/agent';
+import { OrchestratorHooks } from '../../core/orchestrator';
 import { AgentRole, Critique } from '../../types/agent.types';
 import { Contribution, DebateState, DebateConfig, DebateContext, DebateRound } from '../../types/debate.types';
 import { CONTRIBUTION_TYPES } from '../../types/debate.types';
 import { TracingContext } from '../../types/tracing.types';
+import { DEBATE_EVENTS, createEvent } from '../events';
 import { DebateNode, NodeContext, NodeResult, NodeResultImpl } from '../node';
 import { NODE_TYPES } from '../types';
-import { DEBATE_EVENTS, createEvent } from '../events';
-import { OrchestratorHooks } from '../../core/orchestrator';
 
 const ACTIVITY_REFINING = 'refining';
 

@@ -1,23 +1,24 @@
 import { Agent, AgentLogger } from '../core/agent';
 import { JudgeAgent } from '../core/judge';
+import { OrchestratorHooks } from '../core/orchestrator';
 import { StateManager } from '../core/state-manager';
 import { DebateConfig, AgentClarifications, DebateState, ExecutionResult, EXECUTION_STATUS, SUSPEND_REASON } from '../types/debate.types';
 import { TracingContext } from '../types/tracing.types';
-import { OrchestratorHooks } from '../core/orchestrator';
+
+import { DEBATE_EVENTS } from './events';
 import { TransitionGraph } from './graph';
 import { DebateNode, NodeContext } from './node';
-import { NODE_TYPES, NodeType } from './types';
-import { DEBATE_EVENTS } from './events';
-import { InitializationNode } from './nodes/initialization-node';
-import { ClarificationNode } from './nodes/clarification-node';
 import { ClarificationInputNode } from './nodes/clarification-input-node';
+import { ClarificationNode } from './nodes/clarification-node';
+import { CritiqueNode } from './nodes/critique-node';
+import { EvaluationNode } from './nodes/evaluation-node';
+import { InitializationNode } from './nodes/initialization-node';
+import { ProposalNode } from './nodes/proposal-node';
+import { RefinementNode } from './nodes/refinement-node';
 import { RoundManagerNode } from './nodes/round-manager-node';
 import { SummarizationNode } from './nodes/summarization-node';
-import { ProposalNode } from './nodes/proposal-node';
-import { CritiqueNode } from './nodes/critique-node';
-import { RefinementNode } from './nodes/refinement-node';
-import { EvaluationNode } from './nodes/evaluation-node';
 import { SynthesisNode } from './nodes/synthesis-node';
+import { NODE_TYPES, NodeType } from './types';
 
 /**
  * State machine-based orchestrator that coordinates multi-round debates using an event-driven architecture.
@@ -89,6 +90,37 @@ export class StateMachineOrchestrator {
 
 
   /**
+   * Verifies that a node is present in the graph for the given node type.
+   *
+   * @param node - The node from the graph (may be undefined if not registered).
+   * @param nodeType - The node type key, used in the error message when node is missing.
+   * @returns The same node, narrowed to non-null `DebateNode`.
+   * @throws {Error} If `node` is null or undefined.
+   */
+  private verifyNode(node: DebateNode | undefined, nodeType: NodeType): DebateNode {
+    if (!node) {
+      throw new Error(`Node not found: ${nodeType}`);
+    }
+    return node;
+  }
+
+  /**
+   * Verifies that a debate state is present. Use after loading state from the state manager.
+   *
+   * @param state - The state to verify (may be null or undefined if not found).
+   * @param debateId - The debate ID, used in the error message when state is missing.
+   * @param messageSuffix - Optional suffix for the error message (e.g. `' after suspend'`).
+   * @returns The same state, narrowed to non-null `DebateState`.
+   * @throws {Error} If `state` is null or undefined.
+   */
+  private verifyState( state: DebateState | null | undefined, debateId: string, messageSuffix?: string ): DebateState {
+    if (!state) {
+      throw new Error(`Debate ${debateId} not found${messageSuffix ?? ''}`);
+    }
+    return state;
+  }
+
+  /**
    * Validates the final debate state after completion.
    * Ensures the state exists and has a final solution.
    * 
@@ -97,10 +129,11 @@ export class StateMachineOrchestrator {
    * @throws {Error} If the debate state is not found or missing a final solution.
    */
   private async validateFinalState(debateId: string): Promise<DebateState> {
-    const finalState = await this.stateManager.getDebate(debateId);
-    if (!finalState) {
-      throw new Error(`Debate ${debateId} not found after completion`);
-    }
+    const finalState = this.verifyState(
+      await this.stateManager.getDebate(debateId),
+      debateId,
+      ' after completion'
+    );
 
     if (!finalState.finalSolution) {
       throw new Error(`Debate ${debateId} completed without final solution`);
@@ -143,15 +176,9 @@ export class StateMachineOrchestrator {
    * @returns ExecutionResult that may be completed or suspended again.
    * @throws {Error} If the debate is not found or not suspended.
    */
-  async resume(
-    debateId: string,
-    answers: AgentClarifications[]
-  ): Promise<ExecutionResult> {
-    const state = await this.stateManager.getDebate(debateId);
-    if (!state) {
-      throw new Error(`Debate ${debateId} not found`);
-    }
-    
+  async resume( debateId: string, answers: AgentClarifications[] ): Promise<ExecutionResult> {
+    const state = this.verifyState(await this.stateManager.getDebate(debateId), debateId);
+
     if (!state.suspendedAtNode) {
       throw new Error(`Debate ${debateId} is not suspended`);
     }
@@ -172,23 +199,15 @@ export class StateMachineOrchestrator {
    * @param startNode - The node type to start execution from.
    * @returns ExecutionResult indicating completion or suspension.
    */
-  private async executeFromNode(
-    debateId: string,
-    startNode: NodeType
-  ): Promise<ExecutionResult> {
-    let state = await this.stateManager.getDebate(debateId);
-    if (!state) {
-      throw new Error(`Debate ${debateId} not found`);
-    }
+  private async executeFromNode( debateId: string, startNode: NodeType ): Promise<ExecutionResult> 
+  {
+    let state = this.verifyState(await this.stateManager.getDebate(debateId), debateId);
 
     let nodeContext = this.createNodeContext(state);
     let currentNode: NodeType | null = startNode;
 
     while (currentNode !== null) {
-      const node = this.nodes.get(currentNode);
-      if (!node) {
-        throw new Error(`Node not found: ${currentNode}`);
-      }
+      const node = this.verifyNode(this.nodes.get(currentNode), currentNode);
 
       const result = await node.execute(nodeContext);
 
@@ -198,11 +217,12 @@ export class StateMachineOrchestrator {
         await this.stateManager.setSuspendState(debateId, currentNode, new Date());
         
         // Refresh state to get updated clarifications
-        const updatedState = await this.stateManager.getDebate(debateId);
-        if (!updatedState) {
-          throw new Error(`Debate ${debateId} not found after suspend`);
-        }
-        
+        const updatedState = this.verifyState(
+          await this.stateManager.getDebate(debateId),
+          debateId,
+          ' after suspend'
+        );
+
         return {
           status: EXECUTION_STATUS.SUSPENDED,
           suspendReason: SUSPEND_REASON.WAITING_FOR_INPUT,

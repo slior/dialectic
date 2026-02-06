@@ -1,4 +1,7 @@
-import { SynthesisNode } from './synthesis-node';
+import type { JudgeAgent } from '../../core/judge';
+import type { OrchestratorHooks } from '../../core/orchestrator';
+import type { StateManager } from '../../core/state-manager';
+import { AGENT_ROLES } from '../../types/agent.types';
 import {
   DebateState,
   DebateConfig,
@@ -6,15 +9,13 @@ import {
   SUMMARIZATION_METHODS,
   type Solution,
 } from '../../types/debate.types';
-import { AGENT_ROLES } from '../../types/agent.types';
-import { NodeContext } from '../node';
-import { DEBATE_EVENTS } from '../events';
-import { NODE_TYPES } from '../types';
-import { enhanceProblemWithContext } from '../../utils/context-enhancer';
-import type { JudgeAgent } from '../../core/judge';
-import type { StateManager } from '../../core/state-manager';
-import type { OrchestratorHooks } from '../../core/orchestrator';
 import type { TracingContext } from '../../types/tracing.types';
+import { enhanceProblemWithContext } from '../../utils/context-enhancer';
+import { DEBATE_EVENTS } from '../events';
+import { NodeContext } from '../node';
+import { NODE_TYPES } from '../types';
+
+import { SynthesisNode } from './synthesis-node';
 
 jest.mock('../../utils/context-enhancer', () => ({
   enhanceProblemWithContext: jest.fn((problem: string) => problem),

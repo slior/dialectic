@@ -3,6 +3,7 @@ import { JudgeAgent } from '../core/judge';
 import { StateManager } from '../core/state-manager';
 import { DebateConfig, DebateContext, DebateState } from '../types/debate.types';
 import { TracingContext } from '../types/tracing.types';
+
 import { DebateEvent } from './events';
 import { NodeType } from './types';
 

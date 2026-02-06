@@ -1,7 +1,8 @@
-import { ClarificationInputNode } from './clarification-input-node';
 import { DebateState, AgentClarifications, DEBATE_STATUS, DebateConfig } from '../../types/debate.types';
-import { NodeContext } from '../node';
 import { DEBATE_EVENTS } from '../events';
+import { NodeContext } from '../node';
+
+import { ClarificationInputNode } from './clarification-input-node';
 
 describe('ClarificationInputNode', () => {
   let node: ClarificationInputNode;
@@ -29,11 +30,11 @@ describe('ClarificationInputNode', () => {
         timeoutPerRound: 300000,
       } as DebateConfig,
       agents: [],
-      judge: {} as any,
+      judge: {} as NodeContext['judge'],
       stateManager: {
         getDebate: async () => state,
         setClarifications: async () => {},
-      } as any,
+      } as unknown as NodeContext['stateManager'],
     };
   });
 

@@ -1,4 +1,6 @@
-import { SummarizationNode } from './summarization-node';
+import type { Agent } from '../../core/agent';
+import type { OrchestratorHooks } from '../../core/orchestrator';
+import type { StateManager } from '../../core/state-manager';
 import {
   DebateState,
   DebateConfig,
@@ -7,13 +9,12 @@ import {
   SUMMARIZATION_METHODS,
   type DebateSummary,
 } from '../../types/debate.types';
-import { NodeContext } from '../node';
-import { DEBATE_EVENTS } from '../events';
-import { NODE_TYPES } from '../types';
-import type { Agent } from '../../core/agent';
-import type { StateManager } from '../../core/state-manager';
-import type { OrchestratorHooks } from '../../core/orchestrator';
 import type { TracingContext } from '../../types/tracing.types';
+import { DEBATE_EVENTS } from '../events';
+import { NodeContext } from '../node';
+import { NODE_TYPES } from '../types';
+
+import { SummarizationNode } from './summarization-node';
 
 describe('SummarizationNode', () => {
   let node: SummarizationNode;

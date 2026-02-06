@@ -1,7 +1,7 @@
+import { OrchestratorHooks } from '../../core/orchestrator';
+import { DEBATE_EVENTS, createEvent } from '../events';
 import { DebateNode, NodeContext, NodeResult, NodeResultImpl } from '../node';
 import { NODE_TYPES } from '../types';
-import { DEBATE_EVENTS, createEvent } from '../events';
-import { OrchestratorHooks } from '../../core/orchestrator';
 
 /**
  * Round manager node that coordinates round execution.
