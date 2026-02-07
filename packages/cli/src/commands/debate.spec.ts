@@ -3442,6 +3442,94 @@ describe('CLI clarifications phase', () => {
         
         expect(stdoutSpy).toHaveBeenCalled();
       });
+
+      it('should call promptUserForAnswers and resume twice when orchestrator suspends twice', async () => {
+        const configPath = getTestConfigPath(tmpDir);
+        const configContent = createTestConfigContent(undefined, {
+          orchestratorType: 'state-machine',
+          interactiveClarifications: true,
+        });
+        fs.writeFileSync(configPath, JSON.stringify(configContent, null, 2));
+
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const coreModule = require('dialectic-core');
+        const { EXECUTION_STATUS, SUSPEND_REASON } = coreModule;
+
+        const questions1 = [
+          { agentId: 'a1', agentName: 'A', role: 'architect', items: [{ id: 'q1', question: 'Q1?', answer: '' }] },
+        ];
+        const questions2 = [
+          { agentId: 'a1', agentName: 'A', role: 'architect', items: [{ id: 'q1', question: 'Q1?', answer: '' }, { id: 'q2', question: 'Q2?', answer: '' }] },
+        ];
+        const completedResult = {
+          debateId: 'debate-1',
+          solution: { description: 'S', tradeoffs: [], recommendations: [], confidence: 90, synthesizedBy: 'judge' },
+          rounds: [],
+          metadata: { totalRounds: 0, durationMs: 100 },
+        };
+
+        const resumeMock = jest
+          .fn()
+          .mockResolvedValueOnce({
+            status: EXECUTION_STATUS.SUSPENDED,
+            suspendReason: SUSPEND_REASON.WAITING_FOR_INPUT,
+            suspendPayload: { debateId: 'debate-1', questions: questions2, iteration: 2 },
+          })
+          .mockResolvedValueOnce({
+            status: EXECUTION_STATUS.COMPLETED,
+            result: completedResult,
+          });
+
+        const fakeOrchestrator = {
+          runDebate: jest.fn().mockResolvedValue({
+            status: EXECUTION_STATUS.SUSPENDED,
+            suspendReason: SUSPEND_REASON.WAITING_FOR_INPUT,
+            suspendPayload: { debateId: 'debate-1', questions: questions1, iteration: 1 },
+          }),
+          resume: resumeMock,
+        };
+
+        const createOrchestratorSpy = jest
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          .spyOn(require('dialectic-core'), 'createOrchestrator')
+          .mockReturnValue(fakeOrchestrator);
+
+        const isStateMachineSpy = jest
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          .spyOn(require('dialectic-core'), 'isStateMachineOrchestrator')
+          .mockReturnValue(true);
+
+        const readlineModule = require('readline') as { __setMockAnswers?: (answers: string[]) => void };
+        if (readlineModule.__setMockAnswers) {
+          readlineModule.__setMockAnswers(['ans1', 'ans2', 'ans3']);
+        }
+
+        const mockDebateState = {
+          id: 'debate-1',
+          problem: 'Design a system',
+          status: 'completed',
+          rounds: [],
+          finalSolution: { description: 'S', tradeoffs: [], recommendations: [], confidence: 90, synthesizedBy: 'judge' },
+        } as unknown as DebateState;
+        const getDebateSpy = jest
+          .spyOn(StateManager.prototype, 'getDebate')
+          .mockImplementation(() => Promise.resolve(mockDebateState));
+        const setPromptSourcesSpy = jest
+          .spyOn(StateManager.prototype, 'setPromptSources')
+          .mockResolvedValue(undefined);
+
+        await runCli(['debate', 'Design a system', '--config', configPath, '--rounds', '1']);
+
+        getDebateSpy.mockRestore();
+        setPromptSourcesSpy.mockRestore();
+        expect(resumeMock).toHaveBeenCalledTimes(2);
+        expect(resumeMock).toHaveBeenNthCalledWith(1, 'debate-1', expect.any(Array));
+        expect(resumeMock).toHaveBeenNthCalledWith(2, 'debate-1', expect.any(Array));
+        expect(stdoutSpy).toHaveBeenCalled();
+
+        createOrchestratorSpy.mockRestore();
+        isStateMachineSpy.mockRestore();
+      });
     });
 
     describe('extractProblemFileName and extractContextDirectoryName', () => {

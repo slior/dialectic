@@ -175,7 +175,7 @@ export function getSharedSummarizationInstructions(): string {
  * @returns Formatted string containing shared clarification instructions
  */
 export function getSharedClarificationInstructions(): string {
-  return `\n\n## Clarification Guidelines\n\nRespond with ONLY JSON using this exact schema (no prose):\n{"questions":[{"text":"..."}]}\n\nIf none are needed, return {"questions":[]}.\n Prioritize questions that would change the design or scope for this problem. Do not ask about things that are already clear or that would not affect the solution.`;
+  return `\n\n## Clarification Guidelines\n\nRespond with ONLY JSON using this exact schema (no prose):\n{"questions":[{"text":"..."}]}\n\nIf none are needed, return {"questions":[]}.\n Prioritize questions that would change the design or scope for this problem. Do not ask about things that are already clear or that would not affect the solution. If previous Q&A is shown above, you may ask follow-up questions or return {"questions":[]} if no more are needed.`;
 }
 
 /**

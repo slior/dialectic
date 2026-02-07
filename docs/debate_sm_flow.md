@@ -48,6 +48,46 @@ stateDiagram-v2
   - `clarificationsMaxIterations`: Maximum clarification rounds (default: 3)
   - `clarificationsMaxPerAgent`: Max questions per agent per iteration
 
+### Follow-up clarification questions
+
+When `interactiveClarifications` is true, the clarification phase supports **follow-up questions**: after the user submits answers, agents can see those answers and optionally ask new questions. This creates additional rounds of Q&A until agents are satisfied or the iteration cap is reached.
+
+**When it applies:** Only when `interactiveClarifications` is true. When false, the clarification node skips collection and emits `ALL_CLEAR` immediately.
+
+**After the user submits answers:** Control returns to the Clarification node (from Clarification Input via `ANSWERS_SUBMITTED`). If all current questions are answered and `clarificationIterations < clarificationsMaxIterations`, the node runs a **follow-up round**: it calls all agents with the existing Q&A in context (`collectClarifications` receives `existingClarifications`). Agents may return new follow-up questions or an empty list.
+
+**How the loop works:** New questions (with empty answers) are merged into state. The node emits `QUESTIONS_PENDING`, so the machine transitions to Clarification Input and suspends. The user sees the new (and possibly previous) questions; after they submit answers, `resume()` runs and control returns to the Clarification node, which can run another follow-up round or emit `ALL_CLEAR`.
+
+**Cap:** When `clarificationIterations >= clarificationsMaxIterations`, the node does not run another collection and emits `ALL_CLEAR`.
+
+**CLI and web-api:** The same mechanism is used in both. The orchestrator only suspends with a questions payload and resumes with answers; how questions are presented (readline in CLI, WebSocket in web-api) and how answers are collected is outside core.
+
+```mermaid
+sequenceDiagram
+  participant CN as ClarificationNode
+  participant CIN as ClarificationInputNode
+  participant User as User
+
+  Note over CN: User just submitted answers
+  CN->>CN: pendingAgents empty, hasClarifications
+  alt iterations >= maxIterations
+    CN->>CN: emit ALL_CLEAR
+  else iterations < maxIterations
+    CN->>CN: collectQuestions(agents, existingClarifications)
+    alt new questions returned
+      CN->>CN: merge, iteration++, persist
+      CN->>CN: emit QUESTIONS_PENDING
+      CN->>CIN: transition
+      CIN->>User: suspend with questions
+      User->>User: submit answers
+      User->>CN: resume(debateId, answers)
+      CN->>CN: (loop: follow-up again or ALL_CLEAR)
+    else no new questions
+      CN->>CN: emit ALL_CLEAR
+    end
+  end
+```
+
 ### Round Manager Node
 - **Purpose**: Coordinates round execution and determines when to start new rounds
 - **Emits**: 

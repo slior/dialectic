@@ -255,7 +255,8 @@ describe('ClarificationNode', () => {
         state.problem,
         [agent1],
         expect.any(Number),
-        expect.any(Function)
+        expect.any(Function),
+        undefined
       );
     });
 
@@ -281,7 +282,8 @@ describe('ClarificationNode', () => {
         state.problem,
         [agent],
         10,
-        expect.any(Function)
+        expect.any(Function),
+        undefined
       );
     });
 
@@ -508,7 +510,8 @@ describe('ClarificationNode', () => {
         state.problem,
         [agent1, agent2],
         expect.any(Number),
-        expect.any(Function)
+        expect.any(Function),
+        undefined
       );
     });
 
@@ -536,7 +539,8 @@ describe('ClarificationNode', () => {
         state.problem,
         [agent2],
         expect.any(Number),
-        expect.any(Function)
+        expect.any(Function),
+        undefined
       );
     });
 
@@ -565,7 +569,8 @@ describe('ClarificationNode', () => {
         state.problem,
         [agent2],
         expect.any(Number),
-        expect.any(Function)
+        expect.any(Function),
+        undefined
       );
     });
 
@@ -589,6 +594,149 @@ describe('ClarificationNode', () => {
       const result = await node.execute(mockContext);
 
       expect(result.event.type).toBe(DEBATE_EVENTS.QUESTIONS_PENDING);
+    });
+
+    describe('follow-up round', () => {
+      it('should run follow-up when all answered and under max iterations', async () => {
+        const agent = createMockAgent('agent-1', 'Agent 1');
+        state = createState({
+          clarificationIterations: 1,
+          clarifications: [
+            createAgentClarifications('agent-1', [
+              { id: 'q1', question: 'Q1?', answer: 'A1' },
+            ]),
+          ],
+        });
+        mockContext = createContext({
+          state,
+          agents: [agent],
+          config: {
+            ...mockContext.config,
+            clarificationsMaxIterations: 3,
+          } as DebateConfig,
+        });
+        const followUpQuestion = createAgentClarifications('agent-1', [
+          { id: 'q2', question: 'Q2 follow-up?', answer: '' },
+        ]);
+        mockCollectClarifications.mockResolvedValue([followUpQuestion]);
+        const updatedState = createState({ id: state.id });
+        mockStateManager.getDebate.mockResolvedValue(updatedState);
+
+        const result = await node.execute(mockContext);
+
+        expect(result.event.type).toBe(DEBATE_EVENTS.QUESTIONS_PENDING);
+        expect(updatedState.clarificationIterations).toBe(2);
+        expect(mockStateManager.setClarifications).toHaveBeenCalledWith(state.id, expect.any(Array));
+        const merged = mockStateManager.setClarifications.mock.calls[0]![1] as AgentClarifications[];
+        const agent1Merged = merged.find((c) => c.agentId === 'agent-1')!;
+        expect(agent1Merged.items.find((i) => i.id === 'q1')?.answer).toBe('A1');
+        expect(agent1Merged.items.some((i) => i.id === 'f2-0')).toBe(true);
+        expect(agent1Merged.items.some((i) => i.question === 'Q2 follow-up?')).toBe(true);
+        expect(mockCollectClarifications).toHaveBeenCalledWith(
+          state.problem,
+          [agent],
+          expect.any(Number),
+          expect.any(Function),
+          state.clarifications
+        );
+      });
+
+      it('should return ALL_CLEAR when at max iterations without calling collect', async () => {
+        const agent = createMockAgent('agent-1', 'Agent 1');
+        state = createState({
+          clarificationIterations: 3,
+          clarifications: [
+            createAgentClarifications('agent-1', [
+              { id: 'q1', question: 'Q1?', answer: 'A1' },
+            ]),
+          ],
+        });
+        mockContext = createContext({
+          state,
+          agents: [agent],
+          config: {
+            ...mockContext.config,
+            clarificationsMaxIterations: 3,
+          } as DebateConfig,
+        });
+
+        const result = await node.execute(mockContext);
+
+        expect(result.event.type).toBe(DEBATE_EVENTS.ALL_CLEAR);
+        expect(mockCollectClarifications).not.toHaveBeenCalled();
+      });
+
+      it('should return ALL_CLEAR when agents return no new questions in follow-up', async () => {
+        const agent = createMockAgent('agent-1', 'Agent 1');
+        state = createState({
+          clarificationIterations: 1,
+          clarifications: [
+            createAgentClarifications('agent-1', [
+              { id: 'q1', question: 'Q1?', answer: 'A1' },
+            ]),
+          ],
+        });
+        mockContext = createContext({
+          state,
+          agents: [agent],
+          config: {
+            ...mockContext.config,
+            clarificationsMaxIterations: 3,
+          } as DebateConfig,
+        });
+        mockCollectClarifications.mockResolvedValue([
+          createAgentClarifications('agent-1', []),
+        ]);
+
+        const result = await node.execute(mockContext);
+
+        expect(result.event.type).toBe(DEBATE_EVENTS.ALL_CLEAR);
+        expect(mockCollectClarifications).toHaveBeenCalledWith(
+          state.problem,
+          [agent],
+          expect.any(Number),
+          expect.any(Function),
+          state.clarifications
+        );
+      });
+
+      it('should assign unique ids to follow-up questions so duplicate agent ids are merged', async () => {
+        const agent = createMockAgent('agent-1', 'Agent 1');
+        state = createState({
+          clarificationIterations: 1,
+          clarifications: [
+            createAgentClarifications('agent-1', [
+              { id: 'q1', question: 'Q1?', answer: 'A1' },
+              { id: 'q2', question: 'Q2?', answer: 'A2' },
+            ]),
+          ],
+        });
+        mockContext = createContext({
+          state,
+          agents: [agent],
+          config: {
+            ...mockContext.config,
+            clarificationsMaxIterations: 3,
+          } as DebateConfig,
+        });
+        mockCollectClarifications.mockResolvedValue([
+          createAgentClarifications('agent-1', [
+            { id: 'q1', question: 'Follow-up Q1?', answer: '' },
+            { id: 'q2', question: 'Follow-up Q2?', answer: '' },
+          ]),
+        ]);
+        mockStateManager.getDebate.mockResolvedValue(state);
+
+        const result = await node.execute(mockContext);
+
+        expect(result.event.type).toBe(DEBATE_EVENTS.QUESTIONS_PENDING);
+        const merged = mockStateManager.setClarifications.mock.calls[0]![1] as AgentClarifications[];
+        const agent1Merged = merged.find((c) => c.agentId === 'agent-1')!;
+        expect(agent1Merged.items).toHaveLength(4);
+        expect(agent1Merged.items.map((i) => i.id)).toEqual(['q1', 'q2', 'f2-0', 'f2-1']);
+        expect(agent1Merged.items.some((i) => i.id === 'f2-0' && i.question === 'Follow-up Q1?')).toBe(true);
+        expect(agent1Merged.items.some((i) => i.id === 'f2-1' && i.question === 'Follow-up Q2?')).toBe(true);
+      });
     });
   });
 });

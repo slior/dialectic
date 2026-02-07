@@ -19,27 +19,63 @@ export class ClarificationNode implements DebateNode {
     const { state, agents, stateManager } = context;
     const iterations = state.clarificationIterations ?? 0;
     const pendingAgents = this.getAgentsWithPendingQuestions(state, agents);
+    const maxIterations = context.config.clarificationsMaxIterations ?? DEFAULT_CLARIFICATIONS_MAX_ITERATIONS;
+
+    // Follow-up round: all current questions answered, ask agents again with existing Q&A (only when interactiveClarifications)
+    if (
+      context.config.interactiveClarifications &&
+      pendingAgents.length === 0 &&
+      state.hasClarifications()
+    ) {
+      if (iterations >= maxIterations) {
+        return NodeResultImpl.createResult(createEvent(DEBATE_EVENTS.ALL_CLEAR));
+      }
+      const followUpQuestions = await this.collectQuestions(agents, context, state.clarifications);
+      if (
+        !followUpQuestions ||
+        followUpQuestions.length === 0 ||
+        !followUpQuestions.some((q) => q.items.length > 0)
+      ) {
+        return NodeResultImpl.createResult(createEvent(DEBATE_EVENTS.ALL_CLEAR));
+      }
+      const followUpRoundIndex = iterations + 1;
+      const followUpWithUniqueIds = this.assignFollowUpQuestionIds(followUpQuestions, followUpRoundIndex);
+      const mergedClarifications = this.mergeClarifications(state.clarifications, followUpWithUniqueIds);
+      const updatedIterations = iterations + 1;
+      await stateManager.setClarifications(state.id, mergedClarifications);
+      const updatedState = await stateManager.getDebate(state.id);
+      if (!updatedState) {
+        throw new Error(`Debate ${state.id} not found`);
+      }
+      updatedState.clarificationIterations = updatedIterations;
+      return NodeResultImpl.createResult(
+        createEvent(DEBATE_EVENTS.QUESTIONS_PENDING),
+        { state: updatedState }
+      );
+    }
 
     if (this.areClarificationsDoneOrClear(context, pendingAgents)) {
       return NodeResultImpl.createResult(createEvent(DEBATE_EVENTS.ALL_CLEAR));
     }
 
-    // Ask agents for (more) questions, passing existing Q&A history
-    //TODO: with interactive clarifications, change this to an interactive process, where we ask a question, get answer and so forth.
-    const questions = await this.collectQuestions(pendingAgents.length > 0 ? pendingAgents : agents, context);
-    
+    // Ask agents for (more) questions
+    const questions = await this.collectQuestions(
+      pendingAgents.length > 0 ? pendingAgents : agents,
+      context
+    );
+
     // If no questions were collected (all agents signaled ALL_CLEAR), proceed to debate
-    if (!questions || questions.length === 0 || !questions.some(q => q.items.length > 0)) {
+    if (!questions || questions.length === 0 || !questions.some((q) => q.items.length > 0)) {
       return NodeResultImpl.createResult(createEvent(DEBATE_EVENTS.ALL_CLEAR));
     }
-    
+
     // Merge with existing clarifications
     const mergedClarifications = this.mergeClarifications(state.clarifications, questions);
-    
+
     // Update state
     const updatedIterations = iterations + 1;
     await stateManager.setClarifications(state.id, mergedClarifications);
-    
+
     // Get updated state
     const updatedState = await stateManager.getDebate(state.id);
     if (!updatedState) {
@@ -109,12 +145,40 @@ export class ClarificationNode implements DebateNode {
   }
 
   /**
-   * Collects questions from agents that have pending questions.
-   * In practice, this would be handled externally, but we provide a basic implementation here.
+   * Assigns unique ids to follow-up questions so they never collide with existing ones.
+   * Uses format f${roundIndex}-${globalIndex} (e.g. f2-0, f2-1, f3-0) across all groups/items.
    */
-  private async collectQuestions(agents: Agent[], context: NodeContext): Promise<AgentClarifications[]> {
+  private assignFollowUpQuestionIds(
+    followUpQuestions: AgentClarifications[],
+    roundIndex: number
+  ): AgentClarifications[] {
+    let globalIndex = 0;
+    return followUpQuestions.map((group) => ({
+      ...group,
+      items: group.items.map((item) => ({
+        ...item,
+        id: `f${roundIndex}-${globalIndex++}`,
+      })),
+    }));
+  }
+
+  /**
+   * Collects questions from agents. When existingClarifications is provided (follow-up round),
+   * agents receive previous Q&A in context and may return follow-up questions or an empty list.
+   */
+  private async collectQuestions(
+    agents: Agent[],
+    context: NodeContext,
+    existingClarifications?: AgentClarifications[]
+  ): Promise<AgentClarifications[]> {
     const maxPerAgent = context.config.clarificationsMaxPerAgent ?? DEFAULT_CLARIFICATIONS_MAX_PER_AGENT;
-    return collectClarifications(context.state.problem, agents, maxPerAgent, (msg) => logWarning(msg));
+    return collectClarifications(
+      context.state.problem,
+      agents,
+      maxPerAgent,
+      (msg) => logWarning(msg),
+      existingClarifications
+    );
   }
 
   /**

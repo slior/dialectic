@@ -689,6 +689,44 @@ describe('StateMachineOrchestrator', () => {
       expect(stateManager.clearSuspendState).toHaveBeenCalledWith('debate-1');
       expect(result.status).toBe(EXECUTION_STATUS.COMPLETED);
     });
+
+    it('should support multiple suspend/resume rounds for follow-up clarifications', async () => {
+      const state = createMockState({
+        suspendedAtNode: NODE_TYPES.CLARIFICATION_INPUT,
+        suspendedAt: new Date(),
+        clarifications: [{ agentId: 'a1', agentName: 'A', role: 'architect', items: [{ id: 'q1', question: 'Q1?', answer: '' }] }],
+        clarificationIterations: 1,
+      });
+      const stateManager = createMockStateManager(state);
+      const clarificationInputExecute = jest
+        .fn()
+        .mockResolvedValueOnce(createNodeResult('ANSWERS_SUBMITTED'))
+        .mockResolvedValueOnce(createNodeResult('WAITING_FOR_INPUT'));
+      const clarificationExecute = jest.fn().mockResolvedValueOnce(createNodeResult('QUESTIONS_PENDING'));
+
+      const orchestrator = new StateMachineOrchestrator(
+        mockAgents,
+        mockJudge,
+        stateManager,
+        defaultConfig
+      );
+      (orchestrator as unknown as { nodes: Map<NodeType, DebateNode> }).nodes = new Map([
+        [NODE_TYPES.CLARIFICATION_INPUT, createMockNode(clarificationInputExecute)],
+        [NODE_TYPES.CLARIFICATION, createMockNode(clarificationExecute)],
+      ]);
+
+      const answers: AgentClarifications[] = [
+        { agentId: 'a1', agentName: 'A', role: 'architect', items: [{ id: 'q1', question: 'Q1?', answer: 'A1' }] },
+      ];
+      const result = await orchestrator.resume('debate-1', answers);
+
+      expect(result.status).toBe(EXECUTION_STATUS.SUSPENDED);
+      expect(result.suspendReason).toBe(SUSPEND_REASON.WAITING_FOR_INPUT);
+      expect(result.suspendPayload?.questions).toBeDefined();
+      expect(stateManager.setClarifications).toHaveBeenCalledWith('debate-1', answers);
+      expect(clarificationInputExecute).toHaveBeenCalledTimes(2);
+      expect(clarificationExecute).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('createNodeContext (via node execution)', () => {
