@@ -3499,6 +3499,7 @@ describe('CLI clarifications phase', () => {
           .spyOn(require('dialectic-core'), 'isStateMachineOrchestrator')
           .mockReturnValue(true);
 
+          //eslint-disable-next-line @typescript-eslint/no-var-requires -- readline is mocked
         const readlineModule = require('readline') as { __setMockAnswers?: (answers: string[]) => void };
         if (readlineModule.__setMockAnswers) {
           readlineModule.__setMockAnswers(['ans1', 'ans2', 'ans3']);
