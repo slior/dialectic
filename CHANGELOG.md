@@ -2,6 +2,23 @@
 
 
 
+## [0.7.0]
+
+### Added
+- **Follow-Up Clarification Questions**: Implemented follow-up clarification questions in the debate flow for deeper problem understanding
+- **Unit-Test-Agent and Increase-Test-Coverages Skill**: Added unit-test-agent and increase-test-coverages skill for raising Jest coverage
+- **Reduce Function Complexity Skill**: Added reduce-function-complexity skill for lowering cyclomatic and cognitive complexity
+- **Event-Driven State Machine Orchestration**: Implemented event-driven state machine orchestration for the debate
+
+### Changed
+- **Prompts**: Updated prompts for clarity and specificity
+- **Test Coverage**: Enhanced unit tests across core package, web-api (DebateController, DebateGateway), agents, state manager, JudgeAgent, prompt-loader, tracing-decorator-agent, and tool-implementation utilities
+
+### Documentation
+- **AGENTS.md**: Updated AGENTS.md for improved project overview and command-line usage
+
+---
+
 ## [0.6.0]
 
 ### Added
