@@ -1,6 +1,6 @@
 {
   "name": "dialectic-monorepo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Dialectic - Multi-agent debate system for software design",
   "workspaces": [
