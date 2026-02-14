@@ -1,5 +1,5 @@
 import { AgentConfig, AGENT_ROLES, AgentRole, LLM_PROVIDERS } from '../types/agent.types';
-import { ClarificationQuestionsResponse } from '../types/debate.types';
+import { AgentClarifications, ClarificationQuestionsResponse } from '../types/debate.types';
 
 import { Agent } from './agent';
 import { collectClarifications } from './clarifications';
@@ -435,6 +435,42 @@ describe('collectClarifications', () => {
       await collectClarifications(problem, [agent], MAX_PER_AGENT, warn);
 
       expect(agent.askClarifyingQuestions).toHaveBeenCalledWith(problem, { problem });
+    });
+
+    it('should pass existingClarifications in context when provided', async () => {
+      const questions: ClarificationQuestionsResponse = {
+        questions: [{ id: 'q2', text: 'Follow-up?' }],
+      };
+      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, questions);
+      const warn = createMockWarn();
+      const problem = 'Design a distributed cache';
+      const existingClarifications: AgentClarifications[] = [
+        {
+          agentId: 'agent-1',
+          agentName: 'Architect',
+          role: AGENT_ROLES.ARCHITECT,
+          items: [{ id: 'q1', question: 'What scale?', answer: '1M users' }],
+        },
+      ];
+
+      await collectClarifications(problem, [agent], MAX_PER_AGENT, warn, existingClarifications);
+
+      expect(agent.askClarifyingQuestions).toHaveBeenCalledWith(problem, {
+        problem,
+        clarifications: existingClarifications,
+      });
+    });
+
+    it('should pass only problem in context when existingClarifications omitted', async () => {
+      const questions: ClarificationQuestionsResponse = {
+        questions: [{ id: 'q1', text: 'Question' }],
+      };
+      const agent = createMockAgent('agent-1', 'Architect', AGENT_ROLES.ARCHITECT, questions);
+      const warn = createMockWarn();
+
+      await collectClarifications(TEST_PROBLEM, [agent], MAX_PER_AGENT, warn);
+
+      expect(agent.askClarifyingQuestions).toHaveBeenCalledWith(TEST_PROBLEM, { problem: TEST_PROBLEM });
     });
   });
 });

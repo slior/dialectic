@@ -59,24 +59,27 @@ function reviveDatesInDebateState(debateState: DebateState): void {
  * @throws {Error} If the file doesn't exist, is invalid JSON, or lacks required fields.
  */
 function loadAndValidateDebateState(debatePath: string): DebateState {
-  const debate: DebateState = readJsonFile<DebateState>(debatePath, 'Debate file');
+  const debateData = readJsonFile<DebateState>(debatePath, 'Debate file');
   
   // Validate required fields
-  if (!debate.id || typeof debate.id !== 'string') {
+  if (!debateData.id || typeof debateData.id !== 'string') {
     throw createValidationError(ERROR_MISSING_ID_FIELD, EXIT_INVALID_ARGS);
   }
-  if (!debate.problem || typeof debate.problem !== 'string') {
+  if (!debateData.problem || typeof debateData.problem !== 'string') {
     throw createValidationError(ERROR_MISSING_PROBLEM_FIELD, EXIT_INVALID_ARGS);
   }
-  if (!debate.status || typeof debate.status !== 'string') {
+  if (!debateData.status || typeof debateData.status !== 'string') {
     throw createValidationError(ERROR_MISSING_STATUS_FIELD, EXIT_INVALID_ARGS);
   }
-  if (!Array.isArray(debate.rounds)) {
+  if (!Array.isArray(debateData.rounds)) {
     throw createValidationError(ERROR_MISSING_ROUNDS_FIELD, EXIT_INVALID_ARGS);
   }
   
   // Revive Date objects if they were serialized as strings
-  reviveDatesInDebateState(debate);
+  reviveDatesInDebateState(debateData);
+  
+  // Convert plain object to DebateState instance to ensure methods are available
+  const debate = Object.assign(new DebateState(), debateData);
   
   return debate;
 }

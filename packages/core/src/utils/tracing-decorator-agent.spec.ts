@@ -276,6 +276,40 @@ describe('TracingDecoratorAgent', () => {
       );
     });
 
+    it('should include debateId as unknown in span metadata when context has no tracingContext', async () => {
+      const problem = 'Test problem';
+      const contextNoTracing = { problem } as DebateContext;
+
+      await decoratorAgent.propose(problem, contextNoTracing);
+
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            debateId: 'unknown',
+          }),
+        })
+      );
+    });
+
+    it('should omit roundNumber in span metadata when history is empty', async () => {
+      const problem = 'Test problem';
+      const context: DebateContext = {
+        problem,
+        tracingContext,
+        history: [],
+      };
+
+      await decoratorAgent.propose(problem, context);
+
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.not.objectContaining({
+            roundNumber: expect.anything(),
+          }),
+        })
+      );
+    });
+
     it('should end span with ERROR when fn throws (inner catch); outer catch retries fn which also throws', async () => {
       (mockProvider as { complete: jest.Mock }).complete.mockRejectedValue(new Error('LLM failed'));
 
@@ -346,6 +380,31 @@ describe('TracingDecoratorAgent', () => {
         })
       );
       expect(result).toBeDefined();
+    });
+
+    it('should build critiques text when critiques array is non-empty', async () => {
+      const original: Proposal = {
+        content: 'Original proposal',
+        metadata: {},
+      };
+      const critiques: Critique[] = [
+        { content: 'First critique', metadata: {} },
+        { content: 'Second critique', metadata: {} },
+      ];
+      const context: DebateContext = {
+        problem: 'Test problem',
+        tracingContext,
+      };
+
+      const result = await decoratorAgent.refine(original, critiques, context);
+
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'agent-refine-test-agent',
+        })
+      );
+      expect(result).toBeDefined();
+      expect(result.content).toBe('test response');
     });
   });
 
@@ -484,6 +543,27 @@ describe('TracingDecoratorAgent', () => {
       expect(mockSpan.end).toHaveBeenCalledWith({
         level: SPAN_LEVEL.ERROR,
         statusMessage: errMsg,
+      });
+    });
+
+    it('should end tool span with default message when result status is error but error field is missing', () => {
+      const tool = makeTool(JSON.stringify({ status: TOOL_RESULT_STATUS.ERROR }));
+      const toolResultsForThisIteration: ToolResult[] = [];
+      const allToolResults: ToolResult[] = [];
+
+      (decoratorAgent as TracingDecoratorAgentTestAccess).executeTool(
+        tool,
+        {},
+        toolCall,
+        baseContext,
+        undefined,
+        toolResultsForThisIteration,
+        allToolResults
+      );
+
+      expect(mockSpan.end).toHaveBeenCalledWith({
+        level: SPAN_LEVEL.ERROR,
+        statusMessage: 'Tool execution failed',
       });
     });
 

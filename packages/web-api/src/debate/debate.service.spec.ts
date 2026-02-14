@@ -5,7 +5,9 @@ jest.mock('dialectic-core', () => {
     ...actual,
     logWarning: jest.fn(),
     StateManager: jest.fn(),
+    StateMachineOrchestrator: jest.fn(),
     DebateOrchestrator: jest.fn(),
+    createOrchestrator: jest.fn(),
     JudgeAgent: jest.fn(),
     RoleBasedAgent: {
       defaultSystemPrompt: jest.fn(),
@@ -20,7 +22,11 @@ jest.mock('dialectic-core', () => {
 
 import {
   StateManager,
+  StateMachineOrchestrator,
   DebateOrchestrator,
+  createOrchestrator,
+  ExecutionResult,
+  EXECUTION_STATUS,
   JudgeAgent,
   RoleBasedAgent,
   AgentConfig,
@@ -38,6 +44,7 @@ import {
   buildToolRegistry,
   logWarning,
   LLMProvider,
+  DebateState,
 } from 'dialectic-core';
 
 import { DebateService } from './debate.service';
@@ -93,19 +100,32 @@ function createMockAgentConfigs(): AgentConfig[] {
  * Creates a mock StateManager instance.
  */
 function createMockStateManager(): jest.Mocked<StateManager> {
+  const mockState = new DebateState();
+  mockState.id = TEST_DEBATE_ID;
+  mockState.problem = '';
+  mockState.status = 'pending';
+  mockState.currentRound = 0;
+  mockState.rounds = [];
+  mockState.createdAt = new Date();
+  mockState.updatedAt = new Date();
+  
   return {
-    createDebate: jest.fn(),
+    createDebate: jest.fn().mockResolvedValue(mockState),
     beginRound: jest.fn(),
     addContribution: jest.fn(),
     completeDebate: jest.fn(),
     getState: jest.fn(),
+    getDebate: jest.fn().mockResolvedValue(mockState),
+    setClarifications: jest.fn(),
+    setSuspendState: jest.fn(),
+    clearSuspendState: jest.fn(),
   } as unknown as jest.Mocked<StateManager>;
 }
 
 /**
- * Creates a mock DebateOrchestrator instance.
+ * Creates a mock StateMachineOrchestrator instance.
  */
-function createMockDebateOrchestrator(): jest.Mocked<DebateOrchestrator> {
+function createMockDebateOrchestrator(): jest.Mocked<StateMachineOrchestrator> {
   const mockResult: DebateResult = {
     debateId: TEST_DEBATE_ID,
     solution: {
@@ -123,8 +143,12 @@ function createMockDebateOrchestrator(): jest.Mocked<DebateOrchestrator> {
   };
 
   return {
-    runDebate: jest.fn().mockResolvedValue(mockResult),
-  } as unknown as jest.Mocked<DebateOrchestrator>;
+    runDebate: jest.fn().mockResolvedValue({
+      status: EXECUTION_STATUS.COMPLETED,
+      result: mockResult,
+    } as ExecutionResult),
+    resume: jest.fn(),
+  } as unknown as jest.Mocked<StateMachineOrchestrator>;
 }
 
 /**
@@ -186,7 +210,7 @@ function createMockDebateResult(): DebateResult {
 describe('DebateService', () => {
   let service: DebateService;
   let mockStateManager: jest.Mocked<StateManager>;
-  let mockOrchestrator: jest.Mocked<DebateOrchestrator>;
+  let mockOrchestrator: jest.Mocked<StateMachineOrchestrator>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -195,9 +219,12 @@ describe('DebateService', () => {
     mockStateManager = createMockStateManager();
     (StateManager as jest.Mock).mockImplementation(() => mockStateManager);
 
-    // Setup DebateOrchestrator mock
+    // Setup StateMachineOrchestrator mock
     mockOrchestrator = createMockDebateOrchestrator();
-    (DebateOrchestrator as jest.Mock).mockImplementation(() => mockOrchestrator);
+    (StateMachineOrchestrator as jest.Mock).mockImplementation(() => mockOrchestrator);
+    
+    // Mock createOrchestrator factory to return the mock orchestrator
+    (createOrchestrator as jest.Mock).mockReturnValue(mockOrchestrator);
 
     // Setup RoleBasedAgent mocks
     (RoleBasedAgent.defaultSystemPrompt as jest.Mock).mockReturnValue(MOCK_SYSTEM_PROMPT);
@@ -372,18 +399,22 @@ describe('DebateService', () => {
     it('should run debate successfully without hooks or clarifications', async () => {
       const mockResult = createMockDebateResult();
       const mockAgents = createMockAgentConfigs();
-      mockOrchestrator.runDebate.mockResolvedValue(mockResult);
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: mockResult,
+      } as ExecutionResult);
 
       const result = await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
 
-      expect(DebateOrchestrator).toHaveBeenCalledWith(
-        expect.any(Array),
-        expect.anything(),
-        mockStateManager,
+      expect(createOrchestrator).toHaveBeenCalledWith(
         expect.objectContaining({
-          rounds: DEFAULT_ROUNDS,
-        }),
-        undefined
+          agents: expect.any(Array),
+          judge: expect.anything(),
+          stateManager: mockStateManager,
+          config: expect.objectContaining({
+            rounds: DEFAULT_ROUNDS,
+          }),
+        })
       );
       expect(mockOrchestrator.runDebate).toHaveBeenCalledWith(TEST_PROBLEM, undefined, undefined);
       expect(result).toEqual(mockResult);
@@ -396,16 +427,21 @@ describe('DebateService', () => {
         onRoundStart: jest.fn(),
         onPhaseStart: jest.fn(),
       };
-      mockOrchestrator.runDebate.mockResolvedValue(mockResult);
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: mockResult,
+      } as ExecutionResult);
 
       const result = await service.runDebate(TEST_PROBLEM, hooks, undefined, undefined, mockAgents);
 
-      expect(DebateOrchestrator).toHaveBeenCalledWith(
-        expect.any(Array),
-        expect.anything(),
-        mockStateManager,
-        expect.any(Object),
-        hooks
+      expect(createOrchestrator).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agents: expect.any(Array),
+          judge: expect.anything(),
+          stateManager: mockStateManager,
+          config: expect.any(Object),
+          hooks,
+        })
       );
       expect(result).toEqual(mockResult);
     });
@@ -414,7 +450,10 @@ describe('DebateService', () => {
       const mockResult = createMockDebateResult();
       const mockAgents = createMockAgentConfigs();
       const clarifications = createMockAgentClarifications();
-      mockOrchestrator.runDebate.mockResolvedValue(mockResult);
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: mockResult,
+      } as ExecutionResult);
 
       const result = await service.runDebate(TEST_PROBLEM, undefined, clarifications, undefined, mockAgents);
 
@@ -429,36 +468,44 @@ describe('DebateService', () => {
     it('should override rounds when provided', async () => {
       const mockResult = createMockDebateResult();
       const mockAgents = createMockAgentConfigs();
-      mockOrchestrator.runDebate.mockResolvedValue(mockResult);
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: mockResult,
+      } as ExecutionResult);
 
       await service.runDebate(TEST_PROBLEM, undefined, undefined, TEST_ROUNDS_OVERRIDE, mockAgents);
 
-      expect(DebateOrchestrator).toHaveBeenCalledWith(
-        expect.any(Array),
-        expect.anything(),
-        mockStateManager,
+      expect(createOrchestrator).toHaveBeenCalledWith(
         expect.objectContaining({
-          rounds: TEST_ROUNDS_OVERRIDE,
-        }),
-        undefined
+          agents: expect.any(Array),
+          judge: expect.anything(),
+          stateManager: mockStateManager,
+          config: expect.objectContaining({
+            rounds: TEST_ROUNDS_OVERRIDE,
+          }),
+        })
       );
     });
 
     it('should use default rounds when rounds not provided', async () => {
       const mockResult = createMockDebateResult();
       const mockAgents = createMockAgentConfigs();
-      mockOrchestrator.runDebate.mockResolvedValue(mockResult);
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: mockResult,
+      } as ExecutionResult);
 
       await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
 
-      expect(DebateOrchestrator).toHaveBeenCalledWith(
-        expect.any(Array),
-        expect.anything(),
-        mockStateManager,
+      expect(createOrchestrator).toHaveBeenCalledWith(
         expect.objectContaining({
-          rounds: DEFAULT_ROUNDS,
-        }),
-        undefined
+          agents: expect.any(Array),
+          judge: expect.anything(),
+          stateManager: mockStateManager,
+          config: expect.objectContaining({
+            rounds: DEFAULT_ROUNDS,
+          }),
+        })
       );
     });
 
@@ -473,7 +520,10 @@ describe('DebateService', () => {
     it('should build agents and judge correctly', async () => {
       const mockResult = createMockDebateResult();
       const mockAgents = createMockAgentConfigs();
-      mockOrchestrator.runDebate.mockResolvedValue(mockResult);
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: mockResult,
+      } as ExecutionResult);
 
       await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
 
@@ -492,6 +542,60 @@ describe('DebateService', () => {
       await expect(
         service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, null as unknown as AgentConfig[])
       ).rejects.toThrow('No agents configured');
+    });
+
+    it('should throw when createOrchestrator is called without agents argument (defaults to empty)', () => {
+      expect(() => service.createOrchestrator(undefined, undefined)).toThrow('No agents configured');
+    });
+
+    it('should pass interactiveClarifications true when createOrchestrator called with clarificationsEnabled true', () => {
+      const mockAgents = createMockAgentConfigs();
+      (createOrchestrator as jest.Mock).mockClear();
+
+      service.createOrchestrator(undefined, undefined, mockAgents, true);
+
+      expect(createOrchestrator).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            interactiveClarifications: true,
+          }),
+        })
+      );
+    });
+
+    it('should throw when execution result is not completed', async () => {
+      const mockAgents = createMockAgentConfigs();
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.SUSPENDED,
+        suspendReason: 'WAITING_FOR_INPUT',
+      } as ExecutionResult);
+
+      await expect(
+        service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents)
+      ).rejects.toThrow('Debate did not complete successfully');
+    });
+
+    it('should throw when execution result is completed but result is undefined', async () => {
+      const mockAgents = createMockAgentConfigs();
+      mockOrchestrator.runDebate.mockResolvedValue({
+        status: EXECUTION_STATUS.COMPLETED,
+        result: undefined,
+      } as ExecutionResult);
+
+      await expect(
+        service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents)
+      ).rejects.toThrow('Debate did not complete successfully');
+    });
+
+    it('should return debate result directly when orchestrator returns DebateResult (not ExecutionResult)', async () => {
+      const mockResult = createMockDebateResult();
+      const mockAgents = createMockAgentConfigs();
+      // Orchestrator may return raw DebateResult (e.g. DebateOrchestrator); cast for mock typing
+      mockOrchestrator.runDebate.mockResolvedValue(mockResult as unknown as ExecutionResult);
+
+      const result = await service.runDebate(TEST_PROBLEM, undefined, undefined, undefined, mockAgents);
+
+      expect(result).toEqual(mockResult);
     });
   });
 

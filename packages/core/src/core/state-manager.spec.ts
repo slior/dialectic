@@ -684,6 +684,88 @@ describe('StateManager - setClarifications()', () => {
   });
 });
 
+describe('StateManager - suspend state management', () => {
+  let tmpDir: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const temp = createTempDir('debate-state-');
+    tmpDir = temp.tmpDir;
+    cleanup = temp.cleanup;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('should set suspend state with node and timestamp', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+
+    const suspendedAt = new Date();
+    await sm.setSuspendState(state.id, 'PROPOSAL_NODE', suspendedAt);
+
+    const loaded = await sm.getDebate(state.id);
+    expect(loaded).toBeDefined();
+    expect(loaded!.suspendedAtNode).toBe('PROPOSAL_NODE');
+    expect(loaded!.suspendedAt).toBeInstanceOf(Date);
+    expect(loaded!.suspendedAt?.getTime()).toBe(suspendedAt.getTime());
+
+    const filePath = path.join(tmpDir, `${state.id}.json`);
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    expect(parsed.suspendedAtNode).toBe('PROPOSAL_NODE');
+    expect(typeof parsed.suspendedAt).toBe('string');
+  });
+
+  it('should clear individual suspend fields when set to undefined', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+
+    const suspendedAt = new Date();
+    await sm.setSuspendState(state.id, 'PROPOSAL_NODE', suspendedAt);
+
+    await sm.setSuspendState(state.id, undefined, suspendedAt);
+    let loaded = await sm.getDebate(state.id);
+    expect(loaded).toBeDefined();
+    expect(loaded!.suspendedAtNode).toBeUndefined();
+    expect(loaded!.suspendedAt).toBeInstanceOf(Date);
+
+    await sm.setSuspendState(state.id, 'PROPOSAL_NODE', undefined);
+    loaded = await sm.getDebate(state.id);
+    expect(loaded).toBeDefined();
+    expect(loaded!.suspendedAtNode).toBe('PROPOSAL_NODE');
+    expect(loaded!.suspendedAt).toBeUndefined();
+  });
+
+  it('should clear suspend state via clearSuspendState', async () => {
+    const sm = new StateManager(tmpDir);
+    const state = await sm.createDebate('Test Problem');
+
+    const suspendedAt = new Date();
+    await sm.setSuspendState(state.id, 'PROPOSAL_NODE', suspendedAt);
+
+    await sm.clearSuspendState(state.id);
+
+    const loaded = await sm.getDebate(state.id);
+    expect(loaded).toBeDefined();
+    expect(loaded!.suspendedAtNode).toBeUndefined();
+    expect(loaded!.suspendedAt).toBeUndefined();
+  });
+
+  it('should throw error when setting suspend state for nonexistent debate', async () => {
+    const sm = new StateManager(tmpDir);
+    await expect(
+      sm.setSuspendState('nonexistent-id', 'NODE', new Date())
+    ).rejects.toThrow(/not found/);
+  });
+
+  it('should throw error when clearing suspend state for nonexistent debate', async () => {
+    const sm = new StateManager(tmpDir);
+    await expect(sm.clearSuspendState('nonexistent-id')).rejects.toThrow(/not found/);
+  });
+});
+
 describe('StateManager - completeDebate()', () => {
   let tmpDir: string;
   let cleanup: () => void;

@@ -35,17 +35,17 @@ export class StateManager {
    */
   async createDebate(problem: string, context?: string, id?: string): Promise<DebateState> {
     const now = new Date();
-    const state: DebateState = {
-      id: id ?? generateDebateId(now),
-      problem,
-      // Conditional spread: only include context property if defined (avoids explicit undefined with exactOptionalPropertyTypes)
-      ...(context !== undefined && { context }),
-      status: DEBATE_STATUS.RUNNING,
-      currentRound: 0,
-      rounds: [],
-      createdAt: now,
-      updatedAt: now,
-    };
+    const state = new DebateState();
+    state.id = id ?? generateDebateId(now);
+    state.problem = problem;
+    if (context !== undefined) {
+      state.context = context;
+    }
+    state.status = DEBATE_STATUS.RUNNING;
+    state.currentRound = 0;
+    state.rounds = [];
+    state.createdAt = now;
+    state.updatedAt = now;
 
     this.debates.set(state.id, state);
     await this.save(state);
@@ -198,10 +198,10 @@ export class StateManager {
     if (!fs.existsSync(filePath)) return null;
     const raw = await fs.promises.readFile(filePath, FILE_ENCODING_UTF8);
     const parsed = JSON.parse(raw);
-    // Revive top-level dates; round timestamps remain as serialized strings unless separately revived.
-    parsed.createdAt = new Date(parsed.createdAt);
-    parsed.updatedAt = new Date(parsed.updatedAt);
-    return parsed as DebateState;
+    // Use fromJSON to properly create class instance and revive dates
+    const state = DebateState.fromJSON(parsed);
+    this.debates.set(state.id, state);
+    return state;
   }
 
   /**
@@ -301,6 +301,46 @@ export class StateManager {
     state.userFeedback = feedback;
     state.updatedAt = new Date();
     await this.save(state);
+  }
+
+  /**
+   * Updates the suspend state for a debate.
+   * 
+   * @param debateId - The unique identifier of the debate.
+   * @param suspendedAtNode - The node type where the debate was suspended (for resume).
+   * @param suspendedAt - The timestamp when the debate was suspended.
+   * @throws {Error} If the debate with the given ID does not exist.
+   */
+  async setSuspendState(
+    debateId: string,
+    suspendedAtNode: string | undefined,
+    suspendedAt: Date | undefined
+  ): Promise<void> {
+    const state = this.debates.get(debateId);
+    if (!state) throw new Error(`Debate ${debateId} not found`);
+    
+    if (suspendedAtNode !== undefined) {
+      state.suspendedAtNode = suspendedAtNode;
+    } else {
+      delete state.suspendedAtNode;
+    }
+    if (suspendedAt !== undefined) {
+      state.suspendedAt = suspendedAt;
+    } else {
+      delete state.suspendedAt;
+    }
+    state.updatedAt = new Date();
+    await this.save(state);
+  }
+
+  /**
+   * Clears the suspend state when resuming.
+   * 
+   * @param debateId - The unique identifier of the debate.
+   * @throws {Error} If the debate with the given ID does not exist.
+   */
+  async clearSuspendState(debateId: string): Promise<void> {
+    await this.setSuspendState(debateId, undefined, undefined);
   }
 
   /**

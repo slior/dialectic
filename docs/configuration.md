@@ -557,8 +557,10 @@ The `DebateConfig` schema controls how debates execute:
 | `synthesisMethod` | `string` | Yes | Method for synthesizing the final solution. |
 | `includeFullHistory` | `boolean` | Yes | Whether to include full debate history in agent context. |
 | `timeoutPerRound` | `number` | Yes | Maximum time allowed per round in milliseconds. |
-| `interactiveClarifications` | `boolean` | No | Run a one-time pre-debate clarifications phase (default: false). |
+| `orchestratorType` | `string` | No | Which orchestrator to use: `"classic"` or `"state-machine"` (default: `"classic"`). The state-machine orchestrator is required for suspend/resume (e.g. interactive clarifications). The CLI and Web API set this to `"state-machine"` when clarifications are enabled. |
+| `interactiveClarifications` | `boolean` | No | Run a one-time pre-debate clarifications phase (default: false). When true, the CLI sets `orchestratorType` to `"state-machine"` so the clarification flow uses suspend/resume. |
 | `clarificationsMaxPerAgent` | `number` | No | Max questions per agent in clarifications phase (default: 5; excess truncated with a warning). |
+| `clarificationsMaxIterations` | `number` | No | Max clarification rounds before proceeding (default: 3). |
 | `trace` | `string` | No | Tracing provider to use for observability. Currently supports `"langfuse"` only. If omitted, tracing is disabled. |
 
 ### Field Details
@@ -574,14 +576,17 @@ The `DebateConfig` schema controls how debates execute:
 - **Type**: Object
 - **Schema**:
   - `type`: `"fixed"` | `"convergence"` | `"quality"`
-  - `threshold`: `number` (optional, depends on type)
+  - `threshold`: `number` (optional, for convergence/quality)
 - **Accepted Values**:
-  - `{ "type": "fixed" }` - Run exactly the specified number of rounds (currently only supported type)
-  - `{ "type": "convergence", "threshold": 0.9 }` - Stop when solutions converge (planned)
-  - `{ "type": "quality", "threshold": 85 }` - Stop when quality threshold reached (planned)
-- **Semantics**: Determines when the debate terminates. Currently, only `"fixed"` type is implemented.
+  - `{ "type": "fixed" }` - Run exactly the specified number of rounds (default behavior)
+  - `{ "type": "convergence", "threshold": 85 }` - Stop when judge evaluates solution confidence >= threshold
+  - `{ "type": "quality", "threshold": 90 }` - Stop when solution quality meets threshold
+- **Semantics**: 
+  - `"fixed"`: Runs exactly N rounds as specified in `rounds` field
+  - `"convergence"`: Evaluates after each round; stops early if confidence threshold is met. The `rounds` field becomes a maximum limit.
+  - `"quality"`: Similar to convergence but focuses on solution quality metrics
 - **Default**: `{ "type": "fixed" }`
-- **Example**: `{ "type": "fixed" }`
+- **Example**: `{ "type": "fixed" }` or `{ "type": "convergence", "threshold": 85 }`
 
 #### `synthesisMethod`
 - **Type**: String (enum)
@@ -607,6 +612,23 @@ The `DebateConfig` schema controls how debates execute:
 - **Semantics**: Maximum time allowed for a single round to complete. If exceeded, the debate may fail or proceed with partial results (behavior depends on implementation).
 - **Default**: `300000` (5 minutes)
 - **Example**: `300000`
+
+#### `orchestratorType`
+- **Type**: String (optional)
+- **Accepted Values**: `"classic"` | `"state-machine"`
+- **Default**: `"classic"`
+- **Semantics**: Explicitly selects which orchestrator implementation runs the debate. Only this property is used to decide; when omitted, the classic orchestrator is used. The state-machine orchestrator supports suspend/resume (e.g. for interactive clarifications one batch at a time). The CLI sets `orchestratorType` to `"state-machine"` when `--clarify` or `interactiveClarifications` is enabled; the Web API sets it by default for its gateway flow. The chosen type is emitted to stderr when the orchestrator is created.
+- **Example**: `"state-machine"` or `"classic"`
+
+#### `clarificationsMaxIterations`
+- **Type**: Number (optional)
+- **Accepted Values**: Positive integers >= 1
+- **Default**: `3`
+- **Semantics**: Maximum number of clarification rounds allowed. Each round allows agents to ask follow-up questions. The clarification phase ends when:
+  - All agents signal they have no more questions (ALL_CLEAR)
+  - Maximum iterations reached
+  - User explicitly proceeds
+- **Example**: `3`
 
 #### `trace`
 - **Type**: String (optional)
@@ -1315,7 +1337,7 @@ The CLI accepts the following options that can override configuration file setti
 - ### `--clarify`
 - **Type**: Boolean flag
 - **Description**: Forces a one-time pre-debate clarifications phase regardless of configuration.
-- **Precedence**: Takes precedence over `debate.interactiveClarifications` in the configuration file.
+- **Precedence**: When present, the CLI treats clarifications as requested and sets `debate.orchestratorType` to `"state-machine"` for the run (so the clarification flow uses suspend/resume). Equivalent to having `interactiveClarifications: true` in config for that run.
 
 
 ### `debate <problem>`

@@ -1,5 +1,16 @@
 // Core classes
 export { DebateOrchestrator, OrchestratorHooks } from './core/orchestrator';
+export { StateMachineOrchestrator } from './state-machine/state-machine-orchestrator';
+export { createOrchestrator, OrchestratorFactoryParams, isStateMachineOrchestrator } from './core/orchestrator-factory';
+export type { ADebateOrchestrator } from './core/orchestrator-factory';
+export { DEBATE_EVENTS, createEvent } from './state-machine/events';
+export type { DebateEvent } from './state-machine/events';
+export { NODE_TYPES } from './state-machine/types';
+export type { NodeType, DebateNode, NodeContext } from './state-machine/types';
+export type { NodeResult } from './state-machine/node';
+export { TransitionGraph } from './state-machine/graph';
+export type { TransitionRule } from './state-machine/graph';
+export { ClarificationInputNode } from './state-machine/nodes/clarification-input-node';
 export { StateManager } from './core/state-manager';
 export { JudgeAgent } from './core/judge';
 export { Agent, AgentLogger } from './core/agent';
@@ -22,6 +33,9 @@ export { buildToolRegistry } from './utils/tool-registry-builder';
 
 // Types - re-export all
 export * from './types/debate.types';
+export type { ExecutionResult } from './types/debate.types';
+export { isExecutionResult, EXECUTION_STATUS, SUSPEND_REASON, ORCHESTRATOR_TYPES } from './types/debate.types';
+export type { OrchestratorType } from './types/debate.types';
 export * from './types/agent.types';
 export {
   // Re-export only SystemConfig, avoid SummarizationConfig collision
@@ -30,6 +44,9 @@ export {
   DEFAULT_SUMMARIZATION_THRESHOLD,
   DEFAULT_SUMMARIZATION_MAX_LENGTH,
   DEFAULT_SUMMARIZATION_METHOD,
+  DEFAULT_TERMINATION_THRESHOLD,
+  DEFAULT_CLARIFICATIONS_MAX_ITERATIONS,
+  DEFAULT_CLARIFICATIONS_MAX_PER_AGENT,
 } from './types/config.types';
 export * from './types/tool.types';
 export * from './types/tracing.types';

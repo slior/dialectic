@@ -21,6 +21,15 @@ export const DEFAULT_SUMMARIZATION_MAX_LENGTH = 2500;
 /** Default summarization method */
 export const DEFAULT_SUMMARIZATION_METHOD: SummarizationMethod = 'length-based';
 
+/** Default confidence threshold for termination conditions (convergence/quality) */
+export const DEFAULT_TERMINATION_THRESHOLD = 90;
+
+/** Default maximum number of clarification iterations allowed */
+export const DEFAULT_CLARIFICATIONS_MAX_ITERATIONS = 3;
+
+/** Default maximum number of clarification questions to accept per agent */
+export const DEFAULT_CLARIFICATIONS_MAX_PER_AGENT = 5;
+
 /**
  * Represents the top-level system configuration for a debate session.
  *

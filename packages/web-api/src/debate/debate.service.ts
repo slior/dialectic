@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
-  DebateOrchestrator,
+  createOrchestrator,
   StateManager,
   JudgeAgent,
   RoleBasedAgent,
@@ -10,8 +10,12 @@ import {
   SummarizationConfig,
   AgentClarifications,
   DebateResult,
+  EXECUTION_STATUS,
+  isExecutionResult,
+
   AGENT_ROLES,
   LLM_PROVIDERS,
+  ORCHESTRATOR_TYPES,
   TERMINATION_TYPES,
   SYNTHESIS_METHODS,
   createProvider,
@@ -22,6 +26,7 @@ import {
   ContributionType,
   Contribution,
   logWarning,
+  ADebateOrchestrator,
 } from 'dialectic-core';
 
 // Default configuration constants
@@ -137,6 +142,7 @@ export class DebateService {
       synthesisMethod: SYNTHESIS_METHODS.JUDGE,
       includeFullHistory: true,
       timeoutPerRound: DEFAULT_TIMEOUT_PER_ROUND,
+      orchestratorType: ORCHESTRATOR_TYPES.STATE_MACHINE, // Web API requires suspend/resume support. TODO: challenge this assumption.
       summarization: {
         enabled: true,
         threshold: DEFAULT_SUMMARIZATION_THRESHOLD,
@@ -176,6 +182,38 @@ export class DebateService {
   }
 
   /**
+   * Creates an orchestrator instance, automatically choosing the type based on features needed.
+   *
+   * @param hooks - Optional orchestrator hooks for progress notifications.
+   * @param rounds - Optional number of debate rounds (overrides default if provided).
+   * @param agents - Array of agent configurations (required, no fallback).
+   * @param clarificationsEnabled - Whether to run the interactive clarifications phase (sets config.interactiveClarifications).
+   * @returns The orchestrator instance.
+   * @throws {Error} If agents array is empty or invalid.
+   */
+  createOrchestrator( hooks?: OrchestratorHooks, rounds?: number, agents: AgentConfig[] = [], clarificationsEnabled: boolean = false ): ADebateOrchestrator {
+    if (!agents || agents.length === 0) {
+      throw new Error(ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
+    }
+
+    const config = this.getDefaultConfig();
+    
+    // Override rounds and interactive clarifications
+    const debateConfig: DebateConfig = {
+      ...config.debate,
+      rounds: rounds ?? config.debate.rounds,
+      interactiveClarifications: clarificationsEnabled,
+    };
+    
+    // Use summarization from default config (always defined)
+    const summarizationConfig = config.debate.summarization!;
+    const agentInstances = this.buildAgents(agents, summarizationConfig);
+    const judge = this.buildJudge(config.judge, summarizationConfig);
+
+    return createOrchestrator({ agents: agentInstances, judge,  stateManager: this.stateManager, config: debateConfig, hooks     });
+  }
+
+  /**
    * Runs a full debate with the given problem and optional clarifications.
    *
    * @param problem - The problem statement to debate.
@@ -186,39 +224,17 @@ export class DebateService {
    * @returns Promise resolving to the debate result.
    * @throws {Error} If agents array is empty or invalid.
    */
-  async runDebate(
-    problem: string,
-    hooks?: OrchestratorHooks,
-    clarifications?: AgentClarifications[],
-    rounds?: number,
-    agents: AgentConfig[] = []
-  ): Promise<DebateResult> {
-    if (!agents || agents.length === 0) {
-      throw new Error(ERROR_MESSAGES.NO_AGENTS_CONFIGURED);
+  async runDebate( problem: string, hooks?: OrchestratorHooks, clarifications?: AgentClarifications[], rounds?: number, agents: AgentConfig[] = [] ): Promise<DebateResult> {
+    const orchestrator = this.createOrchestrator(hooks, rounds, agents, false);
+    const result = await orchestrator.runDebate(problem, undefined, clarifications);
+    
+    if (isExecutionResult(result)) {
+      if (result.status === EXECUTION_STATUS.COMPLETED && result.result) {
+        return result.result;
+      }
+      throw new Error('Debate did not complete successfully');
     }
-
-    const config = this.getDefaultConfig();
-    
-    // Override rounds if provided
-    const debateConfig: DebateConfig = {
-      ...config.debate,
-      rounds: rounds ?? config.debate.rounds,
-    };
-    
-    // Use summarization from default config (always defined)
-    const summarizationConfig = config.debate.summarization!;
-    const agentInstances = this.buildAgents(agents, summarizationConfig);
-    const judge = this.buildJudge(config.judge, summarizationConfig);
-
-    const orchestrator = new DebateOrchestrator(
-      agentInstances,
-      judge,
-      this.stateManager,
-      debateConfig,
-      hooks
-    );
-
-    return await orchestrator.runDebate(problem, undefined, clarifications);
+    return result;
   }
 
   /**

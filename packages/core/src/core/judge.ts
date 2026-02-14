@@ -1,7 +1,7 @@
 import { DEFAULT_JUDGE_SUMMARY_PROMPT } from '../agents/prompts/judge-prompts';
 import { LLMProvider, CompletionUsage } from '../providers/llm-provider';
 import { AgentConfig, PromptSource } from '../types/agent.types';
-import { DebateContext, DebateRound, Solution, DebateSummary, ContextPreparationResult, SummarizationConfig, CONTRIBUTION_TYPES } from '../types/debate.types';
+import { DebateContext, DebateRound, Solution, DebateSummary, ContextPreparationResult, SummarizationConfig, CONTRIBUTION_TYPES, DebateState, Contribution } from '../types/debate.types';
 import { TracingContext, LangfuseSpan, LangfuseGeneration, SPAN_LEVEL } from '../types/tracing.types';
 import { getErrorMessage } from '../utils/common';
 import { logWarning } from '../utils/console';
@@ -740,6 +740,196 @@ Respond with ONLY the JSON object, no other text.`;
     } catch (err: unknown) {
       logWarning( `Judge ${this.config.name}: Failed to parse judge synthesis JSON. Falling back to plain markdown. Error: ${getErrorMessage(err)}`);
       return undefined;
+    }
+  }
+
+  /**
+   * Evaluates the confidence level of the current debate state.
+   * Analyzes the latest round's refinements to determine consensus.
+   * 
+   * @param state - The current debate state to evaluate.
+   * @param tracingContext - Optional tracing context for observability.
+   * @returns A confidence score from 0-100 indicating how much consensus has been reached.
+   */
+  async evaluateConfidence(state: DebateState, tracingContext?: TracingContext): Promise<number> {
+    const latestRound = state.getLatestRound();
+    if (!latestRound) 
+      return 0;
+    
+
+    const refinements = latestRound.contributions.filter( (c) => c.type === CONTRIBUTION_TYPES.REFINEMENT );
+
+    if (refinements.length === 0)
+      return 0;
+
+    // Build a prompt asking the judge to evaluate consensus
+    const evaluationPrompt = this.buildConfidenceEvaluationPrompt(state.problem, state.rounds, refinements);
+    const systemPrompt = this.resolvedSystemPrompt;
+    const temperature = this.config.temperature ?? DEFAULT_JUDGE_TEMPERATURE;
+
+    if (tracingContext) {
+      const spanName = `judge-evaluateConfidence-${this.config.id}`;
+      return await this.evaluateConfidenceWithTracing(tracingContext, spanName, systemPrompt, evaluationPrompt, temperature);
+    }
+    else  return await this.executeConfidenceEvaluation(systemPrompt, evaluationPrompt, temperature);
+  }
+
+  /**
+   * Builds a prompt for evaluating confidence/consensus in the current debate state.
+   */
+  private buildConfidenceEvaluationPrompt(problem: string, _rounds: DebateRound[], refinements: Contribution[]): string {
+    const refinementsText = refinements
+      .map((r) => `[${r.agentRole}] ${r.content}`)
+      .join('\n\n');
+
+    return `You are evaluating the current state of a debate to determine if consensus has been reached.
+
+Problem: ${problem}
+
+Latest refinements from all agents:
+${refinementsText}
+--------------------------------
+
+Instructions:
+- Return a JSON object with a single field "confidence" (number 0-100) representing your confidence that consensus has been reached and the solution is ready.
+- You MUST respond with **ONLY valid JSON** (no markdown code blocks, no prose). Use this exact schema:
+\`\`\`json
+{
+  "confidence": number 0-100
+}
+\`\`\`
+- Score ranges:
+    - 0-40: No consensus has been reached. The solution is not ready. Major conflicts remain or unmet requirements exist.
+    - 41-70: Only partial alignment or important gaps exist.
+    - 71-89: Mostly aligned, but some non-trivial conflicts or gaps remain.
+    - 90-100: Fully aligned, no significant conflicts or gaps remain. The solution is ready.
+- Before giving confidence ≥ 90, confirm: 
+  - no agents refinement contradicts another on key points;
+  - no major requirement is unaddressed;
+  - no critical concern from critiques is left unanswered.
+  If any of these fail, set confidence below 90.
+- Be skeptical. Prefer to score below 50 when in doubt. Only give high scores (>70) when the eviidence for consensus is strong.
+
+Evaluate the level of consensus and confidence in the current solution. Consider:
+- How aligned are the different agent perspectives?
+- Are there major unresolved conflicts?
+- Is the solution well-defined and complete?
+- Are there critical concerns that remain unaddressed?
+- Are all main requirements met?
+- Are there any open questions or ambiguities?
+- Are there any trade-offs or compromises that need to be considered?
+- Are there any recommendations that need to be made?
+- Are there any other concerns that need to be considered?
+
+
+Example response:
+\`\`\`json
+{
+  "confidence": 85
+}
+\`\`\``;
+  }
+
+  
+  /**
+   * Executes a confidence evaluation for the current solution with support for Langfuse tracing.
+   *
+   * This method attempts to create a tracing span and generation for the confidence scoring action.
+   * If tracing setup fails at any stage, the operation falls back to non-traced execution.
+   *
+   * On success, this method records usage, confidence output, and any errors to the associated
+   * Langfuse span/generation for observability/auditing. Otherwise, warning logs are emitted.
+   *
+   * @param tracingContext - The Langfuse tracing context for the debate
+   * @param spanName - Name to assign to the Langfuse span for this evaluation
+   * @param systemPrompt - The system prompt to send to the judge LLM
+   * @param prompt - The user (content) prompt to be evaluated
+   * @param temperature - LLM temperature setting for completion
+   * @returns The confidence score extracted from the LLM response (0–100)
+   * @throws Rethrows on evaluation error (unless tracing setup fails, in which case logs and falls back)
+   */
+  private async evaluateConfidenceWithTracing(  tracingContext: TracingContext, spanName: string, systemPrompt: string,
+                                                prompt: string, temperature: number ): Promise<number> {
+    let span: LangfuseSpan | undefined;
+    let generation: LangfuseGeneration | undefined;
+
+    try {
+      span = this.createJudgeSpan(tracingContext, spanName);
+    } catch (tracingError: unknown) {
+      logWarning(`Langfuse tracing failed for judge evaluateConfidence (span creation): ${getErrorMessage(tracingError)}`);
+      return await this.executeConfidenceEvaluation(systemPrompt, prompt, temperature);
+    }
+
+    try {
+      generation = this.createJudgeGeneration(span!, systemPrompt, prompt, temperature);
+    } catch (tracingError: unknown) {
+      const errorMessage = getErrorMessage(tracingError);
+      logWarning(`Langfuse tracing failed for judge evaluateConfidence (generation creation): ${errorMessage}`);
+      try {
+        span!.end({ level: SPAN_LEVEL.ERROR, statusMessage: errorMessage });
+      } catch (tracingError: unknown) {
+        logWarning(`Langfuse tracing failed while ending span: ${getErrorMessage(tracingError)}`);
+      }
+      return await this.executeConfidenceEvaluation(systemPrompt, prompt, temperature);
+    }
+
+    try {
+      const res = await this.provider.complete({ model: this.config.model, temperature, systemPrompt, userPrompt: prompt, });
+
+      const langfuseUsage = this.convertUsageToLangfuse(res.usage);
+      const confidence = this.parseConfidenceFromResponse(res.text);
+
+      generation!.end({
+        output: { confidence },
+        ...(langfuseUsage && { usage: langfuseUsage }),
+      });
+      span!.end();
+
+      return confidence;
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      try {
+        generation!.end({
+          level: SPAN_LEVEL.ERROR,
+          statusMessage: errorMessage,
+        });
+        span!.end({ level: SPAN_LEVEL.ERROR, statusMessage: errorMessage });
+      } catch (tracingError: unknown) {
+        logWarning(`Langfuse tracing failed while ending span/generation: ${getErrorMessage(tracingError)}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Executes confidence evaluation without tracing.
+   */
+  private async executeConfidenceEvaluation(systemPrompt: string, prompt: string, temperature: number): Promise<number> {
+    const res = await this.provider.complete({ model: this.config.model, temperature, systemPrompt, userPrompt: prompt, });
+
+    return this.parseConfidenceFromResponse(res.text);
+  }
+
+  /**
+   * Parses confidence score from LLM response.
+   */
+  private parseConfidenceFromResponse(text: string): number {
+    const jsonStr = this.extractFirstJsonObject(text);
+    if (!jsonStr) {
+      logWarning(`Judge ${this.config.name}: No JSON found in confidence evaluation response. Using fallback score.`);
+      return FALLBACK_CONFIDENCE_SCORE;
+    }
+
+    try {
+      const parsed = JSON.parse(jsonStr) as { confidence?: number };
+      if (typeof parsed.confidence === 'number') {
+        return this.clampConfidence(parsed.confidence);
+      }
+      logWarning(`Judge ${this.config.name}: Invalid confidence value in response. Using fallback score.`);
+      return FALLBACK_CONFIDENCE_SCORE;
+    } catch (err: unknown) {
+      logWarning(`Judge ${this.config.name}: Failed to parse confidence evaluation JSON. Using fallback score. Error: ${getErrorMessage(err)}`);
+      return FALLBACK_CONFIDENCE_SCORE;
     }
   }
 
